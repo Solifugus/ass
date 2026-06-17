@@ -211,6 +211,48 @@ func TestDataStepInputMissingField(t *testing.T) {
 	}
 }
 
+func TestDataStepSubsettingIf(t *testing.T) {
+	src := "data adults;\n  input name $ age;\n  if age >= 18;\n  datalines;\nJohn 25\nKid 10\nJane 30\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("adults")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (only adults)", ds.NObs())
+	}
+	for _, r := range ds.Rows {
+		if ds.Get(r, "age").Num < 18 {
+			t.Errorf("row with age %v should have been dropped", ds.Get(r, "age").Display())
+		}
+	}
+}
+
+func TestDataStepIfThenElse(t *testing.T) {
+	src := "data out;\n  input score;\n  if score >= 60 then grade = 'P';\n  else grade = 'F';\n  datalines;\n75\n40\n60\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("out")
+	want := []string{"P", "F", "P"}
+	if ds.NObs() != 3 {
+		t.Fatalf("NObs = %d, want 3", ds.NObs())
+	}
+	for i, w := range want {
+		if got := ds.Get(ds.Rows[i], "grade"); got.Str != w {
+			t.Errorf("row%d grade = %q, want %q", i, got.Str, w)
+		}
+	}
+}
+
+func TestDataStepIfThenOutput(t *testing.T) {
+	// Explicit output inside a THEN: only matching rows are written.
+	src := "data big;\n  input x;\n  if x > 5 then output;\n  datalines;\n3\n7\n9\n1\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("big")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (x > 5)", ds.NObs())
+	}
+	if ds.Get(ds.Rows[0], "x").Num != 7 || ds.Get(ds.Rows[1], "x").Num != 9 {
+		t.Errorf("rows = %v %v, want 7 9", ds.Get(ds.Rows[0], "x").Display(), ds.Get(ds.Rows[1], "x").Display())
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {

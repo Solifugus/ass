@@ -164,6 +164,27 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		d.applySet(d.setRows[d.setPtr])
 		d.setPtr++
 		return flowNormal, nil
+	case *ast.IfStatement:
+		cond, err := Eval(st.Condition, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		if truthy(cond) {
+			return d.execStatement(st.Consequence)
+		}
+		if st.Alternative != nil {
+			return d.execStatement(st.Alternative)
+		}
+		return flowNormal, nil
+	case *ast.SubsettingIf:
+		cond, err := Eval(st.Condition, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		if !truthy(cond) {
+			return flowDelete, nil // drop this row
+		}
+		return flowNormal, nil
 	default:
 		// Unsupported in this phase; skip.
 		return flowNormal, nil
