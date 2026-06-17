@@ -29,6 +29,15 @@ type dataStep struct {
 	n        int              // current iteration (_N_)
 	records  []string         // inline data lines (datalines)
 	recPtr   int              // next datalines record to read
+	setRows  []sourceRow      // rows from SET input datasets (concatenated)
+	setPtr   int              // next SET row to read
+}
+
+// sourceRow is one input row from a SET dataset, paired with the dataset so the
+// reader knows each column's declared type.
+type sourceRow struct {
+	row table.Row
+	ds  *table.Dataset
 }
 
 // RunDataStep executes a DATA step against the library, creating its output
@@ -53,7 +62,19 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library) error {
 	d.records = collectDatalines(ds.Body)
 	hasInput := hasInputStatement(ds.Body)
 
-	if hasInput && len(d.records) > 0 {
+	if hasSetStatement(ds.Body) {
+		// Dataset-driven loop: one iteration per input row across all SET datasets.
+		d.setRows = d.collectSetRows(ds.Body)
+		for d.setPtr < len(d.setRows) {
+			start := d.setPtr
+			if err := d.runIteration(ds.Body); err != nil {
+				return err
+			}
+			if d.setPtr == start { // safety: ensure progress if no SET executed
+				d.setPtr++
+			}
+		}
+	} else if hasInput && len(d.records) > 0 {
 		// Read-driven loop: one iteration per data record. INPUT advances recPtr;
 		// the loop ends when the records are exhausted.
 		for d.recPtr < len(d.records) {
@@ -136,6 +157,13 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 	case *ast.DatalinesStatement:
 		// The data is collected up front; the statement itself does nothing.
 		return flowNormal, nil
+	case *ast.SetStatement:
+		if d.setPtr >= len(d.setRows) {
+			return flowDelete, nil
+		}
+		d.applySet(d.setRows[d.setPtr])
+		d.setPtr++
+		return flowNormal, nil
 	default:
 		// Unsupported in this phase; skip.
 		return flowNormal, nil
@@ -216,6 +244,47 @@ func parseNum(s string) table.Value {
 		return table.MissingNum()
 	}
 	return table.Num(f)
+}
+
+// applySet seeds the PDV from a SET input row, declaring each variable with its
+// source column type and order so the output preserves the input layout.
+func (d *dataStep) applySet(sr sourceRow) {
+	for _, c := range sr.ds.Columns {
+		d.pdv.Set(c.Name, sr.ds.Get(sr.row, c.Name))
+	}
+}
+
+// collectSetRows resolves the SET statement's datasets from the library and
+// returns their rows concatenated in statement order (SAS reads each dataset to
+// completion before the next). Unknown datasets are skipped.
+func (d *dataStep) collectSetRows(stmts []ast.Statement) []sourceRow {
+	var rows []sourceRow
+	for _, s := range stmts {
+		set, ok := s.(*ast.SetStatement)
+		if !ok {
+			continue
+		}
+		for _, name := range set.Datasets {
+			src, found := d.lib.Get(name)
+			if !found {
+				continue
+			}
+			for _, r := range src.Rows {
+				rows = append(rows, sourceRow{row: r, ds: src})
+			}
+		}
+	}
+	return rows
+}
+
+// hasSetStatement reports whether the body contains a SET statement.
+func hasSetStatement(stmts []ast.Statement) bool {
+	for _, s := range stmts {
+		if _, ok := s.(*ast.SetStatement); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // collectDatalines gathers the inline data records from the body's DATALINES

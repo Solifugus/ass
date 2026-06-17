@@ -98,6 +98,69 @@ func TestDataStepNoExplicitOutputImplicitOnce(t *testing.T) {
 	}
 }
 
+// runProgram runs every DATA step in the program against one library.
+func runProgram(t *testing.T, src string) *table.Library {
+	t.Helper()
+	prog := parser.New(src).ParseProgram()
+	lib := table.NewLibrary()
+	for _, step := range prog.Steps {
+		ds, ok := step.(*ast.DataStep)
+		if !ok {
+			continue
+		}
+		if err := RunDataStep(ds, lib); err != nil {
+			t.Fatalf("RunDataStep error: %v", err)
+		}
+	}
+	return lib
+}
+
+func TestDataStepSetCopy(t *testing.T) {
+	src := "data a;\n  input name $ age;\n  datalines;\nJohn 25\nJane 30\n;\nrun;\n" +
+		"data b;\n  set a;\n  agePlus = age + 1;\n  run;"
+	lib := runProgram(t, src)
+	b, ok := lib.Get("b")
+	if !ok {
+		t.Fatal("dataset B not created")
+	}
+	if b.NObs() != 2 {
+		t.Fatalf("B NObs = %d, want 2", b.NObs())
+	}
+	// SET variables come first, in source order; computed column follows.
+	want := []string{"name", "age", "agePlus"}
+	if got := b.ColumnNames(); len(got) != 3 || got[0] != want[0] || got[2] != want[2] {
+		t.Fatalf("columns = %v, want %v", got, want)
+	}
+	if got := b.Get(b.Rows[1], "agePlus"); got.Num != 31 {
+		t.Errorf("row1 agePlus = %v, want 31", got.Display())
+	}
+	if got := b.Get(b.Rows[0], "name"); got.Str != "John" {
+		t.Errorf("row0 name = %q, want John", got.Str)
+	}
+}
+
+func TestDataStepSetConcatenates(t *testing.T) {
+	src := "data a;\n  input x;\n  datalines;\n1\n2\n;\nrun;\n" +
+		"data c;\n  input x;\n  datalines;\n3\n;\nrun;\n" +
+		"data all;\n  set a c;\n  run;"
+	lib := runProgram(t, src)
+	all, _ := lib.Get("all")
+	if all.NObs() != 3 {
+		t.Fatalf("ALL NObs = %d, want 3 (2 + 1)", all.NObs())
+	}
+	got := []float64{
+		all.Get(all.Rows[0], "x").Num,
+		all.Get(all.Rows[1], "x").Num,
+		all.Get(all.Rows[2], "x").Num,
+	}
+	want := []float64{1, 2, 3}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row%d x = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestDataStepInputDatalines(t *testing.T) {
 	src := "data people;\n  input name $ age;\n  datalines;\nJohn 25\nJane 30\nBob 40\n;\nrun;"
 	lib := runStep(t, src)
