@@ -25,10 +25,10 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 0 — Project scaffolding
 
-- [ ] **0.1 Initialize Go module.** Run `go mod init github.com/<owner>/ass` (confirm the module path with the user; default to `ass` if unknown). Create `.gitignore` for Go. Add a top-level `README.md` stub with the project description and the "not affiliated with SAS Institute" disclaimer from the design doc §11. Acceptance: `go build ./...` succeeds (no packages yet is fine).
-- [ ] **0.2 Create package skeleton.** Create empty packages with a single `doc.go` (package comment) each: `cmd/ass`, `lexer`, `parser`, `ast`, `macro`, `runtime`, `table`, `proc`, `formats`, `sql`, `log`, `corpus`. Do NOT create `vm` yet (optional, deferred). Acceptance: `go build ./...` succeeds.
-- [ ] **0.3 Minimal CLI entry point.** In `cmd/ass/main.go`, implement arg parsing for `ass <file.sas>` (read file, print token count placeholder) and `ass test <dir>` (stub that prints "not implemented"). Wire nothing else yet. Acceptance: `go run ./cmd/ass --help` prints usage; `go run ./cmd/ass somefile.sas` reads the file without crashing.
-- [ ] **0.4 Git init & first commit.** `git init`, commit the scaffold. (Only if the user wants version control — confirm first.) Acceptance: clean `git status`.
+- [x] **0.1 Initialize Go module.** Run `go mod init github.com/<owner>/ass` (confirm the module path with the user; default to `ass` if unknown). Create `.gitignore` for Go. Add a top-level `README.md` stub with the project description and the "not affiliated with SAS Institute" disclaimer from the design doc §11. Acceptance: `go build ./...` succeeds (no packages yet is fine).
+- [x] **0.2 Create package skeleton.** Create empty packages with a single `doc.go` (package comment) each: `cmd/ass`, `lexer`, `parser`, `ast`, `macro`, `runtime`, `table`, `proc`, `formats`, `sql`, `log`, `corpus`. Do NOT create `vm` yet (optional, deferred). Acceptance: `go build ./...` succeeds.
+- [x] **0.3 Minimal CLI entry point.** In `cmd/ass/main.go`, implement arg parsing for `ass <file.sas>` (read file, print token count placeholder) and `ass test <dir>` (stub that prints "not implemented"). Wire nothing else yet. Acceptance: `go run ./cmd/ass --help` prints usage; `go run ./cmd/ass somefile.sas` reads the file without crashing.
+- [x] **0.4 Git init & first commit.** `git init`, commit the scaffold. (Only if the user wants version control — confirm first.) Acceptance: clean `git status`.
 
 ## Phase 1 — Research & sample gathering
 
@@ -153,3 +153,10 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Key files: PLAN.md
 - Decisions/deviations: Plan follows the compatibility levels and milestones in `ass-design.md`. No code written yet — repository still contains only `ass-design.md` and `CLAUDE.md`.
 - Next: Phase 0.1 — initialize the Go module (confirm module path with user).
+
+### 2026-06-16 — Phase 0 complete (0.1–0.4)
+- What changed: Scaffolded the Go project end to end. Module initialized, all packages stubbed, CLI runs, committed to git.
+- Key files: `go.mod` (module `github.com/solifugus/ass`, go 1.24), `.gitignore`, `README.md`, `doc.go` in all 11 packages (lexer, parser, ast, macro, runtime, table, proc, formats, sql, log, corpus — `vm` deferred per plan), `cmd/ass/main.go`.
+- Decisions/deviations: Module path `github.com/solifugus/ass` (confirmed with user). Git enabled (confirmed). Toolchain: Go 1.24.4. CLI dispatches `--help`/`test`/`<file>`; file-run and test are placeholders pending the lexer (Phase 2) and harness (Phase 11). Committed as "Phase 0: project scaffolding" (1a2b686).
+- Verified: `go build ./...`, `go vet ./...` clean; `go run ./cmd/ass --help`, `... ass-design.md`, `... test corpus/` all behave as intended.
+- Next: Phase 1.1 — write `corpus/FEATURES.md` (canonical feature-tag list from design §9).
