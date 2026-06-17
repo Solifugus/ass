@@ -1,0 +1,17 @@
+id: data_step_bygroup_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - by-group
+  - retain
+  - sum-statement
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  BY-group processing in the DATA step: first.region resets the accumulator,
+  the sum statement totals amount per group, and last.region outputs one row per
+  region. Expected: east 30, west 70 (input pre-sorted by region).

@@ -433,6 +433,31 @@ func TestDataStepArrayRangeExpansion(t *testing.T) {
 	}
 }
 
+func TestDataStepByGroupAggregation(t *testing.T) {
+	src := "data sales;\n  input region $ amount;\n  datalines;\neast 10\neast 20\nwest 30\nwest 40\n;\nrun;\n" +
+		"data totals;\n  set sales;\n  by region;\n  retain total;\n" +
+		"  if first.region then total = 0;\n  total + amount;\n" +
+		"  if last.region then output;\n  keep region total;\nrun;"
+	lib := runProgram(t, src)
+	ds, ok := lib.Get("totals")
+	if !ok {
+		t.Fatal("TOTALS not created")
+	}
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (one per region)", ds.NObs())
+	}
+	got := map[string]float64{}
+	for _, r := range ds.Rows {
+		got[ds.Get(r, "region").Str] = ds.Get(r, "total").Num
+	}
+	if got["east"] != 30 || got["west"] != 70 {
+		t.Errorf("group totals = %v, want east:30 west:70", got)
+	}
+	if ds.HasColumn("amount") {
+		t.Errorf("amount should not be kept; columns = %v", ds.ColumnNames())
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {

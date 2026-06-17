@@ -14,6 +14,12 @@ import (
 // output dataset.
 var automaticVars = map[string]bool{"_n_": true, "_error_": true}
 
+// isByFlagVar reports whether a PDV name is an automatic BY-group flag
+// (first.<var>/last.<var>), which is never written to output.
+func isByFlagVar(name string) bool {
+	return strings.HasPrefix(name, "first.") || strings.HasPrefix(name, "last.")
+}
+
 // flow signals how statement execution should proceed within an iteration.
 type flow int
 
@@ -36,6 +42,8 @@ type dataStep struct {
 	keep     map[string]bool  // if non-nil, only these vars are output (lowercased)
 	drop     map[string]bool  // these vars are excluded from output (lowercased)
 	wheres   []ast.Expression // WHERE conditions applied at read time
+	byVars   []string         // BY variables (DATA step BY-group processing)
+	byFlags  []ByFlags        // per-set-row first./last. flags (aligned to setRows)
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -78,6 +86,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	if hasSetStatement(ds.Body) {
 		// Dataset-driven loop: one iteration per input row across all SET datasets.
 		d.setRows = d.collectSetRows(ds.Body)
+		d.setupByGroups(ds.Body)
 		for d.setPtr < len(d.setRows) {
 			start := d.setPtr
 			if err := d.runIteration(ds.Body); err != nil {
@@ -176,6 +185,7 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 			return flowDelete, nil
 		}
 		d.applySet(d.setRows[d.setPtr])
+		d.applyByFlags(d.setPtr)
 		d.setPtr++
 		return d.applyWhere()
 	case *ast.WhereStatement:
@@ -356,7 +366,7 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 	row := make(table.Row)
 	for _, name := range d.pdv.Names() {
 		ln := strings.ToLower(name)
-		if automaticVars[ln] || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
+		if automaticVars[ln] || isByFlagVar(ln) || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
 			continue
 		}
 		v := d.pdv.Get(name)
@@ -401,6 +411,48 @@ func parseNum(s string) table.Value {
 		return table.MissingNum()
 	}
 	return table.Num(f)
+}
+
+// setupByGroups, when the step has a BY statement alongside SET, computes the
+// first./last. flags over the (assumed BY-sorted) input rows.
+func (d *dataStep) setupByGroups(stmts []ast.Statement) {
+	for _, s := range stmts {
+		by, ok := s.(*ast.ByStatement)
+		if !ok {
+			continue
+		}
+		d.byVars = by.Vars
+		if len(d.setRows) == 0 {
+			return
+		}
+		tmp := table.NewDataset("", "_by_")
+		tmp.Columns = d.setRows[0].ds.Columns
+		for _, sr := range d.setRows {
+			tmp.Rows = append(tmp.Rows, sr.row)
+		}
+		d.byFlags = ComputeByGroups(tmp, d.byVars)
+		return
+	}
+}
+
+// applyByFlags sets the automatic first.<var>/last.<var> variables in the PDV
+// for the input row at index i.
+func (d *dataStep) applyByFlags(i int) {
+	if d.byFlags == nil || i >= len(d.byFlags) {
+		return
+	}
+	f := d.byFlags[i]
+	for k, v := range d.byVars {
+		d.pdv.Set("first."+v, boolNum(f.First[k]))
+		d.pdv.Set("last."+v, boolNum(f.Last[k]))
+	}
+}
+
+func boolNum(b bool) table.Value {
+	if b {
+		return table.Num(1)
+	}
+	return table.Num(0)
 }
 
 // applySet seeds the PDV from a SET input row, declaring each variable with its

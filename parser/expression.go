@@ -90,6 +90,14 @@ func (p *Parser) parsePrefixExpr() ast.Expression {
 		if p.curIs(lexer.LBRACE) || p.curIs(lexer.LBRACKET) {
 			return p.parseArrayRef(lit)
 		}
+		// BY-group automatic variables: first.<var> / last.<var>.
+		low := strings.ToLower(lit)
+		if (low == "first" || low == "last") && p.curIs(lexer.DOT) && p.peek.Type == lexer.IDENT {
+			p.next() // '.'
+			name := lit + "." + p.cur.Literal
+			p.next()
+			return &ast.Identifier{Name: name}
+		}
 		return &ast.Identifier{Name: lit}
 	default:
 		p.addError("unexpected token " + string(p.cur.Type) + " (" + p.cur.Literal + ") in expression at line " + itoa(p.cur.Line))
