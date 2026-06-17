@@ -49,9 +49,9 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 3 — Parser & AST
 
-- [ ] **3.1 AST node definitions.** In `ast/`, define interfaces (`Node`, `Statement`, `Expression`) and the program/step containers: `Program` (list of steps), `DataStep`, `ProcStep` (generic with proc name + raw options/statements for now). Acceptance: compiles.
-- [ ] **3.2 Statement & expression nodes.** Add nodes for: assignment, `set`, `input` (with var list + `$` flags), `datalines` (raw block), `if/then/else`, `do/end`, `output`, `keep/drop`, plus expression nodes (literal, identifier, binary op, unary op, function call). Acceptance: compiles; nodes have `String()` for debugging.
-- [ ] **3.3 Program/step parser.** In `parser/parser.go`, implement top-level parsing that splits the token stream into steps by `data`/`proc` ... `run;`/`quit;` and dispatches to step parsers. Add `parser/parser_test.go`. Acceptance: parses a multi-step file into a `Program` with the right step count/types.
+- [x] **3.1 AST node definitions.** In `ast/`, define interfaces (`Node`, `Statement`, `Expression`) and the program/step containers: `Program` (list of steps), `DataStep`, `ProcStep` (generic with proc name + raw options/statements for now). Acceptance: compiles.
+- [x] **3.2 Statement & expression nodes.** Add nodes for: assignment, `set`, `input` (with var list + `$` flags), `datalines` (raw block), `if/then/else`, `do/end`, `output`, `keep/drop`, plus expression nodes (literal, identifier, binary op, unary op, function call). Acceptance: compiles; nodes have `String()` for debugging.
+- [x] **3.3 Program/step parser.** In `parser/parser.go`, implement top-level parsing that splits the token stream into steps by `data`/`proc` ... `run;`/`quit;` and dispatches to step parsers. Add `parser/parser_test.go`. Acceptance: parses a multi-step file into a `Program` with the right step count/types.
 - [ ] **3.4 Expression parser (Pratt).** Implement precedence-climbing/Pratt parsing for SAS expressions: arithmetic (`+ - * / **`), comparison (`= ^= < <= > >=` and word forms `eq ne lt`...), logical (`and or not`), function calls, parentheses. Add tests. Acceptance: expression tests pass including precedence.
 - [ ] **3.5 DATA step statement parser.** Parse the bodies of DATA steps into the statement nodes from 3.2. Add tests against Level-1 corpus items. Acceptance: Level-1 items parse to expected AST shape.
 - [ ] **3.6 PROC step option parser.** Parse common PROC option syntax: `proc <name> data=<ds> (options);` and statement lines like `by`, `var`, `where`. Keep proc-specific semantics out (just structure). **Caveat from Phase 2:** the lexer emits `data` as the `DATA` keyword token even in `proc print data=people` (SAS keywords are contextual). The option parser must accept the `DATA` token (and likely `SET`, etc.) where an option name is expected, rather than only `IDENT`. Acceptance: PROC PRINT/SORT items parse.
@@ -185,3 +185,15 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Mnemonic word operators (`eq`, `and`, `or`, ...) are intentionally left as IDENT for the parser to classify (Phase 3.4) rather than lexed as operators — keeps the lexer context-free. **Discovered caveat:** `data=` in `proc print data=ds` lexes as the `DATA` keyword token (SAS keywords are contextual); recorded a note on step 3.6 so the PROC option parser accepts keyword tokens as option names.
 - Verified: `go test ./...` green (lexer suite passes; other packages have no tests yet). `go build`/`go vet` clean. Manual: `go run ./cmd/ass corpus/data_step_basic_001/input.sas` produces a correct token dump including the `DATALINES_DATA "John 25\nMary 30"` block.
 - Next: Phase 3.1 — define AST node interfaces and the program/step containers in `ast/`.
+
+### 2026-06-16 — Phase 3 partial (3.1–3.3)
+- What changed: Defined the AST node set and built the top-level parser that splits a program into steps. Step headers and PROC options are parsed; step bodies are captured (DATALINES structured; other statements as RawStatement, to be refined in 3.5).
+- Key files:
+  - `ast/ast.go` — `Node`/`Statement`/`Expression`/`Step` interfaces; `Program`, `DataStep` (Datasets + Body), `ProcStep` (Name/Data/Options/Body), `ProcOption`. All have `String()`.
+  - `ast/expressions.go` — NumberLiteral, StringLiteral, MissingLiteral, Identifier, PrefixExpression, InfixExpression, CallExpression.
+  - `ast/statements.go` — Assignment, Set, Input (+InputVar.Char), Datalines, If (Consequence/Alternative), SubsettingIf, Do (DoKind: simple/iterative/while/until), Output, Keep, Drop, By (+Descending), Var, and RawStatement (placeholder for not-yet-structured statements).
+  - `parser/parser.go` — `Parser` with cur/peek lookahead; `ParseProgram` dispatches DATA/PROC; `parseDataStep`, `parseProcStep` (options incl. `data=`, accepts keyword tokens as option names per the Phase-2 caveat), `parseStepBody` (stops at run/quit), `parseStatement` (DATALINES structured, else raw), `parseDatalines`, `parseRawStatement`. Local `itoa` to avoid a one-call strconv import.
+  - `parser/parser_test.go` — step counts/types, datalines capture, proc options+flags, no-errors-on-clean-input.
+- Decisions/deviations: PROC option parsing (part of step 3.6) was done here since it's structural; 3.6 remains for body statements like `by`/`var`/`where` and any option-name edge cases. RawStatement lets the parser keep moving over assignment/set/input/if/do until 3.5 gives them real nodes — nothing is dropped.
+- Verified: `go test ./...` green (lexer + parser); `go vet ./...` clean.
+- Next: Phase 3.4 — Pratt expression parser (arithmetic/comparison/logical/calls, incl. mnemonic word operators eq/ne/and/or/not).
