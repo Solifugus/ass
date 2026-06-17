@@ -31,6 +31,8 @@ type dataStep struct {
 	recPtr   int              // next datalines record to read
 	setRows  []sourceRow      // rows from SET input datasets (concatenated)
 	setPtr   int              // next SET row to read
+	keep     map[string]bool  // if non-nil, only these vars are output (lowercased)
+	drop     map[string]bool  // these vars are excluded from output (lowercased)
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -60,6 +62,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library) error {
 
 	d.explicit = containsOutput(ds.Body)
 	d.records = collectDatalines(ds.Body)
+	d.keep, d.drop = collectKeepDrop(ds.Body)
 	hasInput := hasInputStatement(ds.Body)
 
 	if hasSetStatement(ds.Body) {
@@ -185,10 +188,92 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 			return flowDelete, nil // drop this row
 		}
 		return flowNormal, nil
+	case *ast.DoStatement:
+		return d.execDo(st)
 	default:
 		// Unsupported in this phase; skip.
 		return flowNormal, nil
 	}
+}
+
+// execDo executes a DO...END block in its four forms, propagating a flowDelete
+// from the body out of the loop (a deleted row abandons the whole iteration).
+func (d *dataStep) execDo(st *ast.DoStatement) (flow, error) {
+	switch st.Kind {
+	case ast.DoSimple:
+		return d.execStatements(st.Body)
+
+	case ast.DoIterative:
+		return d.execDoIterative(st)
+
+	case ast.DoWhile:
+		for {
+			cond, err := Eval(st.Cond, d.pdv)
+			if err != nil {
+				return flowNormal, err
+			}
+			if !truthy(cond) {
+				return flowNormal, nil
+			}
+			f, err := d.execStatements(st.Body)
+			if err != nil || f == flowDelete {
+				return f, err
+			}
+		}
+
+	case ast.DoUntil:
+		for {
+			f, err := d.execStatements(st.Body)
+			if err != nil || f == flowDelete {
+				return f, err
+			}
+			cond, err := Eval(st.Cond, d.pdv)
+			if err != nil {
+				return flowNormal, err
+			}
+			if truthy(cond) {
+				return flowNormal, nil
+			}
+		}
+	}
+	return flowNormal, nil
+}
+
+// execDoIterative runs `do var = from to to [by by]`. The loop variable is left
+// at the first value past the bound (matching SAS, where `do i=1 to 3` leaves
+// i=4). Missing or zero step bounds skip the loop to avoid non-termination.
+func (d *dataStep) execDoIterative(st *ast.DoStatement) (flow, error) {
+	from, err := Eval(st.From, d.pdv)
+	if err != nil {
+		return flowNormal, err
+	}
+	to, err := Eval(st.To, d.pdv)
+	if err != nil {
+		return flowNormal, err
+	}
+	by := 1.0
+	if st.By != nil {
+		byVal, err := Eval(st.By, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		by = byVal.Num
+	}
+	if from.IsMissing() || to.IsMissing() || by == 0 {
+		return flowNormal, nil
+	}
+
+	v := from.Num
+	for (by > 0 && v <= to.Num) || (by < 0 && v >= to.Num) {
+		d.pdv.Set(st.Var, table.Num(v))
+		f, err := d.execStatements(st.Body)
+		if err != nil || f == flowDelete {
+			return f, err
+		}
+		v += by
+	}
+	d.pdv.Set(st.Var, table.Num(v)) // terminal value past the bound
+	return flowNormal, nil
 }
 
 // output writes the current PDV to the named output datasets, or to all of the
@@ -220,7 +305,8 @@ func (d *dataStep) outputAll() {
 func (d *dataStep) writeRow(ds *table.Dataset) {
 	row := make(table.Row)
 	for _, name := range d.pdv.Names() {
-		if automaticVars[strings.ToLower(name)] {
+		ln := strings.ToLower(name)
+		if automaticVars[ln] || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
 			continue
 		}
 		v := d.pdv.Get(name)
@@ -296,6 +382,30 @@ func (d *dataStep) collectSetRows(stmts []ast.Statement) []sourceRow {
 		}
 	}
 	return rows
+}
+
+// collectKeepDrop scans the body for KEEP and DROP statements and returns the
+// resulting variable filters (lowercased). keep is nil unless a KEEP statement
+// appears (nil means "keep all"); drop is always a set. Multiple statements
+// accumulate.
+func collectKeepDrop(stmts []ast.Statement) (keep, drop map[string]bool) {
+	drop = make(map[string]bool)
+	for _, s := range stmts {
+		switch st := s.(type) {
+		case *ast.KeepStatement:
+			if keep == nil {
+				keep = make(map[string]bool)
+			}
+			for _, v := range st.Vars {
+				keep[strings.ToLower(v)] = true
+			}
+		case *ast.DropStatement:
+			for _, v := range st.Vars {
+				drop[strings.ToLower(v)] = true
+			}
+		}
+	}
+	return keep, drop
 }
 
 // hasSetStatement reports whether the body contains a SET statement.

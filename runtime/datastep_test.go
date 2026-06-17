@@ -253,6 +253,74 @@ func TestDataStepIfThenOutput(t *testing.T) {
 	}
 }
 
+func TestDataStepDoIterativeOutput(t *testing.T) {
+	src := "data squares;\n  do i = 1 to 5;\n    sq = i * i;\n    output;\n  end;\n  run;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("squares")
+	if ds.NObs() != 5 {
+		t.Fatalf("NObs = %d, want 5", ds.NObs())
+	}
+	if got := ds.Get(ds.Rows[2], "sq"); got.Num != 9 {
+		t.Errorf("row2 sq = %v, want 9", got.Display())
+	}
+	if got := ds.Get(ds.Rows[4], "i"); got.Num != 5 {
+		t.Errorf("row4 i = %v, want 5", got.Display())
+	}
+}
+
+func TestDataStepDoIterativeBy(t *testing.T) {
+	src := "data evens;\n  do n = 0 to 10 by 2;\n    output;\n  end;\n  run;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("evens")
+	if ds.NObs() != 6 { // 0,2,4,6,8,10
+		t.Fatalf("NObs = %d, want 6", ds.NObs())
+	}
+	if got := ds.Get(ds.Rows[5], "n"); got.Num != 10 {
+		t.Errorf("last n = %v, want 10", got.Display())
+	}
+}
+
+func TestDataStepDoWhile(t *testing.T) {
+	src := "data g;\n  i = 1;\n  do while(i <= 3);\n    output;\n    i = i + 1;\n  end;\n  run;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("g")
+	if ds.NObs() != 3 {
+		t.Fatalf("NObs = %d, want 3", ds.NObs())
+	}
+}
+
+func TestDataStepDoUntilRunsAtLeastOnce(t *testing.T) {
+	src := "data g;\n  i = 10;\n  do until(i >= 3);\n    output;\n    i = i + 1;\n  end;\n  run;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("g")
+	if ds.NObs() != 1 {
+		t.Fatalf("NObs = %d, want 1 (until tests after body)", ds.NObs())
+	}
+}
+
+func TestDataStepDrop(t *testing.T) {
+	src := "data out;\n  input x y z;\n  drop y;\n  datalines;\n1 2 3\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("out")
+	if ds.HasColumn("y") {
+		t.Errorf("y should be dropped; columns = %v", ds.ColumnNames())
+	}
+	if !ds.HasColumn("x") || !ds.HasColumn("z") {
+		t.Errorf("x and z should remain; columns = %v", ds.ColumnNames())
+	}
+}
+
+func TestDataStepKeep(t *testing.T) {
+	src := "data out;\n  input x y z;\n  keep x z;\n  datalines;\n1 2 3\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("out")
+	want := []string{"x", "z"}
+	got := ds.ColumnNames()
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("columns = %v, want %v", got, want)
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {

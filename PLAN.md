@@ -66,7 +66,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 - [x] **4.5 `input` + `datalines`.** Implement reading the raw datalines region per the `input` spec (list input: space-delimited, `$` = char). Populate the PDV and output one row per data line. Acceptance: the canonical `data people; input name $ age; datalines; ... run;` produces a 2-row dataset.
 - [x] **4.6 `set` (read existing dataset).** Implement `set <ds>`: the implicit loop iterates rows of the input dataset into the PDV. Acceptance: `data b; set a; run;` copies dataset a to b.
 - [x] **4.7 `if/then/else` + subsetting if.** Implement conditional execution and the subsetting-`if` (a bare `if cond;` that drops the row when false). Acceptance: `data adults; set people; if age>=18; run;` filters correctly.
-- [ ] **4.8 `do/end` loops & `keep`/`drop`.** Implement iterative `do`/`do while`/`do until` and column selection via `keep`/`drop` statements (and dataset options if feasible). Acceptance: tests for a do loop and keep/drop pass.
+- [x] **4.8 `do/end` loops & `keep`/`drop`.** Implement iterative `do`/`do while`/`do until` and column selection via `keep`/`drop` statements (and dataset options if feasible). Acceptance: tests for a do loop and keep/drop pass.
 - [ ] **4.9 SAS-style log output.** In `log/`, implement a logger that writes SAS-like NOTEs (e.g. "NOTE: The data set WORK.PEOPLE has N observations and M variables."). Wire DATA step to emit these. Acceptance: log lines match the expected format for Level-1 items.
 
 ## Phase 5 — PROC PRINT
@@ -272,3 +272,13 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: A THEN/ELSE branch is a single statement (the parser already wraps multi-statement branches in DO blocks, handled in 4.8). No `delete`/`return`/`abort` statements yet (no AST nodes); subsetting-if covers the corpus's filtering needs.
 - Verified: `go test ./runtime/` green; `go build ./...` and `go vet ./...` clean.
 - Next: Phase 4.8 — do/end + keep/drop. Execute `DoStatement` (simple/iterative/while/until — run the body, iterative drives a loop var via `From`/`To`/`By`, while/until test `Cond`) and apply `KeepStatement`/`DropStatement` to filter the output variable set. Acceptance: a `do i = 1 to n` loop and a kept/dropped variable list behave correctly.
+
+### 2026-06-16 — Phase 4.8 (do/end loops + keep/drop)
+- What changed: DO...END blocks and output-variable selection. All four DO forms execute; KEEP/DROP filter the columns written to output.
+- Key files (`runtime/datastep.go`):
+  - `execStatement` gained `*ast.DoStatement` → `execDo`. `execDo` handles `DoSimple` (run body once), `DoWhile` (test-before), `DoUntil` (test-after, ≥1 run); `execDoIterative` runs `do var = from to to [by by]`, leaves the loop var one step past the bound (SAS `do i=1 to 3` ⇒ i=4), and skips on missing/zero-step bounds to avoid non-termination. A `flowDelete` from any DO body propagates out of the loop and the iteration.
+  - `dataStep` gained `keep`/`drop` (lowercased sets); `collectKeepDrop` scans the body (keep nil ⇒ keep-all, accumulates across statements); `writeRow` skips automatic, dropped, and non-kept vars.
+  - `runtime/datastep_test.go` — iterative loop with output + terminal loop-var value, `by` step count, do-while (3 rows), do-until (runs once when already past bound), drop removes a column, keep restricts to a column list (order preserved).
+- Decisions/deviations: KEEP/DROP are treated as step-global (scanned up front, top-level), matching how SAS compiles them; dataset-option forms (`data out(keep=...)`) are deferred. No `leave`/`continue`/`do over`/array-do yet (no AST nodes); arrays are Phase 10 (L5).
+- Verified: `go test ./runtime/` green; `go build ./...` and `go vet ./...` clean.
+- Next: Phase 4.9 — SAS-style log output. In `log/`, add a logger emitting NOTEs (e.g. "NOTE: The data set WORK.OUT has N observations and M variables."); wire `RunDataStep` to emit one per output dataset. Acceptance: log lines match the expected format for L1 items.
