@@ -24,6 +24,16 @@ func Eval(expr ast.Expression, pdv *PDV) (table.Value, error) {
 		return table.MissingNum(), nil
 	case *ast.Identifier:
 		return pdv.Get(e.Name), nil
+	case *ast.ArrayRef:
+		idx, err := Eval(e.Index, pdv)
+		if err != nil {
+			return table.MissingNum(), err
+		}
+		name, ok := pdv.ArrayElement(e.Name, int(idx.Num))
+		if !ok {
+			return table.MissingNum(), fmt.Errorf("array subscript out of range: %s{%v}", e.Name, idx.Display())
+		}
+		return pdv.Get(name), nil
 	case *ast.PrefixExpression:
 		return evalPrefix(e, pdv)
 	case *ast.InfixExpression:

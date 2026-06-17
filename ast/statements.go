@@ -173,6 +173,50 @@ func (r *RetainStatement) String() string {
 	return "retain " + strings.Join(r.Vars, " ") + ";"
 }
 
+// ArrayStatement is `array name{n} elem1 elem2 ...;`. Elements are the variable
+// names the array indexes (1-based). Size is len(Elements) when declared `{*}`.
+type ArrayStatement struct {
+	Name     string
+	Size     int
+	Elements []string
+}
+
+func (a *ArrayStatement) statementNode() {}
+func (a *ArrayStatement) String() string {
+	return "array " + a.Name + "{" + str(&NumberLiteral{Literal: itoaArr(a.Size)}) + "} " + strings.Join(a.Elements, " ") + ";"
+}
+
+func itoaArr(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	if neg {
+		b = append([]byte{'-'}, b...)
+	}
+	return string(b)
+}
+
+// ArrayElementAssignment is `name{index} = value;`.
+type ArrayElementAssignment struct {
+	Name  string
+	Index Expression
+	Value Expression
+}
+
+func (a *ArrayElementAssignment) statementNode() {}
+func (a *ArrayElementAssignment) String() string {
+	return a.Name + "{" + str(a.Index) + "} = " + str(a.Value) + ";"
+}
+
 // SumStatement is the SAS sum statement `<var> + <expr>;`, equivalent to
 // `var = sum(var, expr)` with var retained and initialized to 0.
 type SumStatement struct {

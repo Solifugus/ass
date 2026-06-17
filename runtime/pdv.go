@@ -19,8 +19,9 @@ import (
 type PDV struct {
 	values   map[string]table.Value
 	kinds    map[string]table.Kind
-	order    []string        // display names, in first-seen order
-	retained map[string]bool // names exempt from per-iteration reset (lowercased)
+	order    []string            // display names, in first-seen order
+	retained map[string]bool     // names exempt from per-iteration reset (lowercased)
+	arrays   map[string][]string // array name (lowercased) -> element variable names
 }
 
 // NewPDV creates an empty PDV.
@@ -29,7 +30,23 @@ func NewPDV() *PDV {
 		values:   make(map[string]table.Value),
 		kinds:    make(map[string]table.Kind),
 		retained: make(map[string]bool),
+		arrays:   make(map[string][]string),
 	}
+}
+
+// DefineArray registers an array's element variable names under its name.
+func (p *PDV) DefineArray(name string, elements []string) {
+	p.arrays[strings.ToLower(name)] = elements
+}
+
+// ArrayElement returns the variable name for the 1-based index of an array, and
+// whether the array and index are valid.
+func (p *PDV) ArrayElement(name string, index int) (string, bool) {
+	elems, ok := p.arrays[strings.ToLower(name)]
+	if !ok || index < 1 || index > len(elems) {
+		return "", false
+	}
+	return elems[index-1], true
 }
 
 // Retain marks a variable as retained: ResetVars will not clear it between

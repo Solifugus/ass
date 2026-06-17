@@ -237,6 +237,18 @@ func (l *Lexer) scan() (tok Token) {
 	case ')':
 		l.advance()
 		return Token{Type: RPAREN, Literal: ")", Line: line, Col: col}
+	case '[':
+		l.advance()
+		return Token{Type: LBRACKET, Literal: "[", Line: line, Col: col}
+	case ']':
+		l.advance()
+		return Token{Type: RBRACKET, Literal: "]", Line: line, Col: col}
+	case '{':
+		l.advance()
+		return Token{Type: LBRACE, Literal: "{", Line: line, Col: col}
+	case '}':
+		l.advance()
+		return Token{Type: RBRACE, Literal: "}", Line: line, Col: col}
 	case ',':
 		l.advance()
 		return Token{Type: COMMA, Literal: ",", Line: line, Col: col}

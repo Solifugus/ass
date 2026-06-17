@@ -64,6 +64,10 @@ const (
 	SEMICOLON TokenType = "SEMICOLON" // ;
 	LPAREN    TokenType = "LPAREN"    // (
 	RPAREN    TokenType = "RPAREN"    // )
+	LBRACKET  TokenType = "LBRACKET"  // [
+	RBRACKET  TokenType = "RBRACKET"  // ]
+	LBRACE    TokenType = "LBRACE"    // {
+	RBRACE    TokenType = "RBRACE"    // }
 	COMMA     TokenType = "COMMA"     // ,
 	DOT       TokenType = "DOT"       // .
 	DOLLAR    TokenType = "DOLLAR"    // $ (character-variable marker in INPUT, format prefix)

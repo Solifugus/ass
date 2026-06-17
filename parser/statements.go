@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
@@ -44,6 +45,10 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseNameListStmt("drop")
 	case p.identIs("retain"):
 		return p.parseRetain()
+	case p.identIs("array"):
+		return p.parseArray()
+	case p.curIs(lexer.IDENT) && (p.peek.Type == lexer.LBRACE || p.peek.Type == lexer.LBRACKET):
+		return p.parseArrayElementAssignment()
 	case p.curIs(lexer.IDENT) && p.peek.Type == lexer.PLUS:
 		return p.parseSum()
 	case p.identIs("by"):
@@ -86,6 +91,101 @@ func (p *Parser) parseRetain() ast.Statement {
 	}
 	p.expectSemicolon()
 	return stmt
+}
+
+// parseArray parses `array name{n|*} elem1 elem2 ...;`. Element lists may use
+// `x1-x3` numeric-suffix ranges, which are expanded.
+func (p *Parser) parseArray() ast.Statement {
+	p.next() // 'array'
+	stmt := &ast.ArrayStatement{}
+	if p.curIs(lexer.IDENT) {
+		stmt.Name = p.cur.Literal
+		p.next()
+	}
+	// Dimension: {n} / [n] / {*} (parens are not used to avoid call ambiguity).
+	if p.curIs(lexer.LBRACE) || p.curIs(lexer.LBRACKET) {
+		close := lexer.RBRACE
+		if p.curIs(lexer.LBRACKET) {
+			close = lexer.RBRACKET
+		}
+		p.next()
+		if p.curIs(lexer.NUMBER) {
+			n, _ := strconv.Atoi(p.cur.Literal)
+			stmt.Size = n
+			p.next()
+		} else if p.curIs(lexer.STAR) {
+			p.next() // '*' => size inferred from element count
+		}
+		if p.curIs(close) {
+			p.next()
+		}
+	}
+	// Element names (until ';'), expanding x1-x3 ranges.
+	for p.curIs(lexer.IDENT) {
+		name := p.cur.Literal
+		p.next()
+		if p.curIs(lexer.MINUS) && p.peek.Type == lexer.IDENT {
+			p.next() // '-'
+			end := p.cur.Literal
+			p.next()
+			stmt.Elements = append(stmt.Elements, expandRange(name, end)...)
+		} else {
+			stmt.Elements = append(stmt.Elements, name)
+		}
+	}
+	if stmt.Size == 0 {
+		stmt.Size = len(stmt.Elements)
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseArrayElementAssignment parses `name{index} = value;`.
+func (p *Parser) parseArrayElementAssignment() ast.Statement {
+	name := p.cur.Literal
+	p.next() // name
+	ref := p.parseArrayRef(name).(*ast.ArrayRef)
+	if p.curIs(lexer.EQ) {
+		p.next()
+	} else {
+		p.addError("expected '=' in array assignment at line " + itoa(p.cur.Line))
+	}
+	stmt := &ast.ArrayElementAssignment{Name: name, Index: ref.Index, Value: p.parseExpression(pLOWEST)}
+	p.expectSemicolon()
+	return stmt
+}
+
+// expandRange expands a `prefixN - prefixM` element range, e.g. x1-x3 ->
+// [x1 x2 x3]. If the names do not share a prefix with numeric suffixes, it
+// returns the two endpoints unchanged.
+func expandRange(start, end string) []string {
+	ps, ns := splitSuffix(start)
+	pe, ne := splitSuffix(end)
+	if ps == "" || ps != pe || ns < 0 || ne < ns {
+		return []string{start, end}
+	}
+	var out []string
+	for i := ns; i <= ne; i++ {
+		out = append(out, ps+itoa(i))
+	}
+	return out
+}
+
+// splitSuffix splits a name into its non-numeric prefix and trailing integer
+// (e.g. "x12" -> "x", 12). Returns ("",-1) if there is no trailing number.
+func splitSuffix(name string) (string, int) {
+	i := len(name)
+	for i > 0 && name[i-1] >= '0' && name[i-1] <= '9' {
+		i--
+	}
+	if i == len(name) {
+		return "", -1
+	}
+	n := 0
+	for _, c := range name[i:] {
+		n = n*10 + int(c-'0')
+	}
+	return name[:i], n
 }
 
 // parseSum parses the sum statement `<var> + <expr>;`.

@@ -1,0 +1,15 @@
+id: data_step_array_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - arrays
+  - do-loop
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  array s{3} over s1-s3, iterated with a DO loop to double each element. Expected:
+  row1 s1=2 s2=4 s3=6; row2 s1=20 s2=40 s3=60. The loop index i is dropped.

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -68,6 +69,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	d.records = collectDatalines(ds.Body)
 	d.keep, d.drop = collectKeepDrop(ds.Body)
 	d.wheres = collectWheres(ds.Body)
+	d.defineArrays(ds.Body)
 	if err := d.initRetained(ds.Body); err != nil {
 		return err
 	}
@@ -181,6 +183,24 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		return flowNormal, nil
 	case *ast.RetainStatement:
 		// Retention/initialization is handled once at step setup (initRetained).
+		return flowNormal, nil
+	case *ast.ArrayStatement:
+		// Array definitions are registered at setup (defineArrays); no-op here.
+		return flowNormal, nil
+	case *ast.ArrayElementAssignment:
+		idx, err := Eval(st.Index, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		name, ok := d.pdv.ArrayElement(st.Name, int(idx.Num))
+		if !ok {
+			return flowNormal, fmt.Errorf("array subscript out of range: %s{%v}", st.Name, idx.Display())
+		}
+		v, err := Eval(st.Value, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		d.pdv.Set(name, v)
 		return flowNormal, nil
 	case *ast.SumStatement:
 		add, err := Eval(st.Expr, d.pdv)
@@ -412,6 +432,20 @@ func (d *dataStep) collectSetRows(stmts []ast.Statement) []sourceRow {
 		}
 	}
 	return rows
+}
+
+// defineArrays registers every ARRAY statement's element list in the PDV and
+// declares the element variables (numeric by default) so subscripted access and
+// output column order work.
+func (d *dataStep) defineArrays(stmts []ast.Statement) {
+	for _, s := range stmts {
+		if arr, ok := s.(*ast.ArrayStatement); ok {
+			d.pdv.DefineArray(arr.Name, arr.Elements)
+			for _, e := range arr.Elements {
+				d.pdv.Declare(e, table.Numeric)
+			}
+		}
+	}
 }
 
 // initRetained scans the body for RETAIN and sum statements, marks those

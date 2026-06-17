@@ -106,7 +106,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 ## Phase 10 — Advanced DATA step (Level 5)
 
 - [x] **10.1 `retain`.** Variables keep values across iterations. Acceptance: retain test (running total) passes. (Includes the sum statement `var + expr;`.)
-- [ ] **10.2 Arrays.** Implement `array` declaration and subscripted references. Acceptance: array test passes.
+- [x] **10.2 Arrays.** Implement `array` declaration and subscripted references. Acceptance: array test passes.
 - [ ] **10.3 BY-group processing in DATA step.** Use `first.`/`last.` (from 7.3) inside the implicit loop. Acceptance: by-group aggregation test passes.
 - [ ] **10.4 `merge` + `in=`.** Implement match-merge by BY variables with `in=` dataset flags. Acceptance: merge test passes.
 - [ ] **10.5 Formats & informats.** Implement `formats/` core formats (e.g. numeric `w.d`, `dollar`, `date`/`datetime`) and informats; apply on input and on PRINT. Acceptance: format application tests pass.
@@ -408,3 +408,17 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Retained vars are declared at setup (before the loop), so they lead the output column order; this matches SAS when RETAIN precedes other statements (as in idiomatic code) but could differ if RETAIN appears later — output not byte-verified, values are correct. RETAIN initial-value lists use the SAS rule "a literal applies to the preceding variable." `(1 2 3)` grouped-initial syntax not parsed.
 - Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 19/19 (100%).
 - Next: Phase 10.2 — arrays. `array name{n} v1..vn;` declaration + subscripted references `name{i}` in expressions/assignments. Needs an Array AST node, parser support, and runtime resolution of subscripts to PDV variables. Add a corpus item (e.g. iterate an array to transform columns).
+
+### 2026-06-16 — Phase 10.2 (arrays)
+- What changed: Implemented `array` declarations and subscripted references `name{i}` / `name[i]`.
+- Key files:
+  - `lexer/token.go` + `lexer/lexer.go` — new `[` `]` `{` `}` tokens (LBRACKET/RBRACKET/LBRACE/RBRACE).
+  - `ast/expressions.go` — `ArrayRef{Name, Index}`. `ast/statements.go` — `ArrayStatement{Name, Size, Elements}` and `ArrayElementAssignment{Name, Index, Value}`.
+  - `parser/expression.go` — IDENT followed by `{`/`[` → `parseArrayRef`. `parser/statements.go` — `parseArray` (dimension `{n}`/`{*}`, element list with `x1-x3` range expansion via `expandRange`/`splitSuffix`); `parseArrayElementAssignment` (IDENT followed by `{`/`[` at statement start).
+  - `runtime/pdv.go` — PDV holds `arrays` map; `DefineArray`/`ArrayElement(name, 1-based idx)`.
+  - `runtime/datastep.go` — `defineArrays` (setup: register element lists, declare elements numeric); `execStatement` handles ArrayStatement (no-op) and ArrayElementAssignment (resolve index → element var → Set); `eval.go` resolves `*ast.ArrayRef` via the PDV. Out-of-range subscript → error.
+  - `runtime/datastep_test.go` — DO-loop doubling an array (s1=2,s2=4,s3=6; drop i) and `x1-x3` range expansion with `x{1}+x{2}+x{3}`.
+  - `corpus/data_step_array_001/` — array-doubling item; harness now 20/20, 100%.
+- Decisions/deviations: Subscripts use `{}`/`[]` only — not `()` (avoids function-call ambiguity); SAS allows `()` but it's rarely needed. Arrays are numeric-by-default (no `$` char-array parsing yet); `_temporary_` arrays and multi-dimensional arrays not supported. Element vars are declared at setup, so an array's columns lead the output order.
+- Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 20/20 (100%).
+- Next: Phase 10.3 — BY-group processing in the DATA step. Wire `runtime.ComputeByGroups` (built in 7.3) into the SET loop: a `by` statement exposes automatic `first.<var>`/`last.<var>` variables in the PDV during iteration, enabling by-group aggregation (e.g. sum per group, output on last.). Add a corpus item.

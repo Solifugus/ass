@@ -405,6 +405,34 @@ func TestDataStepRetainCarriesValue(t *testing.T) {
 	}
 }
 
+func TestDataStepArray(t *testing.T) {
+	src := "data t;\n  array s{3} s1 s2 s3;\n  input s1 s2 s3;\n  do i = 1 to 3;\n    s{i} = s{i} * 2;\n  end;\n  drop i;\n  datalines;\n1 2 3\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("t")
+	if ds.NObs() != 1 {
+		t.Fatalf("NObs = %d, want 1", ds.NObs())
+	}
+	want := map[string]float64{"s1": 2, "s2": 4, "s3": 6}
+	for k, v := range want {
+		if got := ds.Get(ds.Rows[0], k); got.Num != v {
+			t.Errorf("%s = %v, want %v", k, got.Display(), v)
+		}
+	}
+	if ds.HasColumn("i") {
+		t.Errorf("loop var i should be dropped; columns = %v", ds.ColumnNames())
+	}
+}
+
+func TestDataStepArrayRangeExpansion(t *testing.T) {
+	// array x{3} x1-x3; the range expands to x1 x2 x3.
+	src := "data t;\n  array x{3} x1-x3;\n  input x1 x2 x3;\n  total = x{1} + x{2} + x{3};\n  datalines;\n4 5 6\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("t")
+	if got := ds.Get(ds.Rows[0], "total"); got.Num != 15 {
+		t.Errorf("total = %v, want 15", got.Display())
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {

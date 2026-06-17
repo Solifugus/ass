@@ -65,6 +65,15 @@ func (ie *InfixExpression) String() string {
 	return "(" + str(ie.Left) + " " + ie.Op + " " + str(ie.Right) + ")"
 }
 
+// ArrayRef is a subscripted array reference, e.g. `a{i}`.
+type ArrayRef struct {
+	Name  string
+	Index Expression
+}
+
+func (a *ArrayRef) expressionNode() {}
+func (a *ArrayRef) String() string  { return a.Name + "{" + str(a.Index) + "}" }
+
 // CallExpression is a function call, e.g. `substr(name, 1, 3)`.
 type CallExpression struct {
 	Func string

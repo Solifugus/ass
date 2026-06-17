@@ -87,12 +87,32 @@ func (p *Parser) parsePrefixExpr() ast.Expression {
 		if p.curIs(lexer.LPAREN) {
 			return p.parseCall(lit)
 		}
+		if p.curIs(lexer.LBRACE) || p.curIs(lexer.LBRACKET) {
+			return p.parseArrayRef(lit)
+		}
 		return &ast.Identifier{Name: lit}
 	default:
 		p.addError("unexpected token " + string(p.cur.Type) + " (" + p.cur.Literal + ") in expression at line " + itoa(p.cur.Line))
 		p.next()
 		return nil
 	}
+}
+
+// parseArrayRef parses a subscripted array reference `name{expr}` or
+// `name[expr]`; cur is the opening bracket/brace.
+func (p *Parser) parseArrayRef(name string) ast.Expression {
+	close := lexer.RBRACE
+	if p.curIs(lexer.LBRACKET) {
+		close = lexer.RBRACKET
+	}
+	p.next() // consume opening bracket
+	idx := p.parseExpression(pLOWEST)
+	if p.curIs(close) {
+		p.next()
+	} else {
+		p.addError("expected closing array subscript at line " + itoa(p.cur.Line))
+	}
+	return &ast.ArrayRef{Name: name, Index: idx}
 }
 
 // parseCall parses a function call argument list; cur is the '('.
