@@ -71,7 +71,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 5 — PROC PRINT
 
-- [ ] **5.1 PROC dispatch.** In `proc/`, define a `Proc` interface (run against a Library + step AST + logger) and a registry mapping proc name → implementation. Wire the runtime to dispatch PROC steps. Acceptance: unknown procs produce a clean "not supported" log note, not a crash.
+- [x] **5.1 PROC dispatch.** In `proc/`, define a `Proc` interface (run against a Library + step AST + logger) and a registry mapping proc name → implementation. Wire the runtime to dispatch PROC steps. Acceptance: unknown procs produce a clean "not supported" log note, not a crash.
 - [ ] **5.2 PROC PRINT core.** Implement `proc print data=<ds>;` rendering a SAS-like listing (Obs column + variables, right/left alignment by type). Support `var` to select/order columns. Add tests comparing rendered text to expected. **Also backfill the deferred corpus `expected_output.txt` files here (see step 1.6): once the renderer format is locked, write expected output for the Level-1/Level-2 items and flip their `output: unverified` → `verified`.** Acceptance: PROC PRINT corpus items match expected output.
 - [ ] **5.3 PROC PRINT options.** Add `noobs`, `label` (use column labels as headers). Acceptance: tests for noobs/label pass.
 
@@ -292,3 +292,13 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Signature change (added logger param) over a stateful runner struct — simplest for now; Phase 5's CLI will pass a real logger writing to stderr. Variable-count uses `len(out.Columns)` (post keep/drop, since columns are only added on output).
 - Verified: `go test ./...` green across lexer/parser/table/runtime/log; `go build ./...` and `go vet ./...` clean.
 - Next: Phase 5 — PROC PRINT + the `ass run` CLI path. First wire `cmd/ass` to execute a program (lex → parse → for each step: DATA via `RunDataStep`, PROC via a dispatcher) with a real logger to stderr; then implement PROC PRINT (`proc/`) rendering a dataset as the SAS-style listing (Obs column unless `noobs`, `var` selection), and start backfilling corpus `expected_output.txt`. See step 5.1/5.2 for specifics.
+
+### 2026-06-16 — Phase 5.1 (PROC dispatch + `ass run` CLI path)
+- What changed: The execution pipeline is now wired end to end. A program runner dispatches DATA and PROC steps, and `ass <file.sas>` executes a program (not just dumps tokens).
+- Key files:
+  - `proc/proc.go` — `Proc` interface (`Run(lib, *ast.ProcStep, logger) error`); a name→impl `registry` with `Register` (panics on dup) / `Lookup`; package-level `Run` that dispatches, logging "NOTE: PROC X is not supported and was skipped." for unregistered procs (no crash).
+  - `runtime/program.go` — `RunProgram(prog, lib, logger)`: iterates steps, DATA → `RunDataStep`, PROC → `proc.Run`; stops at first error. (runtime→proc import; no cycle.)
+  - `cmd/ass/main.go` — `ass <file>` now runs the program (parse-errors abort before exec; log → stderr, PROC output → stdout); token dump moved to `ass tokens <file>`; usage updated.
+  - `runtime/program_test.go` — DATA builds PEOPLE then unknown PROC PRINT logs not-supported.
+- Verified: `go test ./runtime/ ./proc/` green; `go build`/`go vet` clean. Ran all L1 corpus items via `go run ./cmd/ass`: correct obs/var counts (sales 3×4, people→adults 4→2, squares 5, graded 3×3), PROC PRINT logs not-supported (lands in 5.2).
+- Next: Phase 5.2 — PROC PRINT core. Implement `proc print data=<ds>;` in `proc/` (register as "print"): SAS-style listing with an Obs column and the variables (numeric right-aligned, char left-aligned), honoring `var` for column selection/order, writing to stdout. Add render tests comparing to expected text. Then backfill corpus `expected_output.txt` for L1/L2 items and flip `output: unverified` → `verified`.

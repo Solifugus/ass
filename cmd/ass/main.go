@@ -7,16 +7,20 @@ import (
 	"os"
 
 	"github.com/solifugus/ass/lexer"
+	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/parser"
+	"github.com/solifugus/ass/runtime"
+	"github.com/solifugus/ass/table"
 )
 
 const usage = `ass - Analyst's Statistical Suite
 
 Usage:
-  ass <file.sas>       Run a SAS program (currently: dump tokens)
-  ass parse <file.sas> Parse a SAS program and print its AST
-  ass test <dir>       Run the compatibility corpus in <dir>
-  ass --help           Show this help
+  ass <file.sas>        Run a SAS program
+  ass parse <file.sas>  Parse a SAS program and print its AST
+  ass tokens <file.sas> Dump the token stream (lexer debug)
+  ass test <dir>        Run the compatibility corpus in <dir>
+  ass --help            Show this help
 
 ass is an independent open-source project, not affiliated with SAS Institute Inc.`
 
@@ -44,9 +48,36 @@ func run(args []string) error {
 			return fmt.Errorf("parse: missing <file.sas>")
 		}
 		return runParse(args[1])
+	case "tokens":
+		if len(args) < 2 {
+			return fmt.Errorf("tokens: missing <file.sas>")
+		}
+		return dumpTokens(args[1])
 	default:
-		return runFile(args[0])
+		return runProgram(args[0])
 	}
+}
+
+// runProgram reads, parses, and executes a SAS program. The SAS-style log is
+// written to stderr; PROC output goes to stdout. Parse errors abort before
+// execution.
+func runProgram(path string) error {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	p := parser.New(string(src))
+	prog := p.ParseProgram()
+	if errs := p.Errors(); len(errs) > 0 {
+		fmt.Fprintf(os.Stderr, "%d parse error(s):\n", len(errs))
+		for _, e := range errs {
+			fmt.Fprintln(os.Stderr, "  - "+e)
+		}
+		return fmt.Errorf("aborted: %d parse error(s)", len(errs))
+	}
+	logger := log.New(os.Stderr)
+	lib := table.NewLibrary()
+	return runtime.RunProgram(prog, lib, logger)
 }
 
 // runParse parses a SAS source file and prints the resulting AST, plus any
@@ -69,9 +100,8 @@ func runParse(path string) error {
 	return nil
 }
 
-// runFile reads a SAS source file and, until the parser/runtime exist, prints
-// its token stream (debug mode).
-func runFile(path string) error {
+// dumpTokens reads a SAS source file and prints its token stream (lexer debug).
+func dumpTokens(path string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -84,7 +114,6 @@ func runFile(path string) error {
 		}
 		fmt.Printf("%4d:%-3d %-14s %q\n", tok.Line, tok.Col, tok.Type, tok.Literal)
 	}
-	fmt.Fprintln(os.Stderr, "note: execution pipeline not yet implemented (token dump only)")
 	return nil
 }
 
