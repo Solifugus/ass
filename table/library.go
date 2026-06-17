@@ -7,11 +7,15 @@ import "strings"
 // SAS. This is how steps pass data to one another.
 type Library struct {
 	datasets map[string]*Dataset
+
+	// Formats holds user-defined formats created by PROC FORMAT during the run.
+	// It is scoped to the library so definitions never leak between programs.
+	Formats *FormatCatalog
 }
 
 // NewLibrary creates an empty library.
 func NewLibrary() *Library {
-	return &Library{datasets: make(map[string]*Dataset)}
+	return &Library{datasets: make(map[string]*Dataset), Formats: NewFormatCatalog()}
 }
 
 // Put stores (or replaces) a dataset under its name.

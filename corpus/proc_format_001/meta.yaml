@@ -1,0 +1,18 @@
+id: proc_format_001
+source: hand-written
+license: MIT
+features:
+  - user-formats
+  - formats
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC FORMAT defines a numeric VALUE format (agegrp: low-12=Child, 13-19=Teen,
+  20-high=Adult) and a character VALUE format ($sex: M=Male, F=Female,
+  other=Unknown). The FORMAT statement attaches them; PROC PRINT renders the
+  labels. Expected: ages 8/16/45/30 -> Child/Teen/Adult/Adult; sex F/M/F/X ->
+  Female/Male/Female/Unknown.

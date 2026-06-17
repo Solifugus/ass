@@ -29,7 +29,7 @@ ass test corpus/
 | datalines | 5/5 | 100.0% |
 | do-loop | 2/2 | 100.0% |
 | expressions | 2/2 | 100.0% |
-| formats | 2/2 | 100.0% |
+| formats | 3/3 | 100.0% |
 | if-then-else | 3/3 | 100.0% |
 | input | 5/5 | 100.0% |
 | macro-control | 1/1 | 100.0% |
@@ -39,7 +39,8 @@ ass test corpus/
 | merge | 1/1 | 100.0% |
 | proc-freq | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 16/16 | 100.0% |
+| proc-print | 17/17 | 100.0% |
+| proc-reg | 1/1 | 100.0% |
 | proc-sort | 3/3 | 100.0% |
 | proc-sql | 4/4 | 100.0% |
 | retain | 2/2 | 100.0% |
@@ -49,6 +50,7 @@ ass test corpus/
 | sql-join | 1/1 | 100.0% |
 | sql-select | 4/4 | 100.0% |
 | sum-statement | 2/2 | 100.0% |
+| user-formats | 1/1 | 100.0% |
 | where | 1/1 | 100.0% |
 
 > 100% means every corpus item *currently authored* for a feature passes — it is
@@ -60,10 +62,10 @@ ass test corpus/
 ## Known unsupported / deferred constructs
 
 - Two-way PROC FREQ cross-tabulation (one-way only)
-- `proc format` user-defined (VALUE) formats
+- `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
 - Informats (reading formatted input); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options: `where=`, `keep=`, `drop=`, `rename=` (statement forms work)
-- Advanced statistical PROCs: REG, GLM, etc.
+- PROC REG/GLM significance probabilities (`Pr>|t|`) and GLM CLASS effects (OLS estimates/std-err/t/R² are supported)
 - `--compare-output` / JSON harness output (tied to SAS-verified expected files)
 
 See `corpus/FEATURES.md` for the full feature-tag catalog and intended levels.

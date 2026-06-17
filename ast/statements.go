@@ -321,6 +321,36 @@ func (m *ModelStatement) String() string {
 	return "model " + m.Response + " = " + strings.Join(m.Predictors, " ") + ";"
 }
 
+// ValueRange is one `range = label` mapping within a VALUE statement. Low/High
+// are the literal bounds as source text (numeric text or character content);
+// for a single value High == Low. NoLow/NoHigh mark the `low`/`high` keywords;
+// LowExcl/HighExcl mark exclusive bounds (`a <- b`, `a -< b`); Other is the
+// catch-all `other=`.
+type ValueRange struct {
+	Low      string
+	High     string
+	NoLow    bool
+	NoHigh   bool
+	LowExcl  bool
+	HighExcl bool
+	Other    bool
+	Label    string
+}
+
+// ValueStatement is `value [$]name <range>=<label> ...;` inside PROC FORMAT. It
+// defines a user format; Char is true when the name began with `$` (a character
+// format).
+type ValueStatement struct {
+	Name   string
+	Char   bool
+	Ranges []ValueRange
+}
+
+func (v *ValueStatement) statementNode() {}
+func (v *ValueStatement) String() string {
+	return "value " + v.Name + "; (" + fmt.Sprintf("%d", len(v.Ranges)) + " ranges)"
+}
+
 // ClassStatement is `class <vars...>;` — grouping variables for PROC MEANS/FREQ.
 type ClassStatement struct {
 	Vars []string

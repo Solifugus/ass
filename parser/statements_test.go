@@ -113,3 +113,64 @@ func TestParseProcByAndVar(t *testing.T) {
 		t.Errorf("var list = %v", v.Vars)
 	}
 }
+
+func TestParseValueStatement(t *testing.T) {
+	src := `proc format;
+  value agegrp low - 12 = 'Child' 13 - 19 = 'Teen' 20 - high = 'Adult';
+  value $sex 'M' = 'Male' 'F' = 'Female' other = 'Unknown';
+  value g 0 <- 10 = 'A' 10 -< 20 = 'B';
+  value mult 1,3,5 = 'Odd';
+run;`
+	p := New(src)
+	prog := p.ParseProgram()
+	if errs := p.Errors(); len(errs) != 0 {
+		t.Fatalf("parse errors: %v", errs)
+	}
+	ps, ok := prog.Steps[0].(*ast.ProcStep)
+	if !ok || ps.Name != "format" {
+		t.Fatalf("step 0 is %T (name %q), want proc format", prog.Steps[0], ps.Name)
+	}
+	var vals []*ast.ValueStatement
+	for _, s := range ps.Body {
+		if v, ok := s.(*ast.ValueStatement); ok {
+			vals = append(vals, v)
+		}
+	}
+	if len(vals) != 4 {
+		t.Fatalf("got %d value statements, want 4", len(vals))
+	}
+
+	age := vals[0]
+	if age.Name != "agegrp" || age.Char {
+		t.Errorf("agegrp: name=%q char=%v", age.Name, age.Char)
+	}
+	if len(age.Ranges) != 3 || !age.Ranges[0].NoLow || age.Ranges[0].High != "12" || age.Ranges[0].Label != "Child" {
+		t.Errorf("agegrp ranges wrong: %+v", age.Ranges)
+	}
+	if !age.Ranges[2].NoHigh || age.Ranges[2].Low != "20" {
+		t.Errorf("agegrp adult range wrong: %+v", age.Ranges[2])
+	}
+
+	sex := vals[1]
+	if !sex.Char || sex.Name != "$sex" {
+		t.Errorf("$sex: name=%q char=%v", sex.Name, sex.Char)
+	}
+	if len(sex.Ranges) != 3 || !sex.Ranges[2].Other || sex.Ranges[2].Label != "Unknown" {
+		t.Errorf("$sex ranges wrong: %+v", sex.Ranges)
+	}
+
+	g := vals[2]
+	if len(g.Ranges) != 2 || !g.Ranges[0].LowExcl || !g.Ranges[1].HighExcl {
+		t.Errorf("g exclusive bounds wrong: %+v", g.Ranges)
+	}
+
+	mult := vals[3]
+	if len(mult.Ranges) != 3 {
+		t.Fatalf("mult comma list: got %d ranges, want 3: %+v", len(mult.Ranges), mult.Ranges)
+	}
+	for _, r := range mult.Ranges {
+		if r.Label != "Odd" || r.Low != r.High {
+			t.Errorf("mult range wrong: %+v", r)
+		}
+	}
+}

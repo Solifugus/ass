@@ -72,10 +72,12 @@ Obs  name  age
 | PROC SQL | `select`/`where`/`order by`/joins/`group by`, `create table as` (via embedded SQLite) |
 | PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max with `class`/`by` |
 | PROC FREQ | one-way frequency tables |
+| PROC REG/GLM | OLS linear regression: estimates, std err, t-value, R² |
+| PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT |
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
 
-Not yet supported (selected): two-way PROC FREQ, `proc format` user formats, informats, dataset options (`where=`/`keep=`/`rename=`), advanced statistical PROCs (REG/GLM). See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
+Not yet supported (selected): two-way PROC FREQ, informats, dataset options (`where=`/`keep=`/`rename=`), PROC REG/GLM significance probabilities (`Pr>|t|`) and GLM CLASS effects. See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
 
 ## Contributing
 

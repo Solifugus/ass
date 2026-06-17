@@ -468,9 +468,112 @@ func (p *Parser) parseProcStatement() ast.Statement {
 		return &ast.TablesStatement{Vars: p.parseProcNameList()}
 	case p.identIs("model"):
 		return p.parseModel()
+	case p.identIs("value"):
+		return p.parseValueStmt()
 	default:
 		return p.parseRawStatement()
 	}
+}
+
+// parseValueStmt parses a PROC FORMAT `value [$]name <range>=<label> ...;`
+// statement into a ValueStatement. Ranges may be single values, `low`/`high`
+// open-ended or exclusive (`a <- b`, `a -< b`) intervals, comma lists (each
+// value shares the label), or the catch-all `other`.
+func (p *Parser) parseValueStmt() ast.Statement {
+	p.next() // 'value'
+	stmt := &ast.ValueStatement{}
+	if p.curIs(lexer.DOLLAR) {
+		stmt.Char = true
+		stmt.Name = "$"
+		p.next()
+	}
+	if p.curIs(lexer.IDENT) {
+		stmt.Name += p.cur.Literal
+		p.next()
+	}
+
+	var pending []ast.ValueRange
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		switch {
+		case p.curIs(lexer.COMMA):
+			p.next()
+		case p.curIs(lexer.EQ):
+			p.next()
+			label := ""
+			if p.curIs(lexer.STRING) || p.curIs(lexer.NUMBER) || p.curIs(lexer.IDENT) {
+				label = p.cur.Literal
+				p.next()
+			}
+			for i := range pending {
+				pending[i].Label = label
+			}
+			stmt.Ranges = append(stmt.Ranges, pending...)
+			pending = nil
+		default:
+			r, ok := p.parseRangeItem()
+			if !ok {
+				p.next() // skip an unexpected token to avoid looping
+				continue
+			}
+			pending = append(pending, r)
+		}
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseRangeItem parses a single range (one endpoint, or `lo - hi`, or `other`).
+func (p *Parser) parseRangeItem() (ast.ValueRange, bool) {
+	var r ast.ValueRange
+	if p.identIs("other") {
+		r.Other = true
+		p.next()
+		return r, true
+	}
+	lo, noLo, ok := p.parseEndpoint()
+	if !ok {
+		return r, false
+	}
+	r.Low, r.NoLow = lo, noLo
+	if p.curIs(lexer.LT) { // exclusive low: `a <- b`
+		r.LowExcl = true
+		p.next()
+	}
+	if p.curIs(lexer.MINUS) {
+		p.next()
+		if p.curIs(lexer.LT) { // exclusive high: `a -< b`
+			r.HighExcl = true
+			p.next()
+		}
+		hi, noHi, ok := p.parseEndpoint()
+		if !ok {
+			return r, false
+		}
+		r.High, r.NoHigh = hi, noHi
+	} else { // single value
+		r.High, r.NoHigh = r.Low, r.NoLow
+	}
+	return r, true
+}
+
+// parseEndpoint parses one range endpoint: a number (possibly negative), a
+// quoted string, or the `low`/`high` keyword (returned as none=true).
+func (p *Parser) parseEndpoint() (val string, none, ok bool) {
+	switch {
+	case p.identIs("low") || p.identIs("high"):
+		p.next()
+		return "", true, true
+	case p.curIs(lexer.STRING) || p.curIs(lexer.NUMBER):
+		v := p.cur.Literal
+		p.next()
+		return v, false, true
+	case p.curIs(lexer.MINUS) && p.peek.Type == lexer.NUMBER:
+		p.next() // '-'
+		v := "-" + p.cur.Literal
+		p.next()
+		return v, false, true
+	}
+	return "", false, false
 }
 
 // parseModel parses `model <response> = <predictor ...>;`.

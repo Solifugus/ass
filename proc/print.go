@@ -17,10 +17,11 @@ type printProc struct{}
 
 // printOptions captures the options that affect the listing.
 type printOptions struct {
-	noobs   bool              // suppress the Obs column
-	label   bool              // use column labels (when set) as headers
-	vars    []string          // explicit column selection/order (empty = all columns)
-	formats map[string]string // var (lowercased) -> format override (from a FORMAT statement)
+	noobs   bool                 // suppress the Obs column
+	label   bool                 // use column labels (when set) as headers
+	vars    []string             // explicit column selection/order (empty = all columns)
+	formats map[string]string    // var (lowercased) -> format override (from a FORMAT statement)
+	catalog *table.FormatCatalog // user-defined formats (from PROC FORMAT), may be nil
 }
 
 func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error {
@@ -30,6 +31,7 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 		return nil
 	}
 	opts := parsePrintOptions(step)
+	opts.catalog = lib.Formats
 	fmt.Print(renderListing(ds, opts))
 	logger.Note("There were %d observations read from the data set %s.%s.",
 		ds.NObs(), strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name))
@@ -99,7 +101,7 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 		width := len(header)
 		right := c.Kind == table.Numeric
 		for _, r := range ds.Rows {
-			if w := len(formats.Apply(ds.Get(r, c.Name), colFormat(c))); w > width {
+			if w := len(applyFmt(opts.catalog, ds.Get(r, c.Name), colFormat(c))); w > width {
 				width = w
 			}
 		}
@@ -131,12 +133,42 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 			cells = append(cells, pad(fmt.Sprintf("%d", i+1), obsWidth, true))
 		}
 		for _, c := range lc {
-			cells = append(cells, pad(formats.Apply(ds.Get(r, c.name), c.format), c.width, c.right))
+			cells = append(cells, pad(applyFmt(opts.catalog, ds.Get(r, c.name), c.format), c.width, c.right))
 		}
 		b.WriteString(strings.TrimRight(strings.Join(cells, "  "), " "))
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// applyFmt renders v through a format spec, consulting the user-format catalog
+// first (PROC FORMAT VALUE formats) and falling back to the built-in formats.
+// When a named user format exists but v matches none of its ranges, v is shown
+// with its default display, matching SAS.
+func applyFmt(cat *table.FormatCatalog, v table.Value, spec string) string {
+	if cat != nil && spec != "" {
+		key := strings.TrimSuffix(strings.ToLower(spec), ".")
+		if vf, ok := lookupUserFormat(cat, key); ok {
+			if label, matched := vf.Format(v); matched {
+				return label
+			}
+			return v.Display()
+		}
+	}
+	return formats.Apply(v, spec)
+}
+
+// lookupUserFormat finds a user format by name, retrying with any trailing
+// display-width digits stripped (e.g. "agegrp8" -> "agegrp").
+func lookupUserFormat(cat *table.FormatCatalog, key string) (*table.ValueFormat, bool) {
+	if vf, ok := cat.Lookup(key); ok {
+		return vf, true
+	}
+	bare := strings.TrimRight(key, "0123456789")
+	if bare != key && bare != "" && bare != "$" {
+		return cat.Lookup(bare)
+	}
+	return nil, false
 }
 
 // selectColumns resolves the columns to print: the VAR list (existing columns,

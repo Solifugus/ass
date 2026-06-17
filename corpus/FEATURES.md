@@ -45,6 +45,7 @@ level it first becomes relevant at, matching the build order in `PLAN.md`.
 | `informats` | 5 | Input informats for reading formatted values. |
 | `dates` | 5 | Date/datetime literals (`'01JAN2020'd`) and date handling. |
 | `user-formats` | 5 | User-defined formats via `proc format`. |
+| `proc-format` | 5 | `proc format` VALUE statement (ranges, `low`/`high`, `other`, char). |
 | `proc-means` | 6 | `proc means` descriptive statistics. |
 | `proc-freq` | 6 | `proc freq` frequency tables. |
 | `proc-summary` | 6 | `proc summary` aggregation. |
