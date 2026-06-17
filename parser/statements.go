@@ -45,6 +45,8 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseNameListStmt("keep")
 	case p.identIs("drop"):
 		return p.parseNameListStmt("drop")
+	case p.identIs("format"):
+		return p.parseFormatStmt()
 	case p.identIs("retain"):
 		return p.parseRetain()
 	case p.identIs("array"):
@@ -69,6 +71,38 @@ func (p *Parser) parseAssignment() ast.Statement {
 	p.next() // '='
 	stmt := &ast.AssignmentStatement{Name: name, Value: p.parseExpression(pLOWEST)}
 	p.expectSemicolon()
+	return stmt
+}
+
+// parseFormatStmt parses `format <var-list> <format.> ...;`. The format tokens
+// are recovered from raw source (between the keyword and the ';') because a SAS
+// format like `dollar10.2` does not survive tokenization cleanly; a token
+// containing '.' is a format, otherwise it is a variable name. A format applies
+// to all variables listed since the previous format.
+func (p *Parser) parseFormatStmt() ast.Statement {
+	p.next() // 'format'
+	start := p.cur.Pos
+	end := start
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		end = p.cur.End
+		p.next()
+	}
+	raw := p.l.Slice(start, end)
+	p.expectSemicolon()
+
+	stmt := &ast.FormatStatement{Formats: map[string]string{}}
+	var pending []string
+	for _, tok := range strings.Fields(raw) {
+		if strings.Contains(tok, ".") { // a format spec (only formats contain '.')
+			fm := strings.TrimSuffix(tok, ".") // "comma12." -> "comma12"; "8.2" stays
+			for _, v := range pending {
+				stmt.Formats[strings.ToLower(v)] = fm
+			}
+			pending = nil
+		} else {
+			pending = append(pending, tok)
+		}
+	}
 	return stmt
 }
 
@@ -424,6 +458,8 @@ func (p *Parser) parseProcStatement() ast.Statement {
 		return nil
 	case p.identIs("by"):
 		return p.parseBy()
+	case p.identIs("format"):
+		return p.parseFormatStmt()
 	case p.identIs("var"):
 		p.next()
 		var vars []string

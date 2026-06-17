@@ -294,6 +294,22 @@ func (b *ByStatement) String() string {
 	return "by " + strings.Join(parts, " ") + ";"
 }
 
+// FormatStatement is `format <var-list> <format.> ...;` associating display
+// formats with variables. Formats maps a (lowercased) variable name to its
+// format specification (e.g. "dollar10.2").
+type FormatStatement struct {
+	Formats map[string]string
+}
+
+func (f *FormatStatement) statementNode() {}
+func (f *FormatStatement) String() string {
+	parts := make([]string, 0, len(f.Formats))
+	for v, fm := range f.Formats {
+		parts = append(parts, v+" "+fm)
+	}
+	return "format " + strings.Join(parts, " ") + ";"
+}
+
 // VarStatement is `var <vars...>;` (PROC PRINT column selection, etc.).
 type VarStatement struct {
 	Vars []string

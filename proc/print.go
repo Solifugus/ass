@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/formats"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
 )
@@ -16,9 +17,10 @@ type printProc struct{}
 
 // printOptions captures the options that affect the listing.
 type printOptions struct {
-	noobs bool     // suppress the Obs column
-	label bool     // use column labels (when set) as headers
-	vars  []string // explicit column selection/order (empty = all columns)
+	noobs   bool              // suppress the Obs column
+	label   bool              // use column labels (when set) as headers
+	vars    []string          // explicit column selection/order (empty = all columns)
+	formats map[string]string // var (lowercased) -> format override (from a FORMAT statement)
 }
 
 func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error {
@@ -46,8 +48,16 @@ func parsePrintOptions(step *ast.ProcStep) printOptions {
 		}
 	}
 	for _, s := range step.Body {
-		if v, ok := s.(*ast.VarStatement); ok {
-			opts.vars = append(opts.vars, v.Vars...)
+		switch st := s.(type) {
+		case *ast.VarStatement:
+			opts.vars = append(opts.vars, st.Vars...)
+		case *ast.FormatStatement:
+			if opts.formats == nil {
+				opts.formats = map[string]string{}
+			}
+			for k, v := range st.Formats {
+				opts.formats[k] = v
+			}
 		}
 	}
 	return opts
@@ -60,6 +70,7 @@ type listingColumn struct {
 	header string
 	width  int
 	right  bool
+	format string
 }
 
 // renderListing produces the SAS-style listing text for a dataset. The format
@@ -72,6 +83,13 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 	cols := selectColumns(ds, opts.vars)
 
 	// Compute column widths from headers and cell values.
+	colFormat := func(c table.Column) string {
+		if f, ok := opts.formats[strings.ToLower(c.Name)]; ok {
+			return f
+		}
+		return c.Format
+	}
+
 	lc := make([]listingColumn, len(cols))
 	for i, c := range cols {
 		header := c.Name
@@ -81,11 +99,11 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 		width := len(header)
 		right := c.Kind == table.Numeric
 		for _, r := range ds.Rows {
-			if w := len(ds.Get(r, c.Name).Display()); w > width {
+			if w := len(formats.Apply(ds.Get(r, c.Name), colFormat(c))); w > width {
 				width = w
 			}
 		}
-		lc[i] = listingColumn{name: c.Name, header: header, width: width, right: right}
+		lc[i] = listingColumn{name: c.Name, header: header, width: width, right: right, format: colFormat(c)}
 	}
 
 	obsWidth := len("Obs")
@@ -113,7 +131,7 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 			cells = append(cells, pad(fmt.Sprintf("%d", i+1), obsWidth, true))
 		}
 		for _, c := range lc {
-			cells = append(cells, pad(ds.Get(r, c.name).Display(), c.width, c.right))
+			cells = append(cells, pad(formats.Apply(ds.Get(r, c.name), c.format), c.width, c.right))
 		}
 		b.WriteString(strings.TrimRight(strings.Join(cells, "  "), " "))
 		b.WriteString("\n")

@@ -44,9 +44,10 @@ type dataStep struct {
 	wheres   []ast.Expression // WHERE conditions applied at read time
 	byVars    []string        // BY variables (DATA step BY-group processing)
 	byFlags   []ByFlags       // per-set-row first./last. flags (aligned to setRows)
-	mergeRows []table.Row     // precomputed combined rows for MERGE
-	mergePtr  int             // next merge row to emit
-	inVars    map[string]bool // in= flag variable names (lowercased), excluded from output
+	mergeRows []table.Row       // precomputed combined rows for MERGE
+	mergePtr  int               // next merge row to emit
+	inVars    map[string]bool   // in= flag variable names (lowercased), excluded from output
+	formats   map[string]string // variable (lowercased) -> display format
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -79,6 +80,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	d.explicit = containsOutput(ds.Body)
 	d.records = collectDatalines(ds.Body)
 	d.keep, d.drop = collectKeepDrop(ds.Body)
+	d.formats = collectFormats(ds.Body)
 	d.wheres = collectWheres(ds.Body)
 	d.defineArrays(ds.Body)
 	if err := d.initRetained(ds.Body); err != nil {
@@ -394,8 +396,8 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 			continue
 		}
 		v := d.pdv.Get(name)
-		ds.AddColumn(table.Column{Name: name, Kind: v.Kind})
-		row[strings.ToLower(name)] = v
+		ds.AddColumn(table.Column{Name: name, Kind: v.Kind, Format: d.formats[ln]})
+		row[ln] = v
 	}
 	ds.AppendRow(row)
 }
@@ -568,6 +570,19 @@ func (d *dataStep) applyWhere() (flow, error) {
 		}
 	}
 	return flowNormal, nil
+}
+
+// collectFormats merges all FORMAT statements into a var→format map.
+func collectFormats(stmts []ast.Statement) map[string]string {
+	out := map[string]string{}
+	for _, s := range stmts {
+		if f, ok := s.(*ast.FormatStatement); ok {
+			for k, v := range f.Formats {
+				out[k] = v
+			}
+		}
+	}
+	return out
 }
 
 // collectWheres gathers the WHERE conditions from the body.

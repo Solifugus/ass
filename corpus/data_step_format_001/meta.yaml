@@ -1,0 +1,16 @@
+id: data_step_format_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - formats
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  FORMAT statement assigns dollar10.2 to amount; PROC PRINT renders it with a
+  dollar sign, thousands separators, and 2 decimals. Expected amounts:
+  $1,234.50 and $56,789.00.

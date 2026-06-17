@@ -109,7 +109,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 - [x] **10.2 Arrays.** Implement `array` declaration and subscripted references. Acceptance: array test passes.
 - [x] **10.3 BY-group processing in DATA step.** Use `first.`/`last.` (from 7.3) inside the implicit loop. Acceptance: by-group aggregation test passes.
 - [x] **10.4 `merge` + `in=`.** Implement match-merge by BY variables with `in=` dataset flags. Acceptance: merge test passes.
-- [ ] **10.5 Formats & informats.** Implement `formats/` core formats (e.g. numeric `w.d`, `dollar`, `date`/`datetime`) and informats; apply on input and on PRINT. Acceptance: format application tests pass.
+- [x] **10.5 Formats & informats.** Implement `formats/` core formats (e.g. numeric `w.d`, `dollar`, `date`/`datetime`) and informats; apply on input and on PRINT. Acceptance: format application tests pass. (Numeric `w.d`/`dollar`/`comma`/`percent` + `$w.` done and applied in PRINT; date formats land in 10.6 with date literals; informats deferred — see log.)
 - [ ] **10.6 Date literals & user formats.** Support `'01JAN2020'd` date literals and `proc format` user-defined formats. Acceptance: date + user-format tests pass.
 
 ## Phase 11 — Compatibility harness
@@ -446,3 +446,16 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Inputs assumed pre-sorted by BY (no auto-sort). `in=` flag = 1 on fresh-contribution rows, 0 on held rows (covers the common `if a`/`if a and b` idioms). first./last. set per full-key group (exact for single/innermost BY var; outer-var boundaries approximate for multi-key merges). Other dataset options (keep=/drop=/rename=) parsed-but-ignored. One-to-many holds the short side's last values (typical SAS behavior).
 - Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 22/22 (100%).
 - Next: Phase 10.5 — formats & informats. Implement `formats/` core numeric/char formats (`w.d`, `dollarw.d`, `commaw.d`, date/datetime) and informats; honor a FORMAT statement and apply formats in PROC PRINT and on output. Then 10.6 (date literals `'01JAN2020'd` + `proc format` user formats).
+
+### 2026-06-16 — Phase 10.5 (formats)
+- What changed: Added the `formats` package and the FORMAT statement; PROC PRINT now renders values through their assigned format.
+- Key files:
+  - `formats/formats.go` — `Apply(value, spec)`: numeric `w.d` (fixed), `dollar`/`comma` (thousands grouping, sign before `$`), `percent` (×100 + `%`), `$w.` (char truncation), default → `Value.Display()`. `parseSpec` splits name/width/decimals. `formats/formats_test.go` — numeric/dollar/comma/percent/negative, missing, char.
+  - `ast/statements.go` — `FormatStatement{Formats map[string]string}`.
+  - `parser/statements.go` — `parseFormatStmt` recovers format tokens from raw source (via `Token.Pos/End` + `Lexer.Slice`) since `dollar10.2` doesn't survive tokenization; a token containing `.` is a format, else a variable; format applies to all vars listed since the previous format. Dispatched in both DATA and PROC bodies.
+  - `runtime/datastep.go` — `collectFormats`; `writeRow` stamps each output `Column.Format`.
+  - `proc/print.go` — `printOptions.formats` (from a PROC PRINT FORMAT statement, overriding column formats); `renderListing` formats cells (and widths) via `formats.Apply`.
+  - `corpus/data_step_format_001/` — dollar10.2 amounts → `$1,234.50` / `$56,789.00`; harness 23/23, 100%.
+- Decisions/deviations: Informats (reading formatted input) deferred — list input already parses plain numbers; add informats when a corpus item needs `commaw.`/date input. Date/datetime formats deferred to 10.6 (paired with date literals + the SAS epoch). `w.` with no decimals falls back to default display (not fixed-0). Width is used for char truncation and column sizing, not numeric zero-padding.
+- Verified: `go test ./...` green (incl. `formats`); `go vet` clean; `ass test corpus/` 23/23 (100%).
+- Next: Phase 10.6 — date literals `'01JAN2020'd` (lex/parse to the SAS day number, epoch 1960-01-01) and `proc format` user-defined formats (VALUE ranges), plus `date9.`/`mmddyy`/`worddate` display formats in the `formats` package. Add corpus items. That completes Phase 10.
