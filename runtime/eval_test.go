@@ -226,6 +226,39 @@ func TestEvalNumericLookupFunctions(t *testing.T) {
 	}
 }
 
+func TestEvalCharToNumCoercion(t *testing.T) {
+	pdv := NewPDV()
+	pdv.Set("s", table.Char("42"))
+	pdv.Set("bad", table.Char("xyz"))
+	if got := evalExpr(t, "s + 8", pdv); got.IsMissing() || got.Num != 50 {
+		t.Errorf("'42' + 8 = %v, want 50", got.Display())
+	}
+	if got := evalExpr(t, "bad * 2", pdv); !got.IsMissing() {
+		t.Errorf("'xyz' * 2 = %v, want missing", got.Display())
+	}
+}
+
+func TestEvalNumToCharCoercionInConcat(t *testing.T) {
+	pdv := NewPDV()
+	pdv.Set("age", table.Num(25))
+	got := evalExpr(t, "'age=' || age", pdv)
+	if got.Str != "age=25" {
+		t.Errorf("concat with numeric = %q, want %q", got.Str, "age=25")
+	}
+}
+
+func TestEvalMixedComparison(t *testing.T) {
+	pdv := NewPDV()
+	pdv.Set("n", table.Num(5))
+	// Character literal compared to a numeric variable coerces to numeric.
+	if got := evalExpr(t, "n = '5'", pdv); got.Num != 1 {
+		t.Errorf("5 = '5' (coerced) = %v, want 1", got.Display())
+	}
+	if got := evalExpr(t, "n > '10'", pdv); got.Num != 0 {
+		t.Errorf("5 > '10' (coerced) = %v, want 0", got.Display())
+	}
+}
+
 func TestEvalSumAllMissingIsMissing(t *testing.T) {
 	pdv := NewPDV()
 	pdv.Set("m", table.MissingNum())

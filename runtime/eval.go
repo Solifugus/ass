@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
@@ -101,9 +102,9 @@ func evalInfix(e *ast.InfixExpression, pdv *PDV) (table.Value, error) {
 
 	switch op {
 	case "||", "!!":
-		return table.Char(left.Str + right.Str), nil
+		return table.Char(asChar(left) + asChar(right)), nil
 	case "+", "-", "*", "/", "**":
-		return evalArith(op, left, right)
+		return evalArith(op, asNum(left), asNum(right))
 	case "=", "eq", "ne", "^=", "~=", "<", "lt", "<=", "le", ">", "gt", ">=", "ge":
 		return boolVal(compare(op, left, right)), nil
 	default:
@@ -140,6 +141,11 @@ func evalArith(op string, left, right table.Value) (table.Value, error) {
 // table.Value.Compare): character values compare lexically; numeric values
 // compare by magnitude with missing ordered below every number.
 func compare(op string, left, right table.Value) bool {
+	// Mixed numeric/character comparison: SAS coerces the character operand to
+	// numeric so the two compare by magnitude.
+	if left.Kind != right.Kind {
+		left, right = asNum(left), asNum(right)
+	}
 	cmp := left.Compare(right)
 	switch op {
 	case "=", "eq":
@@ -156,6 +162,34 @@ func compare(op string, left, right table.Value) bool {
 		return cmp >= 0
 	}
 	return false
+}
+
+// asNum coerces a value to numeric (SAS automatic character→numeric
+// conversion). A numeric value passes through; a character value is parsed,
+// yielding numeric missing for blank or unparseable text.
+func asNum(v table.Value) table.Value {
+	if v.Kind == table.Numeric {
+		return v
+	}
+	s := strings.TrimSpace(v.Str)
+	if s == "" {
+		return table.MissingNum()
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return table.MissingNum()
+	}
+	return table.Num(f)
+}
+
+// asChar coerces a value to its character form (SAS automatic numeric→character
+// conversion). A character value passes through; a numeric value uses its
+// BEST.-style display (with numeric missing rendered as ".").
+func asChar(v table.Value) string {
+	if v.Kind == table.Character {
+		return v.Str
+	}
+	return v.Display()
 }
 
 // truthy reports whether a value is "true" in a logical context: a non-missing,

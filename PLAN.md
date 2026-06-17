@@ -79,7 +79,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 - [x] **6.1 Expand function library.** Add commonly-used DATA step functions: `substr`, `trim`, `left`, `length`, `scan`, `index`, `int`, `round`, `abs`, `min`, `max`, `mean`/`sum` (varargs). Table-test each. Acceptance: function tests pass.
 - [x] **6.2 `where` vs subsetting if.** Ensure `where` clauses (DATA step option and statement) filter correctly and document the difference from subsetting `if`. Acceptance: where tests pass. (Statement form done; `data=ds(where=...)` dataset-option form deferred — see progress log.)
-- [ ] **6.3 Type coercion & formatting basics.** Implement automatic numeric↔character coercion rules and default numeric printing (BEST. format approximation). Acceptance: coercion tests pass.
+- [x] **6.3 Type coercion & formatting basics.** Implement automatic numeric↔character coercion rules and default numeric printing (BEST. format approximation). Acceptance: coercion tests pass.
 
 ## Phase 7 — PROC SORT
 
@@ -352,3 +352,12 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: **if vs where** — WHERE is applied at read (right after INPUT/SET), so it sees only input variables, not values computed later in the step; a subsetting IF runs at its position in the body and can test computed variables. Multiple WHEREs combine with AND. **Deferred:** the dataset-option form `set a(where=(...))` / `data=ds(where=...)` — it needs general dataset-option parsing (`(where= keep= drop= rename=)` after a dataset name), best built as one unit later (note for a Phase 6.x/10 follow-up); the statement form covers the immediate need. WHERE in PROC bodies (e.g. `proc print; where ...;`) not yet honored (parses as raw) — add when a corpus item needs it.
 - Verified: `go test ./...` green; `go build`/`go vet` clean.
 - Next: Phase 6.3 — type coercion & numeric formatting. Automatic numeric↔character coercion in expressions (e.g. number used where char expected and vice-versa) and a BEST.-style default numeric format approximation for display/printing (currently `Value.Display` uses compact `%g`).
+
+### 2026-06-16 — Phase 6.3 (type coercion & formatting) — PHASE 6 COMPLETE
+- What changed: Automatic numeric↔character coercion in expressions; the BEST.-style default numeric display was already in `Value.Display` (compact %g) and is reused as the number→char form. Closes Phase 6.
+- Key files:
+  - `runtime/eval.go` — `asNum` (char→numeric: trim + ParseFloat; blank/unparseable → numeric missing) and `asChar` (numeric→char via `Value.Display`). Arithmetic coerces both operands with `asNum`; `||` concatenation coerces with `asChar`; mixed-kind comparison coerces the character operand to numeric (so `n = '5'` is true).
+  - `runtime/eval_test.go` — char→num in arithmetic (incl. unparseable → missing), num→char in concat, mixed numeric/char comparison.
+- Decisions/deviations: Coercion is silent (SAS logs a NOTE on automatic conversion; we skip the note for now — add with richer logging later). BEST. is approximated by `%g` shortest-round-trip — no width/precision control yet (that arrives with the `formats` package / FORMAT statement). No SAS conversion-NOTE or `_ERROR_` set on bad char→num (returns missing).
+- Verified: `go test ./...` green; `go build`/`go vet` clean.
+- Next: Phase 8 — PROC SQL (Level 3). 8.1 decide the SQL engine approach (Go-native mini-engine vs embedded DuckDB/SQLite) — recommend a small Go-native engine over the in-memory `table.Library` to avoid a CGo/dependency footprint and keep clean-room control; 8.2 SELECT/WHERE/ORDER BY over a single table; 8.3 joins; 8.4 GROUP BY + aggregates; mapping `proc sql; create table x as select ...; quit;` to library datasets. See the four `sql_*` corpus items. (Phase 7 already done; Phase 6 done — DATA-step core + polish complete.)
