@@ -10,9 +10,9 @@ import (
 )
 
 func TestRunProgramDataThenUnknownProc(t *testing.T) {
-	// PROC FREQ is not yet implemented, so it should be skipped with a note.
+	// PROC TABULATE is not yet implemented, so it should be skipped with a note.
 	src := "data people;\n  input name $ age;\n  datalines;\nJohn 25\nJane 30\n;\nrun;\n" +
-		"proc freq data=people; run;"
+		"proc tabulate data=people; run;"
 	prog := parser.New(src).ParseProgram()
 	lib := table.NewLibrary()
 	var b strings.Builder
@@ -29,7 +29,7 @@ func TestRunProgramDataThenUnknownProc(t *testing.T) {
 	if !strings.Contains(out, "The data set WORK.PEOPLE has 2 observations") {
 		t.Errorf("missing dataset note; log:\n%s", out)
 	}
-	if !strings.Contains(out, "PROC FREQ is not supported") {
+	if !strings.Contains(out, "PROC TABULATE is not supported") {
 		t.Errorf("unknown proc should log not-supported note; log:\n%s", out)
 	}
 }

@@ -461,15 +461,24 @@ func (p *Parser) parseProcStatement() ast.Statement {
 	case p.identIs("format"):
 		return p.parseFormatStmt()
 	case p.identIs("var"):
-		p.next()
-		var vars []string
-		for p.curIs(lexer.IDENT) {
-			vars = append(vars, p.cur.Literal)
-			p.next()
-		}
-		p.expectSemicolon()
-		return &ast.VarStatement{Vars: vars}
+		return &ast.VarStatement{Vars: p.parseProcNameList()}
+	case p.identIs("class"):
+		return &ast.ClassStatement{Vars: p.parseProcNameList()}
+	case p.identIs("tables") || p.identIs("table"):
+		return &ast.TablesStatement{Vars: p.parseProcNameList()}
 	default:
 		return p.parseRawStatement()
 	}
+}
+
+// parseProcNameList parses `<keyword> <name name ...>;` and returns the names.
+func (p *Parser) parseProcNameList() []string {
+	p.next() // the leading keyword
+	var names []string
+	for p.curIs(lexer.IDENT) {
+		names = append(names, p.cur.Literal)
+		p.next()
+	}
+	p.expectSemicolon()
+	return names
 }

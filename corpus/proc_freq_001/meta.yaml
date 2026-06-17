@@ -1,0 +1,13 @@
+id: proc_freq_001
+source: hand-written
+license: MIT
+features:
+  - proc-freq
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC FREQ one-way table on kind. Expected frequencies: cat 3 (50%), dog 2
+  (33.3%), fish 1 (16.7%), with cumulative columns ending at 6 / 100%.

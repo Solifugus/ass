@@ -1,0 +1,14 @@
+id: proc_means_001
+source: hand-written
+license: MIT
+features:
+  - proc-means
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC MEANS with a CLASS variable: N/Mean/StdDev/Min/Max per group. Expected
+  group a: N=3 Mean=20 StdDev=10 Min=10 Max=30; group b: N=2 Mean=150
+  StdDev=70.71 Min=100 Max=200.

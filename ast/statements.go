@@ -310,6 +310,26 @@ func (f *FormatStatement) String() string {
 	return "format " + strings.Join(parts, " ") + ";"
 }
 
+// ClassStatement is `class <vars...>;` — grouping variables for PROC MEANS/FREQ.
+type ClassStatement struct {
+	Vars []string
+}
+
+func (c *ClassStatement) statementNode() {}
+func (c *ClassStatement) String() string {
+	return "class " + strings.Join(c.Vars, " ") + ";"
+}
+
+// TablesStatement is `tables <vars...>;` — the variables PROC FREQ tabulates.
+type TablesStatement struct {
+	Vars []string
+}
+
+func (t *TablesStatement) statementNode() {}
+func (t *TablesStatement) String() string {
+	return "tables " + strings.Join(t.Vars, " ") + ";"
+}
+
 // VarStatement is `var <vars...>;` (PROC PRINT column selection, etc.).
 type VarStatement struct {
 	Vars []string
