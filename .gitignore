@@ -1,0 +1,16 @@
+# Binaries
+/ass
+*.exe
+*.test
+*.out
+
+# Build / coverage
+/bin/
+/dist/
+coverage.*
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
