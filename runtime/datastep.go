@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
 )
 
@@ -47,7 +48,9 @@ type sourceRow struct {
 // iteration) and inline data via INPUT + DATALINES (one iteration per data
 // record). Assignment, INPUT, DATALINES, and OUTPUT statements are executed;
 // other statement kinds are handled in later phases.
-func RunDataStep(ds *ast.DataStep, lib *table.Library) error {
+//
+// A non-nil logger receives the standard post-step NOTE for each output dataset.
+func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error {
 	d := &dataStep{lib: lib, pdv: NewPDV()}
 
 	// Resolve output datasets. An unnamed DATA step writes to WORK.DATA1 in SAS;
@@ -98,6 +101,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library) error {
 
 	for _, out := range d.outputs {
 		d.lib.Put(out)
+		logger.DatasetNote(out.Lib, out.Name, out.NObs(), len(out.Columns))
 	}
 	return nil
 }

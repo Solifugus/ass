@@ -21,7 +21,7 @@ func runStep(t *testing.T, src string) *table.Library {
 		t.Fatalf("first step is %T, want *ast.DataStep", prog.Steps[0])
 	}
 	lib := table.NewLibrary()
-	if err := RunDataStep(ds, lib); err != nil {
+	if err := RunDataStep(ds, lib, nil); err != nil {
 		t.Fatalf("RunDataStep error: %v", err)
 	}
 	return lib
@@ -108,7 +108,7 @@ func runProgram(t *testing.T, src string) *table.Library {
 		if !ok {
 			continue
 		}
-		if err := RunDataStep(ds, lib); err != nil {
+		if err := RunDataStep(ds, lib, nil); err != nil {
 			t.Fatalf("RunDataStep error: %v", err)
 		}
 	}

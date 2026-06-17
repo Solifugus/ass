@@ -67,7 +67,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 - [x] **4.6 `set` (read existing dataset).** Implement `set <ds>`: the implicit loop iterates rows of the input dataset into the PDV. Acceptance: `data b; set a; run;` copies dataset a to b.
 - [x] **4.7 `if/then/else` + subsetting if.** Implement conditional execution and the subsetting-`if` (a bare `if cond;` that drops the row when false). Acceptance: `data adults; set people; if age>=18; run;` filters correctly.
 - [x] **4.8 `do/end` loops & `keep`/`drop`.** Implement iterative `do`/`do while`/`do until` and column selection via `keep`/`drop` statements (and dataset options if feasible). Acceptance: tests for a do loop and keep/drop pass.
-- [ ] **4.9 SAS-style log output.** In `log/`, implement a logger that writes SAS-like NOTEs (e.g. "NOTE: The data set WORK.PEOPLE has N observations and M variables."). Wire DATA step to emit these. Acceptance: log lines match the expected format for Level-1 items.
+- [x] **4.9 SAS-style log output.** In `log/`, implement a logger that writes SAS-like NOTEs (e.g. "NOTE: The data set WORK.PEOPLE has N observations and M variables."). Wire DATA step to emit these. Acceptance: log lines match the expected format for Level-1 items.
 
 ## Phase 5 — PROC PRINT
 
@@ -282,3 +282,13 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: KEEP/DROP are treated as step-global (scanned up front, top-level), matching how SAS compiles them; dataset-option forms (`data out(keep=...)`) are deferred. No `leave`/`continue`/`do over`/array-do yet (no AST nodes); arrays are Phase 10 (L5).
 - Verified: `go test ./runtime/` green; `go build ./...` and `go vet ./...` clean.
 - Next: Phase 4.9 — SAS-style log output. In `log/`, add a logger emitting NOTEs (e.g. "NOTE: The data set WORK.OUT has N observations and M variables."); wire `RunDataStep` to emit one per output dataset. Acceptance: log lines match the expected format for L1 items.
+
+### 2026-06-16 — Phase 4.9 (SAS-style log) — PHASE 4 COMPLETE
+- What changed: Added the `log` package and wired the DATA step to emit the standard post-step NOTE. This closes Phase 4 — the DATA step runtime is end-to-end for L1.
+- Key files:
+  - `log/log.go` — `Logger` wrapping an `io.Writer`; `Note`/`Warning`/`Error` (printf-style, SAS prefixes) and `DatasetNote(lib, name, nobs, nvars)` → "NOTE: The data set WORK.NAME has N observations and M variables.". A nil `*Logger` is safe (discards), so callers needn't guard.
+  - `runtime/datastep.go` — `RunDataStep` now takes a `*log.Logger` (nil-safe) and emits a `DatasetNote` per output dataset after `Put`.
+  - `log/log_test.go` — level prefixes, dataset note format, nil-logger safety. `runtime/datastep_test.go` call sites pass `nil`.
+- Decisions/deviations: Signature change (added logger param) over a stateful runner struct — simplest for now; Phase 5's CLI will pass a real logger writing to stderr. Variable-count uses `len(out.Columns)` (post keep/drop, since columns are only added on output).
+- Verified: `go test ./...` green across lexer/parser/table/runtime/log; `go build ./...` and `go vet ./...` clean.
+- Next: Phase 5 — PROC PRINT + the `ass run` CLI path. First wire `cmd/ass` to execute a program (lex → parse → for each step: DATA via `RunDataStep`, PROC via a dispatcher) with a real logger to stderr; then implement PROC PRINT (`proc/`) rendering a dataset as the SAS-style listing (Obs column unless `noobs`, `var` selection), and start backfilling corpus `expected_output.txt`. See step 5.1/5.2 for specifics.
