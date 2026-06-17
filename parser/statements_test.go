@@ -202,3 +202,26 @@ func TestParseTablesCrossing(t *testing.T) {
 		t.Errorf("request 2 = %v, want [c d]", tab.Requests[2])
 	}
 }
+
+func TestParseInputInformats(t *testing.T) {
+	body := dataBody(t, "data t; input id name $ pay : comma8. d date9.; run;")
+	in, ok := body[0].(*ast.InputStatement)
+	if !ok {
+		t.Fatalf("stmt 0 is %T, want InputStatement", body[0])
+	}
+	if len(in.Vars) != 4 {
+		t.Fatalf("got %d vars, want 4: %+v", len(in.Vars), in.Vars)
+	}
+	if in.Vars[0].Name != "id" || in.Vars[0].Informat != "" {
+		t.Errorf("id: %+v", in.Vars[0])
+	}
+	if in.Vars[1].Name != "name" || !in.Vars[1].Char {
+		t.Errorf("name: %+v", in.Vars[1])
+	}
+	if in.Vars[2].Name != "pay" || in.Vars[2].Informat != "comma8." {
+		t.Errorf("pay: %+v", in.Vars[2])
+	}
+	if in.Vars[3].Name != "d" || in.Vars[3].Informat != "date9." {
+		t.Errorf("d: %+v", in.Vars[3])
+	}
+}

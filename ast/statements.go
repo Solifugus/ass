@@ -52,10 +52,12 @@ func (m *MergeStatement) String() string {
 }
 
 // InputVar is one variable in an INPUT statement; Char is true if it was marked
-// with `$` (character).
+// with `$` (character). Informat, when non-empty, is the informat spec used to
+// read the field (e.g. "comma8.", "date9.", "$20.").
 type InputVar struct {
-	Name string
-	Char bool
+	Name     string
+	Char     bool
+	Informat string
 }
 
 // InputStatement is `input <var [$]>...;`.

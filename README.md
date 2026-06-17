@@ -76,8 +76,9 @@ Obs  name  age
 | PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT |
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
+| Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
 
-Not yet supported (selected): informats, dataset options (`where=`/`keep=`/`rename=`), PROC FREQ n-way tables and association statistics, PROC GLM CLASS effects. See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
+Not yet supported (selected): dataset options (`where=`/`keep=`/`rename=`), column/pointer input, PROC FREQ n-way tables and association statistics, PROC GLM CLASS effects. See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
 
 ## Contributing
 

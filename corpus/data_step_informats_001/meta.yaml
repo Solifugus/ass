@@ -1,0 +1,16 @@
+id: data_step_informats_001
+source: hand-written
+license: MIT
+features:
+  - informats
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  List input with informats: comma8. reads "1,234"/"56,789" into numbers,
+  date9. reads "15JAN2020"/"01JUL2021" into SAS dates. FORMAT then renders pay
+  as $1,234.00 / $56,789.00 and hired back as 15JAN2020 / 01JUL2021.

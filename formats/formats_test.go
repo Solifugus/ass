@@ -69,3 +69,57 @@ func TestApplyMissingAndChar(t *testing.T) {
 		t.Errorf("empty format = %q, want 5", got)
 	}
 }
+
+func TestParseInputNumericAndChar(t *testing.T) {
+	cases := []struct {
+		field, informat string
+		wantNum         float64
+		wantStr         string
+		missing         bool
+	}{
+		{"1,234", "comma8.", 1234, "", false},
+		{"$56,789.50", "dollar12.2", 56789.5, "", false},
+		{"42", "8.", 42, "", false},
+		{"abc", "8.", 0, "", true},
+		{".", "comma8.", 0, "", true},
+		{"Hello World", "$5.", 0, "Hello", false}, // truncated to width 5
+	}
+	for _, c := range cases {
+		got := ParseInput(c.field, c.informat)
+		if c.missing {
+			if !got.IsMissing() {
+				t.Errorf("ParseInput(%q,%q) = %v, want missing", c.field, c.informat, got.Display())
+			}
+			continue
+		}
+		if c.wantStr != "" {
+			if got.Str != c.wantStr {
+				t.Errorf("ParseInput(%q,%q) = %q, want %q", c.field, c.informat, got.Str, c.wantStr)
+			}
+		} else if got.Num != c.wantNum {
+			t.Errorf("ParseInput(%q,%q) = %v, want %v", c.field, c.informat, got.Num, c.wantNum)
+		}
+	}
+}
+
+func TestParseInputDates(t *testing.T) {
+	// date9. and mmddyy. should agree on the same calendar date's SAS day number.
+	d9 := ParseInput("15JAN2020", "date9.")
+	mdy := ParseInput("01/15/2020", "mmddyy10.")
+	if d9.IsMissing() || mdy.IsMissing() {
+		t.Fatalf("date parse failed: date9=%v mmddyy=%v", d9.Display(), mdy.Display())
+	}
+	if d9.Num != mdy.Num {
+		t.Errorf("date9 %v != mmddyy %v for 2020-01-15", d9.Num, mdy.Num)
+	}
+	// ddmmyy reads day first.
+	dmy := ParseInput("15/01/2020", "ddmmyy10.")
+	if dmy.Num != d9.Num {
+		t.Errorf("ddmmyy %v != date9 %v", dmy.Num, d9.Num)
+	}
+	// yymmdd packed.
+	ymd := ParseInput("20200115", "yymmdd8.")
+	if ymd.Num != d9.Num {
+		t.Errorf("yymmdd %v != date9 %v", ymd.Num, d9.Num)
+	}
+}

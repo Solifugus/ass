@@ -63,6 +63,117 @@ func ParseDateLiteral(s string) (float64, bool) {
 	return float64(int(t.Sub(sasEpoch).Hours()) / 24), true
 }
 
+// ParseInput converts an input field to a Value using an informat specification
+// (e.g. "comma8.", "dollar10.2", "date9.", "mmddyy10.", "$20."). The informat's
+// name determines the conversion: `$` reads characters (truncated to the width);
+// `comma`/`dollar` strip grouping/currency symbols; `date`/`mmddyy`/`ddmmyy`/
+// `yymmdd` read dates to SAS day numbers; anything else parses a plain number.
+// An empty/"." field yields the appropriate missing value.
+func ParseInput(field, informat string) table.Value {
+	name, width, _, _ := parseSpec(informat)
+	field = strings.TrimSpace(field)
+
+	if name == "$" {
+		if width > 0 && len(field) > width {
+			field = field[:width]
+		}
+		return table.Char(field)
+	}
+	if field == "" || field == "." {
+		return table.MissingNum()
+	}
+
+	switch name {
+	case "comma", "dollar", "comman", "dollarn":
+		clean := strings.Map(func(r rune) rune {
+			if r == ',' || r == '$' || r == ' ' {
+				return -1
+			}
+			return r
+		}, field)
+		f, err := strconv.ParseFloat(clean, 64)
+		if err != nil {
+			return table.MissingNum()
+		}
+		return table.Num(f)
+	case "date":
+		if d, ok := ParseDateLiteral(field); ok {
+			return table.Num(d)
+		}
+		return table.MissingNum()
+	case "mmddyy", "ddmmyy", "yymmdd":
+		if d, ok := parseNumericDate(field, name); ok {
+			return table.Num(d)
+		}
+		return table.MissingNum()
+	default: // plain numeric w.d
+		f, err := strconv.ParseFloat(field, 64)
+		if err != nil {
+			return table.MissingNum()
+		}
+		return table.Num(f)
+	}
+}
+
+// parseNumericDate reads a date written with `/`, `-`, or `.` separators (or as
+// packed digits) in the given order (mmddyy/ddmmyy/yymmdd) and returns its SAS
+// day number.
+func parseNumericDate(s, order string) (float64, bool) {
+	var parts []string
+	if strings.ContainsAny(s, "/-.") {
+		parts = strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '-' || r == '.' })
+	} else { // packed digits: 2/2/2 or 2/2/4
+		switch len(s) {
+		case 6:
+			parts = []string{s[0:2], s[2:4], s[4:6]}
+		case 8:
+			if order == "yymmdd" {
+				parts = []string{s[0:4], s[4:6], s[6:8]}
+			} else {
+				parts = []string{s[0:2], s[2:4], s[4:8]}
+			}
+		default:
+			return 0, false
+		}
+	}
+	if len(parts) != 3 {
+		return 0, false
+	}
+	var mo, dy, yr int
+	var err error
+	switch order {
+	case "mmddyy":
+		mo, dy, yr, err = atoi3(parts[0], parts[1], parts[2])
+	case "ddmmyy":
+		dy, mo, yr, err = atoi3(parts[0], parts[1], parts[2])
+	case "yymmdd":
+		yr, mo, dy, err = atoi3(parts[0], parts[1], parts[2])
+	}
+	if err != nil || mo < 1 || mo > 12 || dy < 1 || dy > 31 {
+		return 0, false
+	}
+	if yr < 100 {
+		if yr < 20 {
+			yr += 2000
+		} else {
+			yr += 1900
+		}
+	}
+	t := time.Date(yr, time.Month(mo), dy, 0, 0, 0, 0, time.UTC)
+	return float64(int(t.Sub(sasEpoch).Hours()) / 24), true
+}
+
+func atoi3(a, b, c string) (x, y, z int, err error) {
+	if x, err = strconv.Atoi(a); err != nil {
+		return
+	}
+	if y, err = strconv.Atoi(b); err != nil {
+		return
+	}
+	z, err = strconv.Atoi(c)
+	return
+}
+
 // Apply renders a value using a SAS format specification (e.g. "8.2",
 // "dollar10.2", "comma12.0", "percent8.1", "$8."). An empty or unrecognized
 // format falls back to the value's default display. Numeric missing renders as

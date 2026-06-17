@@ -285,17 +285,45 @@ func (p *Parser) parseMerge() ast.Statement {
 // parseInput parses `input <var [$]>...;`.
 func (p *Parser) parseInput() ast.Statement {
 	p.next() // 'input'
-	stmt := &ast.InputStatement{}
-	for p.curIs(lexer.IDENT) {
-		v := ast.InputVar{Name: p.cur.Literal}
+	start := p.cur.Pos
+	end := start
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		end = p.cur.End
 		p.next()
-		if p.curIs(lexer.DOLLAR) {
-			v.Char = true
-			p.next()
-		}
-		stmt.Vars = append(stmt.Vars, v)
 	}
+	raw := p.l.Slice(start, end)
 	p.expectSemicolon()
+
+	// Tokenize on whitespace: a field is a variable name, a bare `$` (character
+	// marker), a `:`/`&` list-input modifier (ignored), or an informat spec
+	// (the only field that contains `.`, optionally `$`-prefixed for character).
+	stmt := &ast.InputStatement{}
+	for _, tok := range strings.Fields(raw) {
+		switch {
+		case tok == ":" || tok == "&":
+			// list-input modifier — informat still applies to the same variable
+		case tok == "$":
+			if n := len(stmt.Vars); n > 0 {
+				stmt.Vars[n-1].Char = true
+			}
+		case strings.Contains(tok, "."): // an informat for the most recent variable
+			if n := len(stmt.Vars); n > 0 {
+				inf := tok
+				if strings.HasPrefix(inf, "$") {
+					stmt.Vars[n-1].Char = true
+				}
+				stmt.Vars[n-1].Informat = inf
+			}
+		default: // a new variable name (may carry a trailing `$`)
+			name := tok
+			char := false
+			if strings.HasSuffix(name, "$") {
+				name = strings.TrimSuffix(name, "$")
+				char = true
+			}
+			stmt.Vars = append(stmt.Vars, ast.InputVar{Name: name, Char: char})
+		}
+	}
 	return stmt
 }
 

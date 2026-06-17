@@ -63,7 +63,7 @@ ass test corpus/
 
 - PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
-- Informats (reading formatted input); `'..'t`/`'..'dt` time/datetime literals
+- Column/pointer input (`input name $ 1-10 age 11-13;`, `@`/`#`) and time/datetime informats (list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options: `where=`, `keep=`, `drop=`, `rename=` (statement forms work)
 - PROC GLM CLASS effects / design-matrix coding (PROC REG/GLM OLS estimates, std-err, t-value, `Pr>|t|`, and R² are supported)
 - `--compare-output` / JSON harness output (tied to SAS-verified expected files)

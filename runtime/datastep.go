@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/formats"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
 )
@@ -417,6 +418,8 @@ func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
 			} else {
 				val = table.MissingNum()
 			}
+		case v.Informat != "":
+			val = formats.ParseInput(fields[i], v.Informat)
 		case v.Char:
 			val = table.Char(fields[i])
 		default:
