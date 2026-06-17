@@ -42,8 +42,16 @@ type PrefixExpression struct {
 
 func (p *PrefixExpression) expressionNode() {}
 func (p *PrefixExpression) String() string {
-	return "(" + p.Op + p.Right.String() + ")"
+	// Word operators (e.g. "not") need a separating space; symbol operators
+	// (e.g. "-") do not.
+	sep := ""
+	if len(p.Op) > 0 && isLetter(p.Op[0]) {
+		sep = " "
+	}
+	return "(" + p.Op + sep + str(p.Right) + ")"
 }
+
+func isLetter(b byte) bool { return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') }
 
 // InfixExpression is a binary operation, e.g. `a + b` or `age >= 18`.
 type InfixExpression struct {
@@ -54,7 +62,7 @@ type InfixExpression struct {
 
 func (ie *InfixExpression) expressionNode() {}
 func (ie *InfixExpression) String() string {
-	return "(" + ie.Left.String() + " " + ie.Op + " " + ie.Right.String() + ")"
+	return "(" + str(ie.Left) + " " + ie.Op + " " + str(ie.Right) + ")"
 }
 
 // CallExpression is a function call, e.g. `substr(name, 1, 3)`.
@@ -67,7 +75,7 @@ func (c *CallExpression) expressionNode() {}
 func (c *CallExpression) String() string {
 	parts := make([]string, len(c.Args))
 	for i, a := range c.Args {
-		parts[i] = a.String()
+		parts[i] = str(a)
 	}
 	return c.Func + "(" + strings.Join(parts, ", ") + ")"
 }

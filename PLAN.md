@@ -52,10 +52,10 @@ If you are a fresh Claude Code instance with no memory of prior work:
 - [x] **3.1 AST node definitions.** In `ast/`, define interfaces (`Node`, `Statement`, `Expression`) and the program/step containers: `Program` (list of steps), `DataStep`, `ProcStep` (generic with proc name + raw options/statements for now). Acceptance: compiles.
 - [x] **3.2 Statement & expression nodes.** Add nodes for: assignment, `set`, `input` (with var list + `$` flags), `datalines` (raw block), `if/then/else`, `do/end`, `output`, `keep/drop`, plus expression nodes (literal, identifier, binary op, unary op, function call). Acceptance: compiles; nodes have `String()` for debugging.
 - [x] **3.3 Program/step parser.** In `parser/parser.go`, implement top-level parsing that splits the token stream into steps by `data`/`proc` ... `run;`/`quit;` and dispatches to step parsers. Add `parser/parser_test.go`. Acceptance: parses a multi-step file into a `Program` with the right step count/types.
-- [ ] **3.4 Expression parser (Pratt).** Implement precedence-climbing/Pratt parsing for SAS expressions: arithmetic (`+ - * / **`), comparison (`= ^= < <= > >=` and word forms `eq ne lt`...), logical (`and or not`), function calls, parentheses. Add tests. Acceptance: expression tests pass including precedence.
-- [ ] **3.5 DATA step statement parser.** Parse the bodies of DATA steps into the statement nodes from 3.2. Add tests against Level-1 corpus items. Acceptance: Level-1 items parse to expected AST shape.
-- [ ] **3.6 PROC step option parser.** Parse common PROC option syntax: `proc <name> data=<ds> (options);` and statement lines like `by`, `var`, `where`. Keep proc-specific semantics out (just structure). **Caveat from Phase 2:** the lexer emits `data` as the `DATA` keyword token even in `proc print data=people` (SAS keywords are contextual). The option parser must accept the `DATA` token (and likely `SET`, etc.) where an option name is expected, rather than only `IDENT`. Acceptance: PROC PRINT/SORT items parse.
-- [ ] **3.7 Wire parser into CLI.** Add `ass parse <file.sas>` (or a flag) that prints the AST. Acceptance: prints AST for corpus items.
+- [x] **3.4 Expression parser (Pratt).** Implement precedence-climbing/Pratt parsing for SAS expressions: arithmetic (`+ - * / **`), comparison (`= ^= < <= > >=` and word forms `eq ne lt`...), logical (`and or not`), function calls, parentheses. Add tests. Acceptance: expression tests pass including precedence.
+- [x] **3.5 DATA step statement parser.** Parse the bodies of DATA steps into the statement nodes from 3.2. Add tests against Level-1 corpus items. Acceptance: Level-1 items parse to expected AST shape.
+- [x] **3.6 PROC step option parser.** Parse common PROC option syntax: `proc <name> data=<ds> (options);` and statement lines like `by`, `var`, `where`. Keep proc-specific semantics out (just structure). **Caveat from Phase 2:** the lexer emits `data` as the `DATA` keyword token even in `proc print data=people` (SAS keywords are contextual). The option parser must accept the `DATA` token (and likely `SET`, etc.) where an option name is expected, rather than only `IDENT`. Acceptance: PROC PRINT/SORT items parse.
+- [x] **3.7 Wire parser into CLI.** Add `ass parse <file.sas>` (or a flag) that prints the AST. Acceptance: prints AST for corpus items.
 
 ## Phase 4 — DATA step runtime (the core)
 
@@ -197,3 +197,16 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: PROC option parsing (part of step 3.6) was done here since it's structural; 3.6 remains for body statements like `by`/`var`/`where` and any option-name edge cases. RawStatement lets the parser keep moving over assignment/set/input/if/do until 3.5 gives them real nodes — nothing is dropped.
 - Verified: `go test ./...` green (lexer + parser); `go vet ./...` clean.
 - Next: Phase 3.4 — Pratt expression parser (arithmetic/comparison/logical/calls, incl. mnemonic word operators eq/ne/and/or/not).
+
+### 2026-06-16 — Phase 3 complete (3.4–3.7)
+- What changed: Finished the parser — Pratt expression parser, real DATA-step and PROC statement parsing (replacing RawStatement placeholders), and a `parse` CLI command. Verified by parsing every non-macro corpus item cleanly.
+- Key files:
+  - `parser/expression.go` — precedence-climbing parser. Precedence (low→high): or, and, compare, ||, +/-, * /, prefix, ** (right-assoc). Mnemonic word operators (and/or/eq/ne/lt/le/gt/ge) normalized to symbolic form; `not`/`^`/`~` prefix binds looser than comparison (matches SAS for `not a = b`). Function calls and parenthesized grouping.
+  - `parser/statements.go` — `parseDataStatement` (set, input+$, if/then/else, subsetting if, do/while/until/iterative + end, output, keep, drop, by, assignment) and `parseProcStatement` (by, var; else raw). Helpers: identIs/peekIdentIs, parseDatasetNames (dotted lib.name).
+  - `parser/parser.go` — `parseStepBody` now takes a statement-parser func; DATA uses parseDataStatement, PROC uses parseProcStatement.
+  - `parser/expression_test.go`, `parser/statements_test.go` — precedence/associativity, mnemonics, calls, literals; assignment/input, set/subsetting-if, if/then/else, do-loop+output, proc by/var.
+  - `cmd/ass/main.go` — `ass parse <file.sas>` prints the AST and reports parse errors (non-zero exit on errors).
+  - `ast/ast.go`,`expressions.go`,`statements.go` — added nil-safe `str()` helper; all child-rendering `String()` methods use it.
+- Decisions/deviations: Found and fixed a robustness bug — `String()` panicked on partial trees from error-parses (nil children); now renders `<?>`. Macro corpus items (`&var`, `%let`, `%macro`) intentionally still produce parse errors: they require the Phase 9 macro preprocessor that runs *before* the parser. All Level-1/2 and SQL items parse with zero errors. PROC option parsing was completed earlier in 3.3.
+- Verified: `go test ./...` green; `go vet` clean; `ass parse` over all 15 non-macro corpus items yields zero errors; macro items error gracefully (no panic).
+- Next: Phase 4.1 — dataset model in `table/` (Dataset, Column, Value with missing-value semantics).

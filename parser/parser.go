@@ -65,7 +65,7 @@ func (p *Parser) parseDataStep() ast.Step {
 		p.next()
 	}
 	p.expectSemicolon()
-	ds.Body = p.parseStepBody()
+	ds.Body = p.parseStepBody(p.parseDataStatement)
 	return ds
 }
 
@@ -96,16 +96,16 @@ func (p *Parser) parseProcStep() ast.Step {
 		}
 	}
 	p.expectSemicolon()
-	ps.Body = p.parseStepBody()
+	ps.Body = p.parseStepBody(p.parseProcStatement)
 	return ps
 }
 
-// parseStepBody collects statements until a RUN/QUIT terminator (or EOF) and
-// consumes that terminator and its semicolon.
-func (p *Parser) parseStepBody() []ast.Statement {
+// parseStepBody collects statements (using parseStmt) until a RUN/QUIT
+// terminator (or EOF) and consumes that terminator and its semicolon.
+func (p *Parser) parseStepBody(parseStmt func() ast.Statement) []ast.Statement {
 	var body []ast.Statement
 	for !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) && !p.curIs(lexer.EOF) {
-		if stmt := p.parseStatement(); stmt != nil {
+		if stmt := parseStmt(); stmt != nil {
 			body = append(body, stmt)
 		}
 	}
@@ -114,21 +114,6 @@ func (p *Parser) parseStepBody() []ast.Statement {
 		p.expectSemicolon()
 	}
 	return body
-}
-
-// parseStatement dispatches to a statement parser. In this phase only the
-// structurally significant DATALINES block is recognized; everything else is
-// captured as a RawStatement and refined in Phase 3.5.
-func (p *Parser) parseStatement() ast.Statement {
-	switch p.cur.Type {
-	case lexer.DATALINES:
-		return p.parseDatalines()
-	case lexer.SEMICOLON:
-		p.next() // empty statement
-		return nil
-	default:
-		return p.parseRawStatement()
-	}
 }
 
 // parseDatalines consumes `datalines; <raw block> ;` into a DatalinesStatement.

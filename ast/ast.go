@@ -11,6 +11,15 @@ type Node interface {
 	String() string
 }
 
+// str renders a node, tolerating nil children (which can occur in partial trees
+// produced when parsing encounters errors).
+func str(n Node) string {
+	if n == nil {
+		return "<?>"
+	}
+	return n.String()
+}
+
 // Statement is a node that appears in the body of a step (e.g. an assignment).
 type Statement interface {
 	Node

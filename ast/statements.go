@@ -13,7 +13,7 @@ type AssignmentStatement struct {
 
 func (a *AssignmentStatement) statementNode() {}
 func (a *AssignmentStatement) String() string {
-	return a.Name + " = " + a.Value.String() + ";"
+	return a.Name + " = " + str(a.Value) + ";"
 }
 
 // SetStatement is `set <datasets...>;`.
@@ -71,7 +71,7 @@ type IfStatement struct {
 
 func (i *IfStatement) statementNode() {}
 func (i *IfStatement) String() string {
-	s := "if " + i.Condition.String() + " then " + i.Consequence.String()
+	s := "if " + str(i.Condition) + " then " + str(i.Consequence)
 	if i.Alternative != nil {
 		s += " else " + i.Alternative.String()
 	}
@@ -86,7 +86,7 @@ type SubsettingIf struct {
 
 func (s *SubsettingIf) statementNode() {}
 func (s *SubsettingIf) String() string {
-	return "if " + s.Condition.String() + ";"
+	return "if " + str(s.Condition) + ";"
 }
 
 // DoKind distinguishes the forms of a DO statement.
@@ -115,15 +115,15 @@ func (d *DoStatement) String() string {
 	var b strings.Builder
 	switch d.Kind {
 	case DoIterative:
-		b.WriteString("do " + d.Var + " = " + d.From.String() + " to " + d.To.String())
+		b.WriteString("do " + d.Var + " = " + str(d.From) + " to " + str(d.To))
 		if d.By != nil {
 			b.WriteString(" by " + d.By.String())
 		}
 		b.WriteString(";")
 	case DoWhile:
-		b.WriteString("do while(" + d.Cond.String() + ");")
+		b.WriteString("do while(" + str(d.Cond) + ");")
 	case DoUntil:
-		b.WriteString("do until(" + d.Cond.String() + ");")
+		b.WriteString("do until(" + str(d.Cond) + ");")
 	default:
 		b.WriteString("do;")
 	}
