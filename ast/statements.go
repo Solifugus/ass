@@ -89,6 +89,18 @@ func (s *SubsettingIf) String() string {
 	return "if " + str(s.Condition) + ";"
 }
 
+// WhereStatement is `where <cond>;`. Unlike a subsetting IF, WHERE filters rows
+// at read time and can reference only variables that exist in the input dataset
+// (not variables computed in the step).
+type WhereStatement struct {
+	Condition Expression
+}
+
+func (w *WhereStatement) statementNode() {}
+func (w *WhereStatement) String() string {
+	return "where " + str(w.Condition) + ";"
+}
+
 // DoKind distinguishes the forms of a DO statement.
 type DoKind int
 

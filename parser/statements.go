@@ -32,6 +32,8 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseInput()
 	case p.identIs("if"):
 		return p.parseIf()
+	case p.identIs("where"):
+		return p.parseWhere()
 	case p.identIs("do"):
 		return p.parseDo()
 	case p.identIs("output"):
@@ -55,6 +57,14 @@ func (p *Parser) parseAssignment() ast.Statement {
 	p.next() // name
 	p.next() // '='
 	stmt := &ast.AssignmentStatement{Name: name, Value: p.parseExpression(pLOWEST)}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseWhere parses `where <cond>;`.
+func (p *Parser) parseWhere() ast.Statement {
+	p.next() // 'where'
+	stmt := &ast.WhereStatement{Condition: p.parseExpression(pLOWEST)}
 	p.expectSemicolon()
 	return stmt
 }

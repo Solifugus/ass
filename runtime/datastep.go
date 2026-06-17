@@ -34,6 +34,7 @@ type dataStep struct {
 	setPtr   int              // next SET row to read
 	keep     map[string]bool  // if non-nil, only these vars are output (lowercased)
 	drop     map[string]bool  // these vars are excluded from output (lowercased)
+	wheres   []ast.Expression // WHERE conditions applied at read time
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -66,6 +67,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	d.explicit = containsOutput(ds.Body)
 	d.records = collectDatalines(ds.Body)
 	d.keep, d.drop = collectKeepDrop(ds.Body)
+	d.wheres = collectWheres(ds.Body)
 	hasInput := hasInputStatement(ds.Body)
 
 	if hasSetStatement(ds.Body) {
@@ -160,7 +162,7 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		}
 		d.applyInput(st, d.records[d.recPtr])
 		d.recPtr++
-		return flowNormal, nil
+		return d.applyWhere()
 	case *ast.DatalinesStatement:
 		// The data is collected up front; the statement itself does nothing.
 		return flowNormal, nil
@@ -170,6 +172,9 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		}
 		d.applySet(d.setRows[d.setPtr])
 		d.setPtr++
+		return d.applyWhere()
+	case *ast.WhereStatement:
+		// WHERE is collected up front and applied at read time; nothing to do here.
 		return flowNormal, nil
 	case *ast.IfStatement:
 		cond, err := Eval(st.Condition, d.pdv)
@@ -386,6 +391,33 @@ func (d *dataStep) collectSetRows(stmts []ast.Statement) []sourceRow {
 		}
 	}
 	return rows
+}
+
+// applyWhere evaluates the step's WHERE conditions against the just-read row.
+// If any is false the row is dropped (flowDelete), matching SAS's read-time
+// filtering. With no WHERE conditions it is a no-op.
+func (d *dataStep) applyWhere() (flow, error) {
+	for _, cond := range d.wheres {
+		v, err := Eval(cond, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		if !truthy(v) {
+			return flowDelete, nil
+		}
+	}
+	return flowNormal, nil
+}
+
+// collectWheres gathers the WHERE conditions from the body.
+func collectWheres(stmts []ast.Statement) []ast.Expression {
+	var out []ast.Expression
+	for _, s := range stmts {
+		if w, ok := s.(*ast.WhereStatement); ok {
+			out = append(out, w.Condition)
+		}
+	}
+	return out
 }
 
 // collectKeepDrop scans the body for KEEP and DROP statements and returns the

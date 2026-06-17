@@ -78,7 +78,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 ## Phase 6 — Expressions, functions & filtering polish
 
 - [x] **6.1 Expand function library.** Add commonly-used DATA step functions: `substr`, `trim`, `left`, `length`, `scan`, `index`, `int`, `round`, `abs`, `min`, `max`, `mean`/`sum` (varargs). Table-test each. Acceptance: function tests pass.
-- [ ] **6.2 `where` vs subsetting if.** Ensure `where` clauses (DATA step option and statement) filter correctly and document the difference from subsetting `if`. Acceptance: where tests pass.
+- [x] **6.2 `where` vs subsetting if.** Ensure `where` clauses (DATA step option and statement) filter correctly and document the difference from subsetting `if`. Acceptance: where tests pass. (Statement form done; `data=ds(where=...)` dataset-option form deferred — see progress log.)
 - [ ] **6.3 Type coercion & formatting basics.** Implement automatic numeric↔character coercion rules and default numeric printing (BEST. format approximation). Acceptance: coercion tests pass.
 
 ## Phase 7 — PROC SORT
@@ -341,3 +341,14 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: `scan`'s default delimiter is a single blank (SAS's full default set is much larger — blank plus many specials); a corpus item needing the full set will extend this. `propcase` is ASCII-only. `length` of "" returns 1 (SAS) — from 4.3.
 - Verified: `go test ./runtime/` green; `go build`/`go vet` clean.
 - Next: Phase 6.2 — `where` (DATA step statement + `data=ds(where=...)` dataset option) vs subsetting `if`. Needs a `WhereStatement` AST node + parser support (and dataset-option parsing for the option form), then runtime filtering at read time. Document the if-vs-where difference (where can't see computed vars; applies at read).
+
+### 2026-06-16 — Phase 6.2 (where statement)
+- What changed: Added the WHERE statement to the DATA step — read-time row filtering, distinct from the subsetting IF.
+- Key files:
+  - `ast/statements.go` — `WhereStatement{Condition}` (doc notes the if-vs-where distinction).
+  - `parser/statements.go` — dispatch `where` → `parseWhere` (`where <expr>;`).
+  - `runtime/datastep.go` — `dataStep.wheres` collected via `collectWheres`; `applyWhere` evaluates all conditions against the just-read row and returns `flowDelete` on any false. Called immediately after INPUT/SET populate the PDV (so it filters at read, before computed statements run); the `WhereStatement` itself is a no-op during body execution.
+  - `runtime/datastep_test.go` — WHERE on INPUT (datalines) and on SET both filter to the matching rows; local `names`/`eqStr` helpers.
+- Decisions/deviations: **if vs where** — WHERE is applied at read (right after INPUT/SET), so it sees only input variables, not values computed later in the step; a subsetting IF runs at its position in the body and can test computed variables. Multiple WHEREs combine with AND. **Deferred:** the dataset-option form `set a(where=(...))` / `data=ds(where=...)` — it needs general dataset-option parsing (`(where= keep= drop= rename=)` after a dataset name), best built as one unit later (note for a Phase 6.x/10 follow-up); the statement form covers the immediate need. WHERE in PROC bodies (e.g. `proc print; where ...;`) not yet honored (parses as raw) — add when a corpus item needs it.
+- Verified: `go test ./...` green; `go build`/`go vet` clean.
+- Next: Phase 6.3 — type coercion & numeric formatting. Automatic numeric↔character coercion in expressions (e.g. number used where char expected and vice-versa) and a BEST.-style default numeric format approximation for display/printing (currently `Value.Display` uses compact `%g`).

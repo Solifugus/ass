@@ -321,6 +321,52 @@ func TestDataStepKeep(t *testing.T) {
 	}
 }
 
+func TestDataStepWhereOnInput(t *testing.T) {
+	src := "data adults;\n  input name $ age;\n  where age >= 18;\n  datalines;\nJohn 25\nKid 10\nJane 30\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("adults")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (where age>=18)", ds.NObs())
+	}
+	if got := names(ds, "name"); !eqStr(got, []string{"John", "Jane"}) {
+		t.Errorf("names = %v, want [John Jane]", got)
+	}
+}
+
+func TestDataStepWhereOnSet(t *testing.T) {
+	src := "data people;\n  input name $ age;\n  datalines;\nJohn 25\nKid 10\nJane 30\n;\nrun;\n" +
+		"data adults;\n  set people;\n  where age > 20;\n  run;"
+	lib := runProgram(t, src)
+	ds, _ := lib.Get("adults")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2", ds.NObs())
+	}
+	if got := names(ds, "name"); !eqStr(got, []string{"John", "Jane"}) {
+		t.Errorf("names = %v, want [John Jane]", got)
+	}
+}
+
+// names/eqStr are small local helpers mirroring the proc tests.
+func names(ds *table.Dataset, col string) []string {
+	out := make([]string, ds.NObs())
+	for i, r := range ds.Rows {
+		out[i] = ds.Get(r, col).Display()
+	}
+	return out
+}
+
+func eqStr(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {
