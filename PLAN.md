@@ -41,11 +41,11 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 2 — Lexer
 
-- [ ] **2.1 Token types.** In `lexer/token.go`, define `TokenType` constants and a `Token` struct (type, literal, line, col). Cover: identifiers, numbers, string literals (single+double quote), `;`, `=`, comparison/arith operators, `(` `)` `,` `.` `&` `%`, comment markers (`*...;` and `/* */`), and keyword detection helper. Acceptance: compiles; constants documented.
-- [ ] **2.2 Core scanner.** In `lexer/lexer.go`, implement a `Lexer` that scans a string into tokens: whitespace skipping, line/col tracking, identifiers, numbers, strings, single-char tokens. Add `lexer/lexer_test.go` with table tests. Acceptance: `go test ./lexer/` passes for basic tokens.
-- [ ] **2.3 Comments & SAS quirks.** Handle SAS's two comment forms (`* ... ;` statement comments and `/* ... */` block comments) and the `$` character-variable marker. Add tests. Acceptance: comment tests pass; comments produce no spurious tokens.
-- [ ] **2.4 Step/keyword recognition.** Recognize statement-leading keywords enough to detect `data`, `proc`, `run`, `quit`, `datalines`/`cards`, and handle the special raw-data region after `datalines;` up to a line with `;`. Add tests for a full `data ... datalines ... run;` token stream. Acceptance: datalines region tokenized correctly (raw lines, not re-lexed as code).
-- [ ] **2.5 Wire lexer into CLI.** Make `ass <file.sas>` print the token stream (debug mode) so the lexer is exercisable end-to-end. Acceptance: running it on a Level-1 corpus item prints sensible tokens.
+- [x] **2.1 Token types.** In `lexer/token.go`, define `TokenType` constants and a `Token` struct (type, literal, line, col). Cover: identifiers, numbers, string literals (single+double quote), `;`, `=`, comparison/arith operators, `(` `)` `,` `.` `&` `%`, comment markers (`*...;` and `/* */`), and keyword detection helper. Acceptance: compiles; constants documented.
+- [x] **2.2 Core scanner.** In `lexer/lexer.go`, implement a `Lexer` that scans a string into tokens: whitespace skipping, line/col tracking, identifiers, numbers, strings, single-char tokens. Add `lexer/lexer_test.go` with table tests. Acceptance: `go test ./lexer/` passes for basic tokens.
+- [x] **2.3 Comments & SAS quirks.** Handle SAS's two comment forms (`* ... ;` statement comments and `/* ... */` block comments) and the `$` character-variable marker. Add tests. Acceptance: comment tests pass; comments produce no spurious tokens.
+- [x] **2.4 Step/keyword recognition.** Recognize statement-leading keywords enough to detect `data`, `proc`, `run`, `quit`, `datalines`/`cards`, and handle the special raw-data region after `datalines;` up to a line with `;`. Add tests for a full `data ... datalines ... run;` token stream. Acceptance: datalines region tokenized correctly (raw lines, not re-lexed as code).
+- [x] **2.5 Wire lexer into CLI.** Make `ass <file.sas>` print the token stream (debug mode) so the lexer is exercisable end-to-end. Acceptance: running it on a Level-1 corpus item prints sensible tokens.
 
 ## Phase 3 — Parser & AST
 
@@ -54,7 +54,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 - [ ] **3.3 Program/step parser.** In `parser/parser.go`, implement top-level parsing that splits the token stream into steps by `data`/`proc` ... `run;`/`quit;` and dispatches to step parsers. Add `parser/parser_test.go`. Acceptance: parses a multi-step file into a `Program` with the right step count/types.
 - [ ] **3.4 Expression parser (Pratt).** Implement precedence-climbing/Pratt parsing for SAS expressions: arithmetic (`+ - * / **`), comparison (`= ^= < <= > >=` and word forms `eq ne lt`...), logical (`and or not`), function calls, parentheses. Add tests. Acceptance: expression tests pass including precedence.
 - [ ] **3.5 DATA step statement parser.** Parse the bodies of DATA steps into the statement nodes from 3.2. Add tests against Level-1 corpus items. Acceptance: Level-1 items parse to expected AST shape.
-- [ ] **3.6 PROC step option parser.** Parse common PROC option syntax: `proc <name> data=<ds> (options);` and statement lines like `by`, `var`, `where`. Keep proc-specific semantics out (just structure). Acceptance: PROC PRINT/SORT items parse.
+- [ ] **3.6 PROC step option parser.** Parse common PROC option syntax: `proc <name> data=<ds> (options);` and statement lines like `by`, `var`, `where`. Keep proc-specific semantics out (just structure). **Caveat from Phase 2:** the lexer emits `data` as the `DATA` keyword token even in `proc print data=people` (SAS keywords are contextual). The option parser must accept the `DATA` token (and likely `SET`, etc.) where an option name is expected, rather than only `IDENT`. Acceptance: PROC PRINT/SORT items parse.
 - [ ] **3.7 Wire parser into CLI.** Add `ass parse <file.sas>` (or a flag) that prints the AST. Acceptance: prints AST for corpus items.
 
 ## Phase 4 — DATA step runtime (the core)
@@ -174,3 +174,14 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: All items are hand-written, MIT-licensed (no external sources pulled in yet — keeps licensing clean). Every item is `output: unverified` for now; the expected *content* of each is described in its `meta.yaml notes:`. **Step 1.6 was revised**: expected_output.txt files are deferred to Phase 5.2 (PROC PRINT renderer defines exact spacing — writing them now would bake in arbitrary formatting). Added a reminder to 5.2 to backfill them and flip to `verified`.
 - Verified: `go build ./...` still clean (no Go code changed). Corpus item dirs confirmed to each contain input.sas + meta.yaml. meta.yaml feature tags all exist in FEATURES.md (manual check).
 - Next: Phase 2.1 — define token types in `lexer/token.go`.
+
+### 2026-06-16 — Phase 2 complete (2.1–2.5)
+- What changed: Implemented the lexer end to end with full test coverage, and wired it into the CLI.
+- Key files:
+  - `lexer/token.go` — `TokenType` (readable string constants) and `Token{Type,Literal,Line,Col}`; structural keywords (DATA/PROC/RUN/QUIT/DATALINES via `LookupIdent`, case-insensitive); operators incl. `**` POW, `||` CONCAT, mnemonic-symbol ops; `$` DOLLAR; `DATALINES_DATA` for raw blocks.
+  - `lexer/lexer.go` — rune-based `Lexer` with line/col tracking; `NextToken`/`scan`; `skipTrivia` handles `/* */` block comments and `* ... ;` statement comments (statement-start tracked via `lastType`, seeded to SEMICOLON); `readDatalines` raw-data mode (verbatim lines until a `;`/`;;;;` terminator line, which is left for the normal scanner); string `''`/`""` escape handling; numbers with fraction/exponent.
+  - `lexer/lexer_test.go` — table tests: basic stream, operators, numbers, strings (with escapes), case-insensitive keywords, positions, illegal rune, block/statement comments, `*`-is-multiply, `$` in input, full datalines flow.
+  - `cmd/ass/main.go` — `runFile` now prints the token stream (`line:col TYPE "literal"`); execution-pending note goes to stderr.
+- Decisions/deviations: Mnemonic word operators (`eq`, `and`, `or`, ...) are intentionally left as IDENT for the parser to classify (Phase 3.4) rather than lexed as operators — keeps the lexer context-free. **Discovered caveat:** `data=` in `proc print data=ds` lexes as the `DATA` keyword token (SAS keywords are contextual); recorded a note on step 3.6 so the PROC option parser accepts keyword tokens as option names.
+- Verified: `go test ./...` green (lexer suite passes; other packages have no tests yet). `go build`/`go vet` clean. Manual: `go run ./cmd/ass corpus/data_step_basic_001/input.sas` produces a correct token dump including the `DATALINES_DATA "John 25\nMary 30"` block.
+- Next: Phase 3.1 — define AST node interfaces and the program/step containers in `ast/`.

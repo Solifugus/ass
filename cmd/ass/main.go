@@ -5,6 +5,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/solifugus/ass/lexer"
 )
 
 const usage = `ass - Analyst's Statistical Suite
@@ -40,15 +42,22 @@ func run(args []string) error {
 	}
 }
 
-// runFile reads and (eventually) executes a SAS source file. For now it loads
-// the file and reports its size as a placeholder until the lexer is wired in.
+// runFile reads a SAS source file and, until the parser/runtime exist, prints
+// its token stream (debug mode).
 func runFile(path string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("read %s (%d bytes)\n", path, len(src))
-	fmt.Println("note: execution pipeline not yet implemented")
+	l := lexer.New(string(src))
+	for {
+		tok := l.NextToken()
+		if tok.Type == lexer.EOF {
+			break
+		}
+		fmt.Printf("%4d:%-3d %-14s %q\n", tok.Line, tok.Col, tok.Type, tok.Literal)
+	}
+	fmt.Fprintln(os.Stderr, "note: execution pipeline not yet implemented (token dump only)")
 	return nil
 }
 
