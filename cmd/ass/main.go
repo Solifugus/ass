@@ -19,6 +19,7 @@ const usage = `ass - Analyst's Statistical Suite
 
 Usage:
   ass <file.sas>        Run a SAS program
+  ass run <file.sas>    Run a SAS program (explicit form)
   ass parse <file.sas>  Parse a SAS program and print its AST
   ass tokens <file.sas> Dump the token stream (lexer debug)
   ass test <dir>        Run the compatibility corpus in <dir>
@@ -55,6 +56,11 @@ func run(args []string) error {
 			return fmt.Errorf("tokens: missing <file.sas>")
 		}
 		return dumpTokens(args[1])
+	case "run":
+		if len(args) < 2 {
+			return fmt.Errorf("run: missing <file.sas>")
+		}
+		return runProgram(args[1])
 	default:
 		return runProgram(args[0])
 	}
