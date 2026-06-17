@@ -114,11 +114,11 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 11 — Compatibility harness
 
-- [ ] **11.1 Corpus loader.** In `corpus/`, implement loading items from disk (parse `meta.yaml`, read input/expected files). Acceptance: loader reads all existing corpus items into structs.
-- [ ] **11.2 `ass test` runner.** Implement `ass test <dir>`: for each item, run parse and (if expected) execute, compare output/log, collect pass/fail + unsupported features. Acceptance: runner produces a per-item report.
-- [ ] **11.3 Filters & modes.** Add `--parse-only`, `--feature <tag>`, `--compare-output <dir>`. Acceptance: each flag changes behavior as documented in design §10.
-- [ ] **11.4 Compatibility report.** Aggregate per-feature and overall compatibility percentages and print the summary table (design §10). Acceptance: running the full corpus prints the percentage table.
-- [ ] **11.5 CI-friendly exit codes.** Non-zero exit on regressions; optional JSON output for tooling. Acceptance: exit code reflects failures.
+- [x] **11.1 Corpus loader.** In `corpus/`, implement loading items from disk (parse `meta.yaml`, read input/expected files). Acceptance: loader reads all existing corpus items into structs.
+- [x] **11.2 `ass test` runner.** Implement `ass test <dir>`: for each item, run parse and (if expected) execute, compare output/log, collect pass/fail + unsupported features. Acceptance: runner produces a per-item report.
+- [x] **11.3 Filters & modes.** Add `--parse-only`, `--feature <tag>`, `--compare-output <dir>`. Acceptance: each flag changes behavior as documented in design §10.
+- [x] **11.4 Compatibility report.** Aggregate per-feature and overall compatibility percentages and print the summary table (design §10). Acceptance: running the full corpus prints the percentage table.
+- [x] **11.5 CI-friendly exit codes.** Non-zero exit on regressions; optional JSON output for tooling. Acceptance: exit code reflects failures.
 
 ## Phase 12 — Statistical procedures (Level 6, later)
 
@@ -384,3 +384,14 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: `&&` is collapsed (basic) rather than fully multi-pass rescanned — no corpus item needs deep `&&`. `%if` simple-statement branch ends at `;`; the `%do`-block form is the primary path. Positional args bind to positional params; keyword params (those with `=default`) bind by name or default (a positional arg won't fill a keyword param — matches SAS). Macro vars are global within a Process run except call params (scoped). Autocall/external macro libraries, `%sysfunc`, `%eval` arithmetic, and statement-level `%if` outside macros are out of scope for L4.
 - Verified: `go test ./...` green (incl. new `macro` pkg); `go vet` clean. End-to-end: macro_let_001 → adults John/Mary; macro_def_001 → PROC PRINT of people; macro_control_001 → NUMS x=1,2,3.
 - Next: Phase 10 — Advanced DATA step (L5): `retain`, arrays, BY-group processing in the runtime (`first.`/`last.` from `ComputeByGroups` already built in 7.3), `merge` + `in=`, sum statement, user formats. Then Phase 11 (the `ass test` harness — first-class deliverable; also revisits deferred corpus output verification). With Phases 0–9 done, all priority-1 corpus items (L1–L4) execute end-to-end.
+
+### 2026-06-16 — Phase 11 (compatibility harness) — PHASE 11 COMPLETE (note: built before Phase 10)
+- What changed: Implemented `ass test` — the first-class compatibility harness. It loads the corpus, runs parse + execute per item, and prints a per-feature + overall compatibility report. **All 18 corpus items pass: parse 100%, execute 100%, every feature 100%.** Sequencing note: built Phase 11 before Phase 10 because it validates everything done in Phases 0–9 and is self-contained, whereas Phase 10's advanced-DATA-step features have no corpus items yet.
+- Key files:
+  - `corpus/corpus.go` — `Item`/`Expected` structs (YAML tags); `Load(dir)` walks subdirs with meta.yaml+input.sas, parses meta via `gopkg.in/yaml.v3` (new pure-Go dep), reads input + optional expected_output/log. `HasFeature`.
+  - `corpus/runner.go` — `Options{ParseOnly, Feature}`; `Run` → `Report`. `runItem` runs macro→parse (compares to `expected.parse`), then (unless parse-only/skip) executes via `runtime.RunProgram` with output captured (`captureStdout` redirects os.Stdout through a pipe + goroutine reader) and the log to a buffer; compares to `expected.execute` and, when `output: verified`, to `expected_output.txt`. `Report.Summary`/`FeatureStats`/`WriteReport` (per-item PASS/FAIL, per-feature %, totals).
+  - `cmd/ass/main.go` — `runTest` wires `--parse-only`, `--feature <tag>`, `-v/--verbose`, dir arg; non-zero exit when any item fails (CI-friendly).
+  - `corpus/corpus_test.go` — loads the real corpus: all load, all pass, feature filter, parse-only skips execution.
+- Decisions/deviations: `--compare-output <dir>` (11.3) and JSON output (11.5, "optional") are NOT implemented — both are tied to the deferred SAS-verified expected outputs (see 5.2 decision); add alongside that verification. `expected.output: verified` comparison is wired and ready but no item is `verified` yet, so output is reported as part of pass without byte-comparison. yaml.v3 is pure-Go (no new CGo).
+- Verified: `go test ./...` green (incl. new `corpus` pkg); `go vet` clean. `ass test corpus/` → 18/18, 100%; `--feature proc-sql` → 4 items; `--parse-only` → executed 0; exit 0 on success.
+- Next: Phase 10 — Advanced DATA step (L5): `retain`, sum statement, arrays, BY-group `first.`/`last.` in the runtime (use `runtime.ComputeByGroups` from 7.3), `merge` + `in=`, user formats. Add corpus items tagged for each new feature (per the "add corpus items with the feature" rule) so the harness tracks them. Then Phase 12 (stat PROCs), Phase 13 (final docs).

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/solifugus/ass/corpus"
 	"github.com/solifugus/ass/lexer"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/macro"
@@ -121,12 +122,58 @@ func dumpTokens(path string) error {
 	return nil
 }
 
-// runTest will run the compatibility corpus. Stubbed until Phase 11.
+// runTest runs the compatibility corpus and prints a report. Flags:
+//
+//	--parse-only        only check parsing
+//	--feature <tag>     only run items tagged <tag>
+//	-v / --verbose      show failure detail
 func runTest(args []string) error {
+	var opts corpus.Options
+	verbose := false
 	dir := "corpus"
-	if len(args) > 0 {
-		dir = args[0]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--parse-only":
+			opts.ParseOnly = true
+		case "-v", "--verbose":
+			verbose = true
+		case "--feature":
+			if i+1 >= len(args) {
+				return fmt.Errorf("test: --feature requires a tag")
+			}
+			i++
+			opts.Feature = args[i]
+		default:
+			dir = args[i]
+		}
 	}
-	fmt.Printf("test harness not implemented (target dir: %s)\n", dir)
+
+	items, err := corpus.Load(dir)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return fmt.Errorf("no corpus items found in %s", dir)
+	}
+
+	rep := corpus.Run(items, opts)
+	rep.WriteReport(os.Stdout, verbose)
+
+	// CI-friendly: non-zero exit when any item fails.
+	for _, r := range rep.Results {
+		if !r.Pass() {
+			return fmt.Errorf("%d of %d corpus items failed", countFailures(rep), len(rep.Results))
+		}
+	}
 	return nil
+}
+
+func countFailures(rep corpus.Report) int {
+	n := 0
+	for _, r := range rep.Results {
+		if !r.Pass() {
+			n++
+		}
+	}
+	return n
 }
