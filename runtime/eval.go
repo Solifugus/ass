@@ -136,15 +136,11 @@ func evalArith(op string, left, right table.Value) (table.Value, error) {
 	return table.MissingNum(), fmt.Errorf("unknown arithmetic operator %q", op)
 }
 
-// compare implements SAS comparison. Character values compare lexically; numeric
-// values compare by magnitude with missing ordered below every number.
+// compare implements SAS comparison using the canonical value ordering (see
+// table.Value.Compare): character values compare lexically; numeric values
+// compare by magnitude with missing ordered below every number.
 func compare(op string, left, right table.Value) bool {
-	var cmp int
-	if left.Kind == table.Character || right.Kind == table.Character {
-		cmp = strings.Compare(left.Str, right.Str)
-	} else {
-		cmp = compareNum(left, right)
-	}
+	cmp := left.Compare(right)
 	switch op {
 	case "=", "eq":
 		return cmp == 0
@@ -160,26 +156,6 @@ func compare(op string, left, right table.Value) bool {
 		return cmp >= 0
 	}
 	return false
-}
-
-// compareNum orders two numeric values, treating missing as less than any
-// non-missing value (two missings are equal).
-func compareNum(left, right table.Value) int {
-	lm, rm := left.IsMissing(), right.IsMissing()
-	switch {
-	case lm && rm:
-		return 0
-	case lm:
-		return -1
-	case rm:
-		return 1
-	case left.Num < right.Num:
-		return -1
-	case left.Num > right.Num:
-		return 1
-	default:
-		return 0
-	}
 }
 
 // truthy reports whether a value is "true" in a logical context: a non-missing,

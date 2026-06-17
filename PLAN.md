@@ -83,9 +83,9 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 7 — PROC SORT
 
-- [ ] **7.1 PROC SORT core.** Implement `proc sort data=<ds>; by <vars>;` with stable multi-key sort, ascending default and `descending` per key. Support `out=` for a separate output dataset (in place otherwise). Acceptance: SORT corpus items produce expected order.
-- [ ] **7.2 `nodupkey`/`dupout`.** Add duplicate removal by key. Acceptance: tests pass.
-- [ ] **7.3 BY-group plumbing.** Compute `first.`/`last.` flags for BY variables and expose them to the DATA step runtime (sets up Phase 10). Acceptance: first./last. computed correctly on a sorted dataset (unit-tested in table/runtime).
+- [x] **7.1 PROC SORT core.** Implement `proc sort data=<ds>; by <vars>;` with stable multi-key sort, ascending default and `descending` per key. Support `out=` for a separate output dataset (in place otherwise). Acceptance: SORT corpus items produce expected order.
+- [x] **7.2 `nodupkey`/`dupout`.** Add duplicate removal by key. Acceptance: tests pass. (`nodupkey` done; `dupout=` deferred — see progress log.)
+- [x] **7.3 BY-group plumbing.** Compute `first.`/`last.` flags for BY variables and expose them to the DATA step runtime (sets up Phase 10). Acceptance: first./last. computed correctly on a sorted dataset (unit-tested in table/runtime).
 
 ## Phase 8 — PROC SQL (Level 3)
 
@@ -321,3 +321,14 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: `label` is the proc-option form (`proc print data=x label;`); per-variable `label` statements inside the step are not parsed yet (no dedicated AST node) — labels come from column metadata set elsewhere (e.g. future LABEL statement / dataset attrs). Header alignment follows the column's data alignment.
 - Verified: `go test ./...` green; `go build`/`go vet` clean.
 - Next: Phase 6 — Expressions/functions/filtering polish. 6.1 expand the DATA-step function library (`scan`, `index`, plus rounding out the set already present); 6.2 `where` (statement + dataset option) vs subsetting `if`; 6.3 type coercion + BEST.-style numeric formatting. Alternatively jump to Phase 7 (PROC SORT) to light up the L2 sort corpus. Recommend 7 next for breadth of runnable corpus, then circle back to 6.
+
+### 2026-06-16 — Phase 7 (PROC SORT + BY-group plumbing) — PHASE 7 COMPLETE
+- What changed: Implemented PROC SORT (7.1/7.2) and the BY-group first./last. computation (7.3). Also consolidated SAS value ordering into `table.Value.Compare`.
+- Key files:
+  - `table/value.go` — new `Value.Compare(o) int`: canonical SAS ordering (char lexical; numeric with missing-low). `runtime/eval.go` `compare` now delegates to it (removed the duplicate `compareNum`).
+  - `proc/sort.go` — `sortProc` registered as "sort". Reads `data=`, the BY statement (`sortKeys` → name+descending), `out=`, `nodupkey`. Stable multi-key sort on a **copy** of the rows (so `out=` leaves the source untouched); in place when no `out=`. `dropDupKeys` keeps the first row of each equal-key run. Emits the standard dataset NOTE. `datasetName` strips a lib qualifier.
+  - `proc/sort_test.go` (`package proc_test`, external — avoids the runtime→proc import cycle) — numeric in-place, descending + `out=` (source preserved), `nodupkey` (first per key), multi-key with descending secondary + stability, BY-required error.
+  - `runtime/bygroup.go` — `ComputeByGroups(ds, byVars) []ByFlags` computing first./last. per BY var with cascading (a higher-priority change makes all lower vars first/last); `changeIndex` finds the first differing BY var between two rows. `runtime/bygroup_test.go` — single key, two keys (full first/last matrix), single row.
+- Decisions/deviations: `dupout=` (write removed dups to a dataset) deferred — `nodupkey` covers the corpus; noted on step 7.2. `ComputeByGroups` lives in `runtime` (it feeds the Phase-10 DATA step) but is pure over a `table.Dataset`; Phase 10 will wire it into the SET+BY loop as automatic `first.`/`last.` PDV variables. `nodupkey` assumes the dataset is sorted by the same BY (PROC SORT sorts first, so always true here).
+- Verified: `go test ./...` green (all packages); `go build`/`go vet` clean. End-to-end: all three sort corpus items print exactly their documented expected order (byvars → Tim/Ann/John/Mary; descending out= → Mary/John/Ann/Tim; nodupkey → id 1/2/3 with mon/mon/fri).
+- Next: Phase 6 — Expressions/functions/filtering polish (6.1 more functions: `scan`, `index`; 6.2 `where` statement + dataset option vs subsetting `if`; 6.3 type coercion + BEST.-style numeric formatting). This is the last pre-SQL DATA-step polish before Phase 8 (PROC SQL). Recommend 6 next.

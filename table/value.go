@@ -3,7 +3,10 @@
 // in-memory library that steps use to pass data.
 package table
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // Kind is the storage type of a SAS variable/value: numeric or character.
 type Kind int
@@ -50,6 +53,32 @@ func (v Value) IsMissing() bool {
 		return v.Str == ""
 	}
 	return v.missing
+}
+
+// Compare orders two values by SAS rules and returns -1, 0, or 1. Character
+// values (when either side is character) compare lexically; numeric values
+// compare by magnitude with missing ordered below every non-missing number (two
+// missings are equal). This is the canonical ordering used by comparisons and by
+// PROC SORT.
+func (v Value) Compare(o Value) int {
+	if v.Kind == Character || o.Kind == Character {
+		return strings.Compare(v.Str, o.Str)
+	}
+	vm, om := v.IsMissing(), o.IsMissing()
+	switch {
+	case vm && om:
+		return 0
+	case vm:
+		return -1
+	case om:
+		return 1
+	case v.Num < o.Num:
+		return -1
+	case v.Num > o.Num:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // Display renders the value the way it appears unformatted: "." for numeric
