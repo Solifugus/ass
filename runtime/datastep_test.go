@@ -98,6 +98,56 @@ func TestDataStepNoExplicitOutputImplicitOnce(t *testing.T) {
 	}
 }
 
+func TestDataStepInputDatalines(t *testing.T) {
+	src := "data people;\n  input name $ age;\n  datalines;\nJohn 25\nJane 30\nBob 40\n;\nrun;"
+	lib := runStep(t, src)
+	ds, ok := lib.Get("people")
+	if !ok {
+		t.Fatal("dataset PEOPLE not created")
+	}
+	if ds.NObs() != 3 {
+		t.Fatalf("NObs = %d, want 3", ds.NObs())
+	}
+	want := []string{"name", "age"}
+	if got := ds.ColumnNames(); len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("columns = %v, want %v", got, want)
+	}
+	if got := ds.Get(ds.Rows[0], "name"); got.Str != "John" {
+		t.Errorf("row0 name = %q, want John", got.Str)
+	}
+	if got := ds.Get(ds.Rows[1], "age"); got.Num != 30 {
+		t.Errorf("row1 age = %v, want 30", got.Display())
+	}
+	// Type check: age is numeric.
+	for _, c := range ds.Columns {
+		if c.Name == "age" && c.Kind != table.Numeric {
+			t.Error("age should be numeric")
+		}
+	}
+}
+
+func TestDataStepInputWithComputedColumn(t *testing.T) {
+	src := "data out;\n  input x;\n  y = x * 2;\n  datalines;\n1\n2\n3\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("out")
+	if ds.NObs() != 3 {
+		t.Fatalf("NObs = %d, want 3", ds.NObs())
+	}
+	if got := ds.Get(ds.Rows[2], "y"); got.Num != 6 {
+		t.Errorf("row2 y = %v, want 6", got.Display())
+	}
+}
+
+func TestDataStepInputMissingField(t *testing.T) {
+	// Second record omits age -> numeric missing.
+	src := "data people;\n  input name $ age;\n  datalines;\nJohn 25\nJane\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("people")
+	if got := ds.Get(ds.Rows[1], "age"); !got.IsMissing() {
+		t.Errorf("row1 age = %v, want missing", got.Display())
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {
