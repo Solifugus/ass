@@ -59,8 +59,8 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 4 — DATA step runtime (the core)
 
-- [ ] **4.1 Dataset model.** In `table/`, implement `Dataset` (library name, name, ordered columns with name/type/label/format/informat, rows as `[]Row`), `Column`, and a `Value` type supporting numeric, character, and **missing** (`.` numeric, `''` char). Add tests for construction and missing-value semantics. Acceptance: `go test ./table/` passes.
-- [ ] **4.2 In-memory library/catalog.** Implement a `Library` map (e.g. `work`) holding datasets by name, with get/put. This is how steps pass data. Acceptance: tests for put/get and overwrite.
+- [x] **4.1 Dataset model.** In `table/`, implement `Dataset` (library name, name, ordered columns with name/type/label/format/informat, rows as `[]Row`), `Column`, and a `Value` type supporting numeric, character, and **missing** (`.` numeric, `''` char). Add tests for construction and missing-value semantics. Acceptance: `go test ./table/` passes.
+- [x] **4.2 In-memory library/catalog.** Implement a `Library` map (e.g. `work`) holding datasets by name, with get/put. This is how steps pass data. Acceptance: tests for put/get and overwrite.
 - [ ] **4.3 PDV + expression evaluator.** In `runtime/`, implement the Program Data Vector (variable name → current Value) and an expression evaluator over the PDV (numbers, strings, missing propagation, arithmetic, comparison returning 1/0, logical ops, a few core functions like `sum`, `upcase`). Add tests. Acceptance: evaluator tests pass including missing-value propagation rules.
 - [ ] **4.4 Implicit loop & assignment/output.** Implement the DATA step driver: initialize PDV, run the implicit row loop, execute assignment statements, handle automatic `_N_` (iteration counter) and `_ERROR_`. For a step with no input, run once. Implement explicit/implicit `output`. Acceptance: a `data` step with assignments produces the expected dataset.
 - [ ] **4.5 `input` + `datalines`.** Implement reading the raw datalines region per the `input` spec (list input: space-delimited, `$` = char). Populate the PDV and output one row per data line. Acceptance: the canonical `data people; input name $ age; datalines; ... run;` produces a 2-row dataset.
@@ -210,3 +210,14 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Found and fixed a robustness bug — `String()` panicked on partial trees from error-parses (nil children); now renders `<?>`. Macro corpus items (`&var`, `%let`, `%macro`) intentionally still produce parse errors: they require the Phase 9 macro preprocessor that runs *before* the parser. All Level-1/2 and SQL items parse with zero errors. PROC option parsing was completed earlier in 3.3.
 - Verified: `go test ./...` green; `go vet` clean; `ass parse` over all 15 non-macro corpus items yields zero errors; macro items error gracefully (no panic).
 - Next: Phase 4.1 — dataset model in `table/` (Dataset, Column, Value with missing-value semantics).
+
+### 2026-06-16 — Phase 4 partial (4.1–4.2)
+- What changed: Built the `table` package — the dataset/value model and the in-memory library — the data substrate the runtime will fill.
+- Key files:
+  - `table/value.go` — `Kind` (Numeric/Character); `Value{Kind,Num,Str,missing}` with constructors `Num`/`Char`/`MissingNum`/`MissingChar`; `IsMissing()` (numeric uses flag, character missing == ""); `Display()` ("." for num missing, compact decimal otherwise).
+  - `table/dataset.go` — `Column` (Name/Kind/Label/Format/Informat/Length); `Row = map[string]Value` (lowercased keys); `Dataset{Lib,Name,Columns,Rows}` with `NewDataset` (defaults lib WORK), `AddColumn` (dedup case-insensitive), `HasColumn`, `ColumnNames`, `AppendRow`, `NObs`, `Get` (case-insensitive, returns typed missing for absent columns).
+  - `table/library.go` — `Library` keyed by uppercased name; `Put`/`Get`/`Has`/`Names`; `Get` accepts qualified `lib.name` (lib component ignored for now — single in-memory library).
+  - `table/table_test.go` — missing-value semantics, Display formatting, column dedup + typed-missing Get, library put/get/overwrite/qualified-name.
+- Decisions/deviations: Row is a map keyed by lowercased name (convenient for the PDV in 4.3); column order/metadata lives in Columns. Blank-string-as-missing (SAS treats " " as missing) is NOT yet normalized — only "" is missing; noted via a skipped test, to revisit in the formats phase. Qualified `lib.name` resolves on the dataset component only (everything is in one library until persistent storage lands).
+- Verified: `go test ./table/` green; `go vet ./...` clean.
+- Next: Phase 4.3 — PDV + expression evaluator in `runtime/` (evaluate ast.Expression over a PDV with SAS missing-value propagation).
