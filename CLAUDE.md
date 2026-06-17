@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Implementation is underway and tracked in **`PLAN.md`** (a living, resumable plan — read its "How to resume" section first; the Progress log at the bottom is the source of truth for what's done). As of the latest work, Phases 0–8 are complete: the full lexer → parser → runtime pipeline runs end-to-end (`ass run file.sas`), covering the DATA step (input/datalines, set, if/then/else, subsetting if, where, do-loops, keep/drop, output, ~35 functions, missing-value + coercion semantics), PROC PRINT, PROC SORT (+ BY-group first./last.), and PROC SQL (via embedded SQLite). All L1–L3 corpus items run and match their documented expected results. Remaining: macros (Phase 9), advanced DATA step (Phase 10), the `ass test` harness (Phase 11), statistical PROCs (Phase 12), final docs (Phase 13).
+Implementation is well advanced and tracked in **`PLAN.md`** (a living, resumable plan — read its "How to resume" section first; the Progress log at the bottom is the source of truth for what's done). As of the latest work, **Phases 0–12 are essentially complete** (12.3 PROC REG/GLM is an unstarted stretch). The full lexer → macro → parser → runtime pipeline runs real programs end-to-end (`ass file.sas` or `ass run file.sas`): the DATA step (input/datalines, set, merge/in=, if/then/else, subsetting if, where, do-loops, retain, sum, arrays, BY-group first./last., keep/drop/format, output), ~35 functions with missing-value + coercion semantics, PROC PRINT/SORT/SQL (SQLite)/MEANS/SUMMARY/FREQ, the macro preprocessor, formats, and date literals. The `ass test` harness reports **26/26 corpus items at 100%**.
 
-The design rationale lives in `ass-design.md`; the architecture notes below remain the conceptual map.
+Companion docs: `README.md` (usage/features), `COMPATIBILITY.md` (matrix + deferrals), `CONTRIBUTING.md` (how to extend), `ass-design.md` (rationale). The architecture notes below remain the conceptual map. Known deferrals (tracked in PLAN.md): two-way PROC FREQ, `proc format` user formats, informats, dataset-option `where=`/`keep=`/`drop=`, SAS-verified corpus output backfill (+ `--compare-output`/JSON).
 
 ## What ASS is
 
