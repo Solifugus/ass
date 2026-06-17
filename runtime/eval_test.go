@@ -180,6 +180,52 @@ func TestEvalStringFunctions(t *testing.T) {
 	}
 }
 
+func TestEvalMoreStringFunctions(t *testing.T) {
+	pdv := NewPDV()
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{"scan('a,b,c', 2, ',')", "b"},
+		{"scan('one two three', 3)", "three"},
+		{"scan('one two', -1)", "two"},
+		{"compress('a b c')", "abc"},
+		{"compress('a-b-c', '-')", "abc"},
+		{"tranwrd('a cat sat', 'a', 'A')", "A cAt sAt"},
+		{"propcase('john q public')", "John Q Public"},
+		{"reverse('abc')", "cba"},
+		{"catx('-', 'a', 'b', 'c')", "a-b-c"},
+		{"catx('-', 'a', '', 'c')", "a-c"},
+	}
+	for _, c := range cases {
+		got := evalExpr(t, c.src, pdv)
+		if got.Str != c.want {
+			t.Errorf("%s = %q, want %q", c.src, got.Str, c.want)
+		}
+	}
+}
+
+func TestEvalNumericLookupFunctions(t *testing.T) {
+	pdv := NewPDV()
+	pdv.Set("m", table.MissingNum())
+	cases := []struct {
+		src  string
+		want float64
+	}{
+		{"index('hello', 'l')", 3},
+		{"index('hello', 'z')", 0},
+		{"find('abcabc', 'bc', 3)", 5},
+		{"missing(m)", 1},
+		{"missing(5)", 0},
+	}
+	for _, c := range cases {
+		got := evalExpr(t, c.src, pdv)
+		if got.IsMissing() || got.Num != c.want {
+			t.Errorf("%s = %v, want %v", c.src, got.Display(), c.want)
+		}
+	}
+}
+
 func TestEvalSumAllMissingIsMissing(t *testing.T) {
 	pdv := NewPDV()
 	pdv.Set("m", table.MissingNum())

@@ -67,6 +67,27 @@ func evalCall(e *ast.CallExpression, pdv *PDV) (table.Value, error) {
 		return substrFn(args)
 	case "cats":
 		return catsFn(args), nil
+	case "catx":
+		return catxFn(args)
+	case "index":
+		return indexFn(args, 0)
+	case "find":
+		return findFn(args)
+	case "scan":
+		return scanFn(args)
+	case "compress":
+		return compressFn(args)
+	case "tranwrd":
+		return tranwrdFn(args)
+	case "propcase":
+		return scalarStr(args, propcase)
+	case "reverse":
+		return scalarStr(args, reverse)
+	case "missing":
+		if len(args) != 1 {
+			return table.MissingNum(), fmt.Errorf("missing expects 1 argument, got %d", len(args))
+		}
+		return boolVal(args[0].IsMissing()), nil
 	default:
 		return table.MissingNum(), fmt.Errorf("unknown function %q", e.Func)
 	}
@@ -215,4 +236,130 @@ func catsFn(args []table.Value) table.Value {
 		b.WriteString(strings.TrimSpace(a.Display()))
 	}
 	return table.Char(b.String())
+}
+
+// catxFn concatenates the 2nd..nth arguments, each stripped, joined by the first
+// argument used as a separator (empty arguments are skipped, as in SAS).
+func catxFn(args []table.Value) (table.Value, error) {
+	if len(args) < 2 {
+		return table.MissingNum(), fmt.Errorf("catx expects at least 2 arguments, got %d", len(args))
+	}
+	sep := args[0].Str
+	var parts []string
+	for _, a := range args[1:] {
+		s := strings.TrimSpace(a.Display())
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	return table.Char(strings.Join(parts, sep)), nil
+}
+
+// indexFn returns the 1-based position of the first occurrence of substring in
+// string at or after start (0-based offset), or 0 if not found.
+func indexFn(args []table.Value, start int) (table.Value, error) {
+	if len(args) != 2 {
+		return table.MissingNum(), fmt.Errorf("index expects 2 arguments, got %d", len(args))
+	}
+	s := args[0].Str
+	if start > len(s) {
+		return table.Num(0), nil
+	}
+	pos := strings.Index(s[start:], args[1].Str)
+	if pos < 0 {
+		return table.Num(0), nil
+	}
+	return table.Num(float64(start + pos + 1)), nil
+}
+
+// findFn is find(string, substring [, startpos]) — like index with an optional
+// 1-based start position.
+func findFn(args []table.Value) (table.Value, error) {
+	if len(args) != 2 && len(args) != 3 {
+		return table.MissingNum(), fmt.Errorf("find expects 2 or 3 arguments, got %d", len(args))
+	}
+	start := 0
+	if len(args) == 3 {
+		if p := int(args[2].Num); p > 1 {
+			start = p - 1
+		}
+	}
+	return indexFn(args[:2], start)
+}
+
+// scanFn returns the nth word of a string. n<0 counts from the end. Consecutive
+// delimiters are treated as one. The default delimiter set is a blank.
+func scanFn(args []table.Value) (table.Value, error) {
+	if len(args) < 2 || len(args) > 3 {
+		return table.MissingNum(), fmt.Errorf("scan expects 2 or 3 arguments, got %d", len(args))
+	}
+	delims := " "
+	if len(args) == 3 {
+		delims = args[2].Str
+	}
+	parts := strings.FieldsFunc(args[0].Str, func(r rune) bool {
+		return strings.ContainsRune(delims, r)
+	})
+	n := int(args[1].Num)
+	if n < 0 {
+		n = len(parts) + n + 1
+	}
+	if n < 1 || n > len(parts) {
+		return table.Char(""), nil
+	}
+	return table.Char(parts[n-1]), nil
+}
+
+// compressFn removes characters from a string. With one argument it removes
+// blanks; with two it removes every character that appears in the second.
+func compressFn(args []table.Value) (table.Value, error) {
+	if len(args) != 1 && len(args) != 2 {
+		return table.MissingNum(), fmt.Errorf("compress expects 1 or 2 arguments, got %d", len(args))
+	}
+	remove := " "
+	if len(args) == 2 {
+		remove = args[1].Str
+	}
+	out := strings.Map(func(r rune) rune {
+		if strings.ContainsRune(remove, r) {
+			return -1
+		}
+		return r
+	}, args[0].Str)
+	return table.Char(out), nil
+}
+
+// tranwrdFn replaces every occurrence of one substring with another.
+func tranwrdFn(args []table.Value) (table.Value, error) {
+	if len(args) != 3 {
+		return table.MissingNum(), fmt.Errorf("tranwrd expects 3 arguments, got %d", len(args))
+	}
+	return table.Char(strings.ReplaceAll(args[0].Str, args[1].Str, args[2].Str)), nil
+}
+
+// propcase upper-cases the first letter of each word (a word starts after a
+// blank) and lower-cases the rest.
+func propcase(s string) string {
+	b := []byte(strings.ToLower(s))
+	atStart := true
+	for i, c := range b {
+		if c == ' ' {
+			atStart = true
+			continue
+		}
+		if atStart && c >= 'a' && c <= 'z' {
+			b[i] = c - ('a' - 'A')
+		}
+		atStart = false
+	}
+	return string(b)
+}
+
+// reverse returns the string with its bytes reversed.
+func reverse(s string) string {
+	b := []byte(s)
+	for i, j := 0, len(b)-1; i < j; i, j = i+1, j-1 {
+		b[i], b[j] = b[j], b[i]
+	}
+	return string(b)
 }

@@ -77,7 +77,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 6 — Expressions, functions & filtering polish
 
-- [ ] **6.1 Expand function library.** Add commonly-used DATA step functions: `substr`, `trim`, `left`, `length`, `scan`, `index`, `int`, `round`, `abs`, `min`, `max`, `mean`/`sum` (varargs). Table-test each. Acceptance: function tests pass.
+- [x] **6.1 Expand function library.** Add commonly-used DATA step functions: `substr`, `trim`, `left`, `length`, `scan`, `index`, `int`, `round`, `abs`, `min`, `max`, `mean`/`sum` (varargs). Table-test each. Acceptance: function tests pass.
 - [ ] **6.2 `where` vs subsetting if.** Ensure `where` clauses (DATA step option and statement) filter correctly and document the difference from subsetting `if`. Acceptance: where tests pass.
 - [ ] **6.3 Type coercion & formatting basics.** Implement automatic numeric↔character coercion rules and default numeric printing (BEST. format approximation). Acceptance: coercion tests pass.
 
@@ -332,3 +332,12 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: `dupout=` (write removed dups to a dataset) deferred — `nodupkey` covers the corpus; noted on step 7.2. `ComputeByGroups` lives in `runtime` (it feeds the Phase-10 DATA step) but is pure over a `table.Dataset`; Phase 10 will wire it into the SET+BY loop as automatic `first.`/`last.` PDV variables. `nodupkey` assumes the dataset is sorted by the same BY (PROC SORT sorts first, so always true here).
 - Verified: `go test ./...` green (all packages); `go build`/`go vet` clean. End-to-end: all three sort corpus items print exactly their documented expected order (byvars → Tim/Ann/John/Mary; descending out= → Mary/John/Ann/Tim; nodupkey → id 1/2/3 with mon/mon/fri).
 - Next: Phase 6 — Expressions/functions/filtering polish (6.1 more functions: `scan`, `index`; 6.2 `where` statement + dataset option vs subsetting `if`; 6.3 type coercion + BEST.-style numeric formatting). This is the last pre-SQL DATA-step polish before Phase 8 (PROC SQL). Recommend 6 next.
+
+### 2026-06-16 — Phase 6.1 (expand function library)
+- What changed: Added a batch of common DATA-step functions on top of the set already built in 4.3 (which covered substr/trim/left/length/int/round/abs/min/max/mean/sum/n/etc.).
+- Key files:
+  - `runtime/functions.go` — new: `index`, `find` (optional start), `scan` (nth word, negative-from-end, optional delimiters, collapses consecutive delims), `compress` (drop blanks or a given char set), `tranwrd` (replace-all), `catx` (separator-join, skip empties), `propcase` (manual, ASCII), `reverse`, `missing(x)`→1/0. Aggregates/scalars from 4.3 unchanged.
+  - `runtime/eval_test.go` — `TestEvalMoreStringFunctions` (scan/compress/tranwrd/propcase/reverse/catx incl. empty-skip) and `TestEvalNumericLookupFunctions` (index hit/miss, find with start, missing()).
+- Decisions/deviations: `scan`'s default delimiter is a single blank (SAS's full default set is much larger — blank plus many specials); a corpus item needing the full set will extend this. `propcase` is ASCII-only. `length` of "" returns 1 (SAS) — from 4.3.
+- Verified: `go test ./runtime/` green; `go build`/`go vet` clean.
+- Next: Phase 6.2 — `where` (DATA step statement + `data=ds(where=...)` dataset option) vs subsetting `if`. Needs a `WhereStatement` AST node + parser support (and dataset-option parsing for the option form), then runtime filtering at read time. Document the if-vs-where difference (where can't see computed vars; applies at read).
