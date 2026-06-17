@@ -1,0 +1,16 @@
+id: macro_def_001
+source: hand-written
+license: MIT
+features:
+  - macro-def
+  - macro-var
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  %macro/%mend definition with a positional parameter (ds), invoked as
+  %show(people). Expansion yields a PROC PRINT of the people dataset.

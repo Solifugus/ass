@@ -1,0 +1,15 @@
+id: proc_sort_nodupkey_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sort
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  PROC SORT with NODUPKEY removing rows with duplicate BY-key (id), keeping the
+  first occurrence of each id. Expected: id 1 (mon), 2 (mon), 3 (fri).

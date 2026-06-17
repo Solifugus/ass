@@ -1,0 +1,17 @@
+id: macro_control_001
+source: hand-written
+license: MIT
+features:
+  - macro-def
+  - macro-control
+  - macro-var
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  Macro %do loop generating repeated DATA step statements at expansion time.
+  %gen(3) emits three "x = i; output;" pairs, producing rows x = 1, 2, 3.

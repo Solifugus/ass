@@ -1,0 +1,13 @@
+id: proc_print_noobs_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  PROC PRINT with the NOOBS option — the leading Obs column should be suppressed.

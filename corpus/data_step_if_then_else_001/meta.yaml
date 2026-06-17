@@ -1,0 +1,18 @@
+id: data_step_if_then_else_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - if-then-else
+  - assignment
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  IF/THEN/ELSE-IF/ELSE chain assigning a character grade. Exercises conditional
+  execution (not subsetting) and character assignment.

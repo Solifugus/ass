@@ -1,0 +1,16 @@
+id: sql_groupby_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sql
+  - sql-select
+  - sql-groupby
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  GROUP BY with SUM aggregate and a calculated column alias, plus ORDER BY.
+  Expected: east 325, west 250.

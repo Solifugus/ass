@@ -1,0 +1,14 @@
+id: sql_select_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sql
+  - sql-select
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  Basic PROC SQL SELECT with a WHERE filter. Should return John and Mary.

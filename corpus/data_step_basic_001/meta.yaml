@@ -1,0 +1,16 @@
+id: data_step_basic_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Canonical minimal DATA step + PROC PRINT (design doc milestones 3 and 4).
+  Output to be verified once the PROC PRINT renderer is stable (Phase 5).

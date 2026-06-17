@@ -1,0 +1,18 @@
+id: macro_let_001
+source: hand-written
+license: MIT
+features:
+  - macro-let
+  - macro-var
+  - data-step
+  - set
+  - if-then-else
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  %let defines a macro variable; &cutoff is resolved to 18 by the preprocessor
+  before lexing. Result equivalent to subsetting age >= 18 (John, Mary).

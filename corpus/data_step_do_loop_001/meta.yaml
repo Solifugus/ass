@@ -1,0 +1,17 @@
+id: data_step_do_loop_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - do-loop
+  - assignment
+  - expressions
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Iterative DO loop with explicit OUTPUT, producing 5 rows (i, sq). Exercises
+  the do/end construct and explicit output in a step with no input dataset.

@@ -1,0 +1,15 @@
+id: proc_sort_descending_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sort
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  PROC SORT with DESCENDING key and OUT= to a separate dataset (people unchanged,
+  sorted holds the result). Expected order: Mary (30), John (25), Ann (17), Tim (12).

@@ -1,0 +1,19 @@
+id: data_step_subset_if_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - set
+  - if-then-else
+  - where
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Subsetting IF (bare `if age >= 18;`) over a SET of an existing dataset
+  (design doc milestone 5). Should keep only John and Mary.

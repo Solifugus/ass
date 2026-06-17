@@ -1,0 +1,16 @@
+id: sql_join_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sql
+  - sql-select
+  - sql-join
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  Join via comma syntax with table aliases and a WHERE equality condition
+  (classic SAS inner join). Pairs each name with its score.

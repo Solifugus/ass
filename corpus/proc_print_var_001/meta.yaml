@@ -1,0 +1,14 @@
+id: proc_print_var_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  PROC PRINT with a VAR statement selecting and reordering columns (item, total)
+  — qty and price should be omitted from the listing.

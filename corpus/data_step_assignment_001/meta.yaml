@@ -1,0 +1,18 @@
+id: data_step_assignment_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - assignment
+  - expressions
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Computed column via assignment (total = qty * price) exercising arithmetic
+  expression evaluation in the DATA step.

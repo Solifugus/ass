@@ -1,0 +1,15 @@
+id: proc_sort_byvars_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sort
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  PROC SORT in place by a single numeric key (age). Expected order after sort:
+  Tim (12), Ann (17), John (25), Mary (30). Design doc milestone 6.

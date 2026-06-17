@@ -1,0 +1,20 @@
+id: data_step_n_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - set
+  - automatic-vars
+  - assignment
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Uses the automatic variable _N_ (implicit-loop iteration counter) to number
+  rows. _N_ should be 1, 2, 3 for the three input rows and must not appear as a
+  column unless assigned (here copied into `row`).

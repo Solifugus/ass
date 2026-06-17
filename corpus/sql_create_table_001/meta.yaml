@@ -1,0 +1,17 @@
+id: sql_create_table_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - proc-sql
+  - sql-select
+  - sql-create-table
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  CREATE TABLE AS SELECT materializing a filtered result, then PROC PRINT of it.
+  Design doc milestone 7. Expected: adults = John, Mary.
