@@ -310,6 +310,17 @@ func (f *FormatStatement) String() string {
 	return "format " + strings.Join(parts, " ") + ";"
 }
 
+// ModelStatement is `model <response> = <predictor...>;` for PROC REG/GLM.
+type ModelStatement struct {
+	Response   string
+	Predictors []string
+}
+
+func (m *ModelStatement) statementNode() {}
+func (m *ModelStatement) String() string {
+	return "model " + m.Response + " = " + strings.Join(m.Predictors, " ") + ";"
+}
+
 // ClassStatement is `class <vars...>;` — grouping variables for PROC MEANS/FREQ.
 type ClassStatement struct {
 	Vars []string

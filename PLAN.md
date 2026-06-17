@@ -124,7 +124,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 - [x] **12.1 PROC MEANS / SUMMARY.** Descriptive stats (n, mean, std, min, max) with `class`/`by`. Acceptance: means corpus items pass.
 - [x] **12.2 PROC FREQ.** One- and two-way frequency tables. Acceptance: freq items pass. (One-way done; two-way cross-tabulation deferred — see log.)
-- [ ] **12.3 PROC REG / GLM (stretch).** Basic linear regression. Acceptance: reg item produces coefficients within tolerance. (Confirm scope with user — large effort.)
+- [x] **12.3 PROC REG / GLM (stretch).** Basic linear regression. Acceptance: reg item produces coefficients within tolerance. (Confirmed by user. OLS via normal equations; estimates/stderr/tvalue/R-square. Class effects & p-values deferred — see log.)
 
 ## Phase 13 — Final documentation & release
 
@@ -494,3 +494,14 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: COMPATIBILITY.md is hand-captured from harness output (an automated generator could be added later). REG/GLM (12.3) intentionally left unchecked pending user scope confirmation.
 - Verified: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` exits 0 at 26/26 (100%) — the release gate.
 - Status: The planned roadmap (Phases 0–13) is complete aside from 12.3 (stretch) and documented deferrals. Natural follow-ups, in rough priority: `proc format` user formats (FORMAT plumbing already exists — needs a per-run format registry threaded into `formats.Apply`); two-way PROC FREQ; dataset options (`where=`/`keep=`/`drop=`/`rename=`); informats; SAS-verified corpus outputs + `--compare-output`/JSON; then 12.3 if desired.
+
+### 2026-06-17 — Phase 12.3 (PROC REG / GLM) — PHASE 12 COMPLETE, ROADMAP COMPLETE
+- What changed: Basic OLS linear regression (user-confirmed scope). PROC REG and PROC GLM (continuous predictors) fit `model y = x1 x2 ...;` via the normal equations and report parameter estimates, standard errors, t-values, and R-square. This completes Phase 12 and the entire Phases 0–13 roadmap.
+- Key files:
+  - `ast/statements.go` — `ModelStatement{Response, Predictors}`. `parser/statements.go` — `model` dispatch + `parseModel` (`model y = x1 x2;`).
+  - `proc/reg.go` — `regProc` registered as "reg" and "glm". `ols` builds X (with intercept) and y from complete cases, solves (X'X)β = X'y via `invert` (Gauss-Jordan with partial pivoting; errors on singular/collinear), computes SSE/SST/MSE → stderr = sqrt(MSE·diag((X'X)⁻¹)), t = β/se, R² = 1−SSE/SST. Prints dependent var + R² + a parameter-estimates listing.
+  - `proc/reg_test.go` — perfect line (β=[1,2], R²=1), hand-computed fit (intercept 0.6/slope 0.8, positive stderr), exact multiple regression (β=[1,2,3]), too-few-obs error.
+  - `corpus/proc_reg_001/` — simple regression (verified: slope se=√(1.2/10)=0.346, t=2.31, R²=0.64); harness now 27/27, 100%.
+- Decisions/deviations: Significance probabilities (Pr>|t|) omitted — needs a t-distribution CDF; estimates/se/t/R² cover the acceptance ("coefficients within tolerance"). PROC GLM CLASS effects (design-matrix coding) not implemented — GLM ≈ OLS on continuous predictors for now. Single MODEL statement; no selection methods, no ANOVA table.
+- Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 27/27 (100%).
+- Status: **Phases 0–13 of PLAN.md are all complete.** Remaining work is the tracked deferral backlog (proc format user formats; two-way PROC FREQ; dataset options where=/keep=/drop=/rename=; informats; Pr>|t| & GLM class effects; SAS-verified corpus outputs + --compare-output/JSON), to be picked up as desired.

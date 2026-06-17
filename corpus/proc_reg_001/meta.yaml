@@ -1,0 +1,14 @@
+id: proc_reg_001
+source: hand-written
+license: MIT
+features:
+  - proc-reg
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC REG simple linear regression of y on x. Hand-computed OLS gives intercept
+  0.6 and slope 0.8 (Sxy=8, Sxx=10). Parameter-estimates table reports Estimate,
+  StdErr, tValue plus the model R-square.

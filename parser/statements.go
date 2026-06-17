@@ -466,9 +466,30 @@ func (p *Parser) parseProcStatement() ast.Statement {
 		return &ast.ClassStatement{Vars: p.parseProcNameList()}
 	case p.identIs("tables") || p.identIs("table"):
 		return &ast.TablesStatement{Vars: p.parseProcNameList()}
+	case p.identIs("model"):
+		return p.parseModel()
 	default:
 		return p.parseRawStatement()
 	}
+}
+
+// parseModel parses `model <response> = <predictor ...>;`.
+func (p *Parser) parseModel() ast.Statement {
+	p.next() // 'model'
+	stmt := &ast.ModelStatement{}
+	if p.curIs(lexer.IDENT) {
+		stmt.Response = p.cur.Literal
+		p.next()
+	}
+	if p.curIs(lexer.EQ) {
+		p.next()
+	}
+	for p.curIs(lexer.IDENT) {
+		stmt.Predictors = append(stmt.Predictors, p.cur.Literal)
+		p.next()
+	}
+	p.expectSemicolon()
+	return stmt
 }
 
 // parseProcNameList parses `<keyword> <name name ...>;` and returns the names.
