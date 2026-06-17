@@ -1,11 +1,67 @@
 package formats
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/solifugus/ass/table"
 )
+
+// sasEpoch is SAS day 0: 1960-01-01. A SAS date value is the integer count of
+// days since this date.
+var sasEpoch = time.Date(1960, 1, 1, 0, 0, 0, 0, time.UTC)
+
+var monthAbbr = []string{"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"}
+var monthName = []string{"January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December"}
+
+// SASDateToTime converts a SAS day number to a civil date (UTC).
+func SASDateToTime(day float64) time.Time { return sasEpoch.AddDate(0, 0, int(day)) }
+
+// ParseDateLiteral parses a SAS date constant body like "01JAN2020" (the text
+// inside the quotes of a `'...'d` literal) into a SAS day number.
+func ParseDateLiteral(s string) (float64, bool) {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	if len(s) < 7 {
+		return 0, false
+	}
+	// dd MMM yy|yyyy — the day is 1-2 digits, month is 3 letters.
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == 0 || i+3 > len(s) {
+		return 0, false
+	}
+	day, _ := strconv.Atoi(s[:i])
+	mon := s[i : i+3]
+	yearStr := s[i+3:]
+	month := 0
+	for m, a := range monthAbbr {
+		if a == mon {
+			month = m + 1
+			break
+		}
+	}
+	if month == 0 {
+		return 0, false
+	}
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		return 0, false
+	}
+	if year < 100 { // 2-digit year: SAS yearcutoff-style (1920..2019)
+		if year < 20 {
+			year += 2000
+		} else {
+			year += 1900
+		}
+	}
+	t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	return float64(int(t.Sub(sasEpoch).Hours()) / 24), true
+}
 
 // Apply renders a value using a SAS format specification (e.g. "8.2",
 // "dollar10.2", "comma12.0", "percent8.1", "$8."). An empty or unrecognized
@@ -39,6 +95,21 @@ func Apply(v table.Value, format string) string {
 		return group(v.Num, decOr(dec, hasDec, 0))
 	case "percent":
 		return fixed(v.Num*100, decOr(dec, hasDec, 0)) + "%"
+	case "date":
+		t := SASDateToTime(v.Num)
+		if width >= 9 {
+			return fmt.Sprintf("%02d%s%04d", t.Day(), monthAbbr[t.Month()-1], t.Year())
+		}
+		return fmt.Sprintf("%02d%s%02d", t.Day(), monthAbbr[t.Month()-1], t.Year()%100)
+	case "mmddyy":
+		t := SASDateToTime(v.Num)
+		if width >= 10 {
+			return fmt.Sprintf("%02d/%02d/%04d", int(t.Month()), t.Day(), t.Year())
+		}
+		return fmt.Sprintf("%02d/%02d/%02d", int(t.Month()), t.Day(), t.Year()%100)
+	case "worddate":
+		t := SASDateToTime(v.Num)
+		return fmt.Sprintf("%s %d, %d", monthName[t.Month()-1], t.Day(), t.Year())
 	default: // "", "best", "f" → fixed-point if decimals given, else default
 		if hasDec {
 			return fixed(v.Num, dec)

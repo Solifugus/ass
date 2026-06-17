@@ -1,0 +1,14 @@
+id: data_step_dates_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - formats
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Date literal '01JAN2020'd evaluates to the SAS day number (21915) and the
+  date9. format renders it as 01JAN2020 in PROC PRINT for both rows.

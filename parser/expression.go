@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/formats"
 	"github.com/solifugus/ass/lexer"
 )
 
@@ -52,6 +53,15 @@ func (p *Parser) parsePrefixExpr() ast.Expression {
 		p.next()
 		return &ast.NumberLiteral{Literal: lit, Value: v}
 	case lexer.STRING:
+		// Date literal: a string immediately followed by `d`, e.g. '01JAN2020'd.
+		if p.peek.Type == lexer.IDENT && strings.ToLower(p.peek.Literal) == "d" && p.peek.Pos == p.cur.End {
+			if day, ok := formats.ParseDateLiteral(p.cur.Literal); ok {
+				lit := "'" + p.cur.Literal + "'d"
+				p.next() // string
+				p.next() // 'd'
+				return &ast.NumberLiteral{Literal: lit, Value: day}
+			}
+		}
 		s := &ast.StringLiteral{Value: p.cur.Literal}
 		p.next()
 		return s

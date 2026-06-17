@@ -28,6 +28,36 @@ func TestApplyNumeric(t *testing.T) {
 	}
 }
 
+func TestDateLiteralAndFormats(t *testing.T) {
+	if d, ok := ParseDateLiteral("01JAN1960"); !ok || d != 0 {
+		t.Errorf("01JAN1960 = %v ok=%v, want 0", d, ok)
+	}
+	day, ok := ParseDateLiteral("15MAR2021")
+	if !ok {
+		t.Fatal("failed to parse 15MAR2021")
+	}
+	cases := []struct {
+		format string
+		want   string
+	}{
+		{"date9.", "15MAR2021"},
+		{"date7.", "15MAR21"},
+		{"mmddyy10.", "03/15/2021"},
+		{"mmddyy8.", "03/15/21"},
+		{"worddate.", "March 15, 2021"},
+	}
+	for _, c := range cases {
+		// Strip the trailing '.' as the parser does before calling Apply.
+		spec := c.format
+		if spec[len(spec)-1] == '.' {
+			spec = spec[:len(spec)-1]
+		}
+		if got := Apply(table.Num(day), spec); got != c.want {
+			t.Errorf("Apply(15MAR2021, %q) = %q, want %q", c.format, got, c.want)
+		}
+	}
+}
+
 func TestApplyMissingAndChar(t *testing.T) {
 	if got := Apply(table.MissingNum(), "dollar8.2"); got != "." {
 		t.Errorf("missing = %q, want .", got)
