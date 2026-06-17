@@ -57,6 +57,25 @@ func TestRenderListingVarReorder(t *testing.T) {
 	}
 }
 
+func TestRenderListingLabel(t *testing.T) {
+	ds := table.NewDataset("", "people")
+	ds.AddColumn(table.Column{Name: "age", Kind: table.Numeric, Label: "Age in Years"})
+	ds.AppendRow(table.Row{"age": table.Num(25)})
+	// With label option, the header is the column label.
+	got := renderListing(ds, printOptions{noobs: true, label: true})
+	want := "Age in Years\n\n" +
+		"          25\n"
+	if got != want {
+		t.Errorf("label listing mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+	// Without label option, the header is the variable name.
+	got = renderListing(ds, printOptions{noobs: true})
+	want = "age\n\n 25\n"
+	if got != want {
+		t.Errorf("no-label listing mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
 func TestRenderListingMissingValue(t *testing.T) {
 	ds := table.NewDataset("", "t")
 	ds.AddColumn(table.Column{Name: "x", Kind: table.Numeric})

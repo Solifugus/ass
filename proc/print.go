@@ -17,6 +17,7 @@ type printProc struct{}
 // printOptions captures the options that affect the listing.
 type printOptions struct {
 	noobs bool     // suppress the Obs column
+	label bool     // use column labels (when set) as headers
 	vars  []string // explicit column selection/order (empty = all columns)
 }
 
@@ -37,8 +38,11 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 func parsePrintOptions(step *ast.ProcStep) printOptions {
 	var opts printOptions
 	for _, o := range step.Options {
-		if strings.EqualFold(o.Name, "noobs") {
+		switch strings.ToLower(o.Name) {
+		case "noobs":
 			opts.noobs = true
+		case "label":
+			opts.label = true
 		}
 	}
 	for _, s := range step.Body {
@@ -49,12 +53,13 @@ func parsePrintOptions(step *ast.ProcStep) printOptions {
 	return opts
 }
 
-// listingColumn is one rendered column: its header, display width, and whether
-// its values are right-aligned (numeric).
+// listingColumn is one rendered column: its variable name, the header text to
+// display, its width, and whether its values are right-aligned (numeric).
 type listingColumn struct {
-	name  string
-	width int
-	right bool
+	name   string
+	header string
+	width  int
+	right  bool
 }
 
 // renderListing produces the SAS-style listing text for a dataset. The format
@@ -69,14 +74,18 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 	// Compute column widths from headers and cell values.
 	lc := make([]listingColumn, len(cols))
 	for i, c := range cols {
-		width := len(c.Name)
+		header := c.Name
+		if opts.label && c.Label != "" {
+			header = c.Label
+		}
+		width := len(header)
 		right := c.Kind == table.Numeric
 		for _, r := range ds.Rows {
 			if w := len(ds.Get(r, c.Name).Display()); w > width {
 				width = w
 			}
 		}
-		lc[i] = listingColumn{name: c.Name, width: width, right: right}
+		lc[i] = listingColumn{name: c.Name, header: header, width: width, right: right}
 	}
 
 	obsWidth := len("Obs")
@@ -92,7 +101,7 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 		head = append(head, pad("Obs", obsWidth, true))
 	}
 	for _, c := range lc {
-		head = append(head, pad(c.name, c.width, c.right))
+		head = append(head, pad(c.header, c.width, c.right))
 	}
 	b.WriteString(strings.TrimRight(strings.Join(head, "  "), " "))
 	b.WriteString("\n\n")

@@ -73,7 +73,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 - [x] **5.1 PROC dispatch.** In `proc/`, define a `Proc` interface (run against a Library + step AST + logger) and a registry mapping proc name → implementation. Wire the runtime to dispatch PROC steps. Acceptance: unknown procs produce a clean "not supported" log note, not a crash.
 - [x] **5.2 PROC PRINT core.** Implement `proc print data=<ds>;` rendering a SAS-like listing (Obs column + variables, right/left alignment by type). Support `var` to select/order columns. Add tests comparing rendered text to expected. Acceptance: PROC PRINT renders match hand-written expected listings (unit tests in `proc/`). **DECISION (2026-06-16):** the corpus `expected_output.txt` → `verified` backfill (originally folded in here / step 1.6) is **deferred** and NOT done from the ASS engine's own output. Per `corpus/README.md`, `verified` means *hand-derived from real SAS*, which this environment can't produce; capturing our own listing and calling it verified would mislabel it. Backfill is blocked on (a) access to real SAS output, or (b) a Phase 11 decision on whether ASS's clean-room listing format is itself the comparison target (and an added `regression`/`baseline` output state if so). Items stay `output: unverified` until then. New tracking step 11.x to be added in Phase 11.
-- [ ] **5.3 PROC PRINT options.** Add `noobs`, `label` (use column labels as headers). Acceptance: tests for noobs/label pass.
+- [x] **5.3 PROC PRINT options.** Add `noobs`, `label` (use column labels as headers). Acceptance: tests for noobs/label pass.
 
 ## Phase 6 — Expressions, functions & filtering polish
 
@@ -312,3 +312,12 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: See the 5.2 plan line — corpus `expected_output.txt`/`verified` backfill is deferred (can't hand-derive from real SAS here; won't self-verify from our own engine). `data=` only (no `_LAST_` default yet) — missing dataset logs an ERROR note and skips. Numeric display uses `Value.Display()` (compact `%g`); BEST.-style width formatting is Phase 6.3.
 - Verified: `go test ./...` green (lexer/parser/table/runtime/log/proc); `go build`/`go vet` clean. End-to-end via `go run ./cmd/ass`: basic_001 prints the John/Mary listing; proc_print_var_001 prints item/total (qty, price correctly omitted).
 - Next: Phase 5.3 — PROC PRINT options: `label` (use column `Label` as header when set, falling back to name) and confirm `noobs` (already implemented in 5.2). Add tests. Then Phase 6 (functions/where/coercion polish) or Phase 7 (PROC SORT).
+
+### 2026-06-16 — Phase 5.3 (PROC PRINT options) — PHASE 5 COMPLETE
+- What changed: PROC PRINT now honors `label` (use a column's Label as its header when set); `noobs` was already implemented in 5.2. Closes Phase 5.
+- Key files:
+  - `proc/print.go` — `printOptions.label`; `parsePrintOptions` recognizes `label`/`noobs` (case-insensitive); `listingColumn` gained a `header` field; `renderListing` uses the label as header (and for width) when `label` is set and the column has one, else the variable name.
+  - `proc/print_test.go` — label header widens/right-aligns correctly; no-label falls back to the name.
+- Decisions/deviations: `label` is the proc-option form (`proc print data=x label;`); per-variable `label` statements inside the step are not parsed yet (no dedicated AST node) — labels come from column metadata set elsewhere (e.g. future LABEL statement / dataset attrs). Header alignment follows the column's data alignment.
+- Verified: `go test ./...` green; `go build`/`go vet` clean.
+- Next: Phase 6 — Expressions/functions/filtering polish. 6.1 expand the DATA-step function library (`scan`, `index`, plus rounding out the set already present); 6.2 `where` (statement + dataset option) vs subsetting `if`; 6.3 type coercion + BEST.-style numeric formatting. Alternatively jump to Phase 7 (PROC SORT) to light up the L2 sort corpus. Recommend 7 next for breadth of runnable corpus, then circle back to 6.
