@@ -37,6 +37,7 @@ level it first becomes relevant at, matching the build order in `PLAN.md`.
 | `macro-def` | 4 | `%macro`/`%mend` definitions with positional/named parameters. |
 | `macro-control` | 4 | Macro control flow: `%if/%then/%else`, `%do`. |
 | `retain` | 5 | `retain` — values persist across iterations. |
+| `sum-statement` | 5 | Sum statement `var + expr;` (retained accumulator). |
 | `arrays` | 5 | `array` declarations and subscripted references. |
 | `by-group` | 5 | BY-group processing with `first.`/`last.` variables. |
 | `merge` | 5 | Match-merge `merge ... by ...;` with `in=` dataset flags. |

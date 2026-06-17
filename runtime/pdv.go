@@ -17,18 +17,24 @@ import (
 // declared, so an absent value reads back as the correctly typed missing value —
 // matching SAS, where a variable's type is fixed the first time it appears.
 type PDV struct {
-	values map[string]table.Value
-	kinds  map[string]table.Kind
-	order  []string // display names, in first-seen order
+	values   map[string]table.Value
+	kinds    map[string]table.Kind
+	order    []string        // display names, in first-seen order
+	retained map[string]bool // names exempt from per-iteration reset (lowercased)
 }
 
 // NewPDV creates an empty PDV.
 func NewPDV() *PDV {
 	return &PDV{
-		values: make(map[string]table.Value),
-		kinds:  make(map[string]table.Kind),
+		values:   make(map[string]table.Value),
+		kinds:    make(map[string]table.Kind),
+		retained: make(map[string]bool),
 	}
 }
+
+// Retain marks a variable as retained: ResetVars will not clear it between
+// implicit-loop iterations.
+func (p *PDV) Retain(name string) { p.retained[strings.ToLower(name)] = true }
 
 // Declare registers a variable with a known type without setting a value. If the
 // variable already exists its type is left unchanged (SAS fixes a variable's type
@@ -96,6 +102,8 @@ func (p *PDV) Names() []string {
 // preserved.
 func (p *PDV) ResetVars() {
 	for key := range p.values {
-		delete(p.values, key)
+		if !p.retained[key] {
+			delete(p.values, key)
+		}
 	}
 }

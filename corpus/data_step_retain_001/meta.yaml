@@ -1,0 +1,16 @@
+id: data_step_retain_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - retain
+  - sum-statement
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  retain initializes total to 0 and keeps it across iterations; the sum statement
+  "total + sale" accumulates. Expected running total: 10, 30, 60 (with sale 10,
+  20, 30). Demonstrates Level-5 retained-accumulator semantics.

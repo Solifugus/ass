@@ -68,6 +68,9 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	d.records = collectDatalines(ds.Body)
 	d.keep, d.drop = collectKeepDrop(ds.Body)
 	d.wheres = collectWheres(ds.Body)
+	if err := d.initRetained(ds.Body); err != nil {
+		return err
+	}
 	hasInput := hasInputStatement(ds.Body)
 
 	if hasSetStatement(ds.Body) {
@@ -175,6 +178,24 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		return d.applyWhere()
 	case *ast.WhereStatement:
 		// WHERE is collected up front and applied at read time; nothing to do here.
+		return flowNormal, nil
+	case *ast.RetainStatement:
+		// Retention/initialization is handled once at step setup (initRetained).
+		return flowNormal, nil
+	case *ast.SumStatement:
+		add, err := Eval(st.Expr, d.pdv)
+		if err != nil {
+			return flowNormal, err
+		}
+		cur := d.pdv.Get(st.Var)
+		base := 0.0
+		if !cur.IsMissing() {
+			base = cur.Num
+		}
+		if !add.IsMissing() {
+			base += add.Num
+		}
+		d.pdv.Set(st.Var, table.Num(base))
 		return flowNormal, nil
 	case *ast.IfStatement:
 		cond, err := Eval(st.Condition, d.pdv)
@@ -391,6 +412,36 @@ func (d *dataStep) collectSetRows(stmts []ast.Statement) []sourceRow {
 		}
 	}
 	return rows
+}
+
+// initRetained scans the body for RETAIN and sum statements, marks those
+// variables retained in the PDV, and sets their initial values once before the
+// implicit loop: a RETAIN initial (evaluated), else missing; a sum variable is
+// initialized to 0.
+func (d *dataStep) initRetained(stmts []ast.Statement) error {
+	for _, s := range stmts {
+		switch st := s.(type) {
+		case *ast.RetainStatement:
+			for _, name := range st.Vars {
+				d.pdv.Retain(name)
+				if expr, ok := st.Initials[strings.ToLower(name)]; ok {
+					v, err := Eval(expr, d.pdv)
+					if err != nil {
+						return err
+					}
+					d.pdv.Set(name, v)
+				} else if !d.pdv.Has(name) {
+					d.pdv.Declare(name, table.Numeric)
+				}
+			}
+		case *ast.SumStatement:
+			d.pdv.Retain(st.Var)
+			if !d.pdv.Has(st.Var) {
+				d.pdv.Set(st.Var, table.Num(0))
+			}
+		}
+	}
+	return nil
 }
 
 // applyWhere evaluates the step's WHERE conditions against the just-read row.

@@ -42,6 +42,10 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseNameListStmt("keep")
 	case p.identIs("drop"):
 		return p.parseNameListStmt("drop")
+	case p.identIs("retain"):
+		return p.parseRetain()
+	case p.curIs(lexer.IDENT) && p.peek.Type == lexer.PLUS:
+		return p.parseSum()
 	case p.identIs("by"):
 		return p.parseBy()
 	case p.curIs(lexer.IDENT) && p.peek.Type == lexer.EQ:
@@ -57,6 +61,39 @@ func (p *Parser) parseAssignment() ast.Statement {
 	p.next() // name
 	p.next() // '='
 	stmt := &ast.AssignmentStatement{Name: name, Value: p.parseExpression(pLOWEST)}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseRetain parses `retain <var [initial]> ...;`. Identifiers are variable
+// names; a literal that follows assigns an initial value to the most recent
+// variable.
+func (p *Parser) parseRetain() ast.Statement {
+	p.next() // 'retain'
+	stmt := &ast.RetainStatement{Initials: map[string]ast.Expression{}}
+	last := ""
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		if p.curIs(lexer.IDENT) {
+			last = p.cur.Literal
+			stmt.Vars = append(stmt.Vars, last)
+			p.next()
+			continue
+		}
+		expr := p.parsePrefixExpr() // a numeric/string/(-num) initial value
+		if last != "" {
+			stmt.Initials[strings.ToLower(last)] = expr
+		}
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseSum parses the sum statement `<var> + <expr>;`.
+func (p *Parser) parseSum() ast.Statement {
+	name := p.cur.Literal
+	p.next() // var
+	p.next() // '+'
+	stmt := &ast.SumStatement{Var: name, Expr: p.parseExpression(pLOWEST)}
 	p.expectSemicolon()
 	return stmt
 }

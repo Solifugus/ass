@@ -105,7 +105,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 10 — Advanced DATA step (Level 5)
 
-- [ ] **10.1 `retain`.** Variables keep values across iterations. Acceptance: retain test (running total) passes.
+- [x] **10.1 `retain`.** Variables keep values across iterations. Acceptance: retain test (running total) passes. (Includes the sum statement `var + expr;`.)
 - [ ] **10.2 Arrays.** Implement `array` declaration and subscripted references. Acceptance: array test passes.
 - [ ] **10.3 BY-group processing in DATA step.** Use `first.`/`last.` (from 7.3) inside the implicit loop. Acceptance: by-group aggregation test passes.
 - [ ] **10.4 `merge` + `in=`.** Implement match-merge by BY variables with `in=` dataset flags. Acceptance: merge test passes.
@@ -395,3 +395,16 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: `--compare-output <dir>` (11.3) and JSON output (11.5, "optional") are NOT implemented — both are tied to the deferred SAS-verified expected outputs (see 5.2 decision); add alongside that verification. `expected.output: verified` comparison is wired and ready but no item is `verified` yet, so output is reported as part of pass without byte-comparison. yaml.v3 is pure-Go (no new CGo).
 - Verified: `go test ./...` green (incl. new `corpus` pkg); `go vet` clean. `ass test corpus/` → 18/18, 100%; `--feature proc-sql` → 4 items; `--parse-only` → executed 0; exit 0 on success.
 - Next: Phase 10 — Advanced DATA step (L5): `retain`, sum statement, arrays, BY-group `first.`/`last.` in the runtime (use `runtime.ComputeByGroups` from 7.3), `merge` + `in=`, user formats. Add corpus items tagged for each new feature (per the "add corpus items with the feature" rule) so the harness tracks them. Then Phase 12 (stat PROCs), Phase 13 (final docs).
+
+### 2026-06-16 — Phase 10.1 (retain + sum statement)
+- What changed: Started Phase 10 (advanced DATA step, L5). Implemented `retain` and the sum statement `var + expr;` — variables that persist across implicit-loop iterations.
+- Key files:
+  - `ast/statements.go` — `RetainStatement{Vars, Initials map}` and `SumStatement{Var, Expr}`.
+  - `parser/statements.go` — `parseRetain` (identifiers are vars; a following literal is the initial value for the most-recent var) and `parseSum` (dispatched when an IDENT is followed by `+`).
+  - `runtime/pdv.go` — PDV gained a `retained` set; `Retain(name)` marks a var; `ResetVars` now skips retained vars (so they carry across iterations).
+  - `runtime/datastep.go` — `initRetained` (runs once before the loop): marks retain/sum vars retained and sets initials (RETAIN initial expr, else missing; sum var → 0). `execStatement`: RETAIN is a setup no-op; SUM computes `var = (var?0) + (expr?0)` ignoring missings.
+  - `runtime/datastep_test.go` — running total (10/30/60) and a lag/carry test (retained `prev` ⇒ lag = missing,5,8).
+  - `corpus/data_step_retain_001/` (+ `sum-statement` tag in `corpus/FEATURES.md`) — running-total item; harness now 19/19, 100%.
+- Decisions/deviations: Retained vars are declared at setup (before the loop), so they lead the output column order; this matches SAS when RETAIN precedes other statements (as in idiomatic code) but could differ if RETAIN appears later — output not byte-verified, values are correct. RETAIN initial-value lists use the SAS rule "a literal applies to the preceding variable." `(1 2 3)` grouped-initial syntax not parsed.
+- Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 19/19 (100%).
+- Next: Phase 10.2 — arrays. `array name{n} v1..vn;` declaration + subscripted references `name{i}` in expressions/assignments. Needs an Array AST node, parser support, and runtime resolution of subscripts to PDV variables. Add a corpus item (e.g. iterate an array to transform columns).

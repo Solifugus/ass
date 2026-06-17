@@ -160,6 +160,31 @@ func (o *OutputStatement) String() string {
 	return "output " + strings.Join(o.Datasets, " ") + ";"
 }
 
+// RetainStatement is `retain <var [initial]>...;`. Retained variables keep their
+// value across implicit-loop iterations instead of being reset to missing.
+// Initials maps a (lowercased) variable name to its initial-value expression.
+type RetainStatement struct {
+	Vars     []string
+	Initials map[string]Expression
+}
+
+func (r *RetainStatement) statementNode() {}
+func (r *RetainStatement) String() string {
+	return "retain " + strings.Join(r.Vars, " ") + ";"
+}
+
+// SumStatement is the SAS sum statement `<var> + <expr>;`, equivalent to
+// `var = sum(var, expr)` with var retained and initialized to 0.
+type SumStatement struct {
+	Var  string
+	Expr Expression
+}
+
+func (s *SumStatement) statementNode() {}
+func (s *SumStatement) String() string {
+	return s.Var + " + " + str(s.Expr) + ";"
+}
+
 // KeepStatement is `keep <vars...>;`.
 type KeepStatement struct {
 	Vars []string

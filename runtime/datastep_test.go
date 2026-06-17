@@ -367,6 +367,44 @@ func eqStr(a, b []string) bool {
 	return true
 }
 
+func TestDataStepRetainSum(t *testing.T) {
+	src := "data t;\n  retain total 0;\n  input x;\n  total + x;\n  datalines;\n10\n20\n30\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("t")
+	if ds.NObs() != 3 {
+		t.Fatalf("NObs = %d, want 3", ds.NObs())
+	}
+	wantTotal := []float64{10, 30, 60}
+	wantX := []float64{10, 20, 30}
+	for i := range wantTotal {
+		if got := ds.Get(ds.Rows[i], "total"); got.Num != wantTotal[i] {
+			t.Errorf("row%d total = %v, want %v", i, got.Display(), wantTotal[i])
+		}
+		if got := ds.Get(ds.Rows[i], "x"); got.Num != wantX[i] {
+			t.Errorf("row%d x = %v, want %v", i, got.Display(), wantX[i])
+		}
+	}
+}
+
+func TestDataStepRetainCarriesValue(t *testing.T) {
+	// Without retain, a variable not reassigned resets to missing each iteration.
+	// With retain, it carries over (here: remember the previous x).
+	src := "data t;\n  retain prev;\n  input x;\n  lag = prev;\n  prev = x;\n  datalines;\n5\n8\n2\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("t")
+	wantLag := []table.Value{table.MissingNum(), table.Num(5), table.Num(8)}
+	for i, w := range wantLag {
+		got := ds.Get(ds.Rows[i], "lag")
+		if w.IsMissing() {
+			if !got.IsMissing() {
+				t.Errorf("row%d lag = %v, want missing", i, got.Display())
+			}
+		} else if got.Num != w.Num {
+			t.Errorf("row%d lag = %v, want %v", i, got.Display(), w.Num)
+		}
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {
