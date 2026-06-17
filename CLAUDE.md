@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repository currently contains **only the design document** (`ass-design.md`). No Go code, module, or build tooling exists yet. The sections below describe the intended architecture so implementation can begin consistently with the plan. When scaffolding the project, the first steps are `go mod init`, creating the package layout in `cmd/ass`, and wiring the lexer → parser → runtime pipeline.
+Implementation is underway and tracked in **`PLAN.md`** (a living, resumable plan — read its "How to resume" section first; the Progress log at the bottom is the source of truth for what's done). As of the latest work, Phases 0–8 are complete: the full lexer → parser → runtime pipeline runs end-to-end (`ass run file.sas`), covering the DATA step (input/datalines, set, if/then/else, subsetting if, where, do-loops, keep/drop, output, ~35 functions, missing-value + coercion semantics), PROC PRINT, PROC SORT (+ BY-group first./last.), and PROC SQL (via embedded SQLite). All L1–L3 corpus items run and match their documented expected results. Remaining: macros (Phase 9), advanced DATA step (Phase 10), the `ass test` harness (Phase 11), statistical PROCs (Phase 12), final docs (Phase 13).
+
+The design rationale lives in `ass-design.md`; the architecture notes below remain the conceptual map.
 
 ## What ASS is
 
@@ -58,15 +60,17 @@ Each corpus item carries YAML metadata (`id`, `source`, `license`, `features`, `
 
 ## Build & test commands
 
-No tooling exists yet. Once the Go module is created, standard commands apply:
-
 ```bash
 go build ./...
 go test ./...
 go test ./lexer/                 # single package
-go test ./runtime/ -run TestPDV  # single test by name
-go run ./cmd/ass file.sas
+go test ./runtime/ -run TestEval # single test by name
+go run ./cmd/ass run file.sas    # execute a SAS program
+go run ./cmd/ass parse file.sas  # dump the AST
+go run ./cmd/ass tokens file.sas # dump the token stream
 ```
+
+**CGo is required.** PROC SQL embeds SQLite via `github.com/mattn/go-sqlite3`, so building needs `CGO_ENABLED=1` (the default) and a C compiler (e.g. gcc). See `sql/DECISION.md` for the rationale and consequences.
 
 ## Guiding principle
 

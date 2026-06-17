@@ -109,6 +109,23 @@ func (p *Parser) parseProcStep() ast.Step {
 		}
 	}
 	p.expectSemicolon()
+	// PROC SQL has free-form SQL that the SAS statement parser cannot represent
+	// faithfully (string-literal quoting in particular). Capture its body
+	// verbatim from the source, up to the terminating RUN/QUIT.
+	if ps.Name == "sql" {
+		start := p.cur.Pos
+		end := start
+		for !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+			end = p.cur.End
+			p.next()
+		}
+		ps.RawBody = p.l.Slice(start, end)
+		if p.curIs(lexer.RUN) || p.curIs(lexer.QUIT) {
+			p.next()
+			p.expectSemicolon()
+		}
+		return ps
+	}
 	ps.Body = p.parseStepBody(p.parseProcStatement)
 	return ps
 }

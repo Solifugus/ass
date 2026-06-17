@@ -89,10 +89,10 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 8 — PROC SQL (Level 3)
 
-- [ ] **8.1 Decide the SQL backend.** Evaluate: Go-native mini-engine vs embedding SQLite/DuckDB. Write a short decision note in `sql/DECISION.md` (record the trade-off and the choice; default recommendation: start Go-native for `select` over in-memory datasets to avoid a heavy dependency, revisit later). Acceptance: decision recorded. **Confirm the choice with the user before implementing.**
-- [ ] **8.2 SQL lexer/parser (or bridge).** Per 8.1: either a focused SQL parser for `select`/`from`/`where`/`group by`/`order by`/`create table as`, or a translation layer to the chosen embedded engine. Acceptance: parses the SQL corpus items.
-- [ ] **8.3 SELECT execution.** Implement projection, `where`, calculated columns, table aliases over in-memory datasets. Acceptance: simple select items produce expected results.
-- [ ] **8.4 Joins & grouping.** Implement inner/left/right joins, `group by` with aggregates (count/sum/avg/min/max), `order by`. Acceptance: join and group-by items pass.
+- [x] **8.1 Decide the SQL backend.** Evaluate: Go-native mini-engine vs embedding SQLite/DuckDB. Write a short decision note in `sql/DECISION.md` (record the trade-off and the choice; default recommendation: start Go-native for `select` over in-memory datasets to avoid a heavy dependency, revisit later). Acceptance: decision recorded. **Confirm the choice with the user before implementing.**
+- [x] **8.2 SQL lexer/parser (or bridge).** Per 8.1: either a focused SQL parser for `select`/`from`/`where`/`group by`/`order by`/`create table as`, or a translation layer to the chosen embedded engine. Acceptance: parses the SQL corpus items.
+- [x] **8.3 SELECT execution.** Implement projection, `where`, calculated columns, table aliases over in-memory datasets. Acceptance: simple select items produce expected results.
+- [x] **8.4 Joins & grouping.** Implement inner/left/right joins, `group by` with aggregates (count/sum/avg/min/max), `order by`. Acceptance: join and group-by items pass.
 - [ ] **8.5 `create table as`.** Materialize query results into the library. Acceptance: `create table x as select ...` then PROC PRINT of x works end-to-end.
 
 ## Phase 9 — Macro basics (Level 4)
@@ -361,3 +361,16 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Coercion is silent (SAS logs a NOTE on automatic conversion; we skip the note for now — add with richer logging later). BEST. is approximated by `%g` shortest-round-trip — no width/precision control yet (that arrives with the `formats` package / FORMAT statement). No SAS conversion-NOTE or `_ERROR_` set on bad char→num (returns missing).
 - Verified: `go test ./...` green; `go build`/`go vet` clean.
 - Next: Phase 8 — PROC SQL (Level 3). 8.1 decide the SQL engine approach (Go-native mini-engine vs embedded DuckDB/SQLite) — recommend a small Go-native engine over the in-memory `table.Library` to avoid a CGo/dependency footprint and keep clean-room control; 8.2 SELECT/WHERE/ORDER BY over a single table; 8.3 joins; 8.4 GROUP BY + aggregates; mapping `proc sql; create table x as select ...; quit;` to library datasets. See the four `sql_*` corpus items. (Phase 7 already done; Phase 6 done — DATA-step core + polish complete.)
+
+### 2026-06-16 — Phase 8 (PROC SQL via embedded SQLite) — PHASE 8 COMPLETE
+- What changed: Implemented PROC SQL. **Decision (user-chosen): embed SQLite via CGo** (`github.com/mattn/go-sqlite3`) rather than a Go-native engine or DuckDB — see `sql/DECISION.md`. Build now requires CGo (gcc present, CGO_ENABLED=1).
+- Key files:
+  - `lexer/token.go` + `lexer/lexer.go` — `Token.Pos`/`End` (rune indices, stamped centrally in `scan` via a named-return defer) and `Lexer.Slice(start,end)` to recover exact source spans. Needed because reconstructing SQL from SAS tokens loses string-literal quotes.
+  - `ast/ast.go` — `ProcStep.RawBody` (verbatim body for free-form procs).
+  - `parser/parser.go` — `parseProcStep` special-cases `proc sql`: captures `RawBody` from source up to RUN/QUIT, consumes the terminator.
+  - `sql/engine.go` — `Engine` over an in-memory SQLite DB: `NewEngine(lib)` loads every dataset (Numeric→REAL, Character→TEXT, numeric missing→NULL; identifiers unquoted for SAS case-insensitivity); `Query`→`table.Dataset` (column kinds inferred from returned values); `Exec`; `Save` (read a created table back into the library). `sql/engine_test.go` — select/where/order, count/avg aggregate, create-table+save, NULL→missing.
+  - `proc/sql.go` — `sqlProc` registered as "sql": splits `RawBody` on `;`, prints bare SELECTs via `renderListing`, materializes `CREATE TABLE ... AS SELECT` into the library with a NOTE.
+  - `sql/DECISION.md` — the backend decision record (8.1). `CLAUDE.md` updated (status now Phases 0–8; CGo build requirement). `go.mod`/`go.sum` add the driver.
+- Decisions/deviations: `splitStatements` splits on literal `;` (a `;` inside a SQL string would mis-split — no corpus item hits it; noted). SAS PROC SQL extensions (`calculated`, `monotonic()`, `INTO :mvar`, dictionary tables) not translated. SAS↔SQLite function-name shimming not done. Result column kind is inferred from values (string/[]byte→char else numeric), so an all-NULL column defaults numeric.
+- Verified: `go test ./...` green (incl. new `sql` pkg); `go vet` clean. End-to-end: all four `sql_*` corpus items match their documented expected results — select(where)→John/Mary; create-table adults→John/Mary then PROC PRINT; comma-join→name/score pairs; group-by sum+order→east 325/west 250.
+- Next: Phase 9 — macro basics (`%let`/`&var` resolution, `%macro`/`%mend`, simple `%if`). The macro preprocessor runs BEFORE the parser (text substitution). See the three `macro_*` corpus items (currently parse-error gracefully, awaiting this phase). After 9: Phase 10 (advanced DATA step: retain/arrays/merge/in=/by-group first.last. in the runtime), Phase 11 (the `ass test` harness — also revisits the deferred corpus output verification).

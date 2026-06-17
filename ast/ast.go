@@ -77,10 +77,11 @@ func (d *DataStep) String() string {
 // body statements are kept generic; proc-specific structure is layered on in
 // Phase 3.6 and the individual PROC implementations.
 type ProcStep struct {
-	Name    string      // procedure name, lowercased (e.g. "print", "sort")
-	Data    string      // the data= dataset, if given ("" otherwise)
+	Name    string       // procedure name, lowercased (e.g. "print", "sort")
+	Data    string       // the data= dataset, if given ("" otherwise)
 	Options []ProcOption // remaining options after proc <name> ... ;
-	Body    []Statement // statements between the proc statement and run/quit
+	Body    []Statement  // statements between the proc statement and run/quit
+	RawBody string       // verbatim source body, captured for free-form procs (PROC SQL)
 }
 
 // ProcOption is a single option on the PROC statement, e.g. `noobs` (flag) or

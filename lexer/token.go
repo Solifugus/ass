@@ -7,12 +7,17 @@ import "strings"
 type TokenType string
 
 // Token is a single lexical unit produced by the Lexer, with source position.
-// Line and Col are 1-based; Col is the column of the token's first rune.
+// Line and Col are 1-based; Col is the column of the token's first rune. Pos is
+// the 0-based byte offset of the token's first rune in the source, and End is
+// the byte offset just past the token; together they allow callers to recover
+// the exact source span of a range of tokens (used to capture raw PROC SQL).
 type Token struct {
 	Type    TokenType
 	Literal string
 	Line    int
 	Col     int
+	Pos     int
+	End     int
 }
 
 const (

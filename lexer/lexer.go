@@ -27,6 +27,22 @@ func New(input string) *Lexer {
 	return &Lexer{src: []rune(input), pos: 0, line: 1, col: 1, lastType: SEMICOLON}
 }
 
+// Slice returns the source text between two rune indices (e.g. Token.Pos/End),
+// used to recover an exact source span such as a raw PROC SQL body. Out-of-range
+// indices are clamped.
+func (l *Lexer) Slice(start, end int) string {
+	if start < 0 {
+		start = 0
+	}
+	if end > len(l.src) {
+		end = len(l.src)
+	}
+	if start >= end {
+		return ""
+	}
+	return string(l.src[start:end])
+}
+
 // cur returns the current rune, or 0 at end of input.
 func (l *Lexer) cur() rune {
 	if l.pos >= len(l.src) {
@@ -119,14 +135,22 @@ func (l *Lexer) NextToken() Token {
 	return tok
 }
 
-// scan produces the next token without bookkeeping (see NextToken).
-func (l *Lexer) scan() Token {
+// scan produces the next token without bookkeeping (see NextToken). It stamps
+// each token's source span (Pos/End as rune indices) via a deferred assignment
+// so the many return sites below need not set them individually.
+func (l *Lexer) scan() (tok Token) {
 	if l.pendingData {
 		l.pendingData = false
 		return l.readDatalines()
 	}
 
 	l.skipTrivia()
+
+	start := l.pos
+	defer func() {
+		tok.Pos = start
+		tok.End = l.pos
+	}()
 
 	line, col := l.line, l.col
 	r := l.cur()
