@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASS — Analyst's Statistical Suite</title>
+  <meta
+    name="description"
+    content="Analyst's Statistical Suite (ASS) is an open-source, SAS-compatible data processing and analytics engine written in Go."
+  />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #121a33;
+      --card: #182346;
+      --text: #eef2ff;
+      --muted: #b3c0f0;
+      --primary: #8fb3ff;
+      --accent: #83f0d2;
+      --border: #2a3d7a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      background: linear-gradient(180deg, var(--bg) 0%, #0c1530 100%);
+      color: var(--text);
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .container {
+      width: min(1100px, 92vw);
+      margin: 0 auto;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(8px);
+      background: rgba(11, 16, 32, 0.88);
+    }
+
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.9rem 0;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color: #fff;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.95rem;
+    }
+
+    .hero {
+      padding: 4rem 0 3rem;
+    }
+
+    .badge {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      color: var(--accent);
+      background: rgba(131, 240, 210, 0.08);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    h1, h2 { line-height: 1.2; }
+    h1 { font-size: clamp(1.9rem, 5vw, 3rem); margin: 0 0 0.75rem; }
+    h2 { margin-top: 0; }
+
+    .lead {
+      color: var(--muted);
+      max-width: 70ch;
+      margin-bottom: 1.5rem;
+      font-size: 1.05rem;
+    }
+
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 0.65rem 1rem;
+      border-radius: 0.6rem;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .button.primary {
+      background: linear-gradient(135deg, #5d87ff, #3e62d8);
+      border-color: #6d95ff;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0 2rem;
+    }
+
+    .card {
+      background: rgba(24, 35, 70, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 0.8rem;
+      padding: 1rem;
+    }
+
+    section { padding: 1rem 0 2rem; }
+
+    code {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 0.35rem;
+      padding: 0.08rem 0.32rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    pre {
+      margin: 0;
+      overflow-x: auto;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 0.8rem;
+      background: #0b1430;
+    }
+
+    ul { padding-left: 1.2rem; margin: 0.5rem 0; }
+    li { margin-bottom: 0.35rem; }
+
+    .muted { color: var(--muted); }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 0 2.5rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container nav">
+      <div class="brand">ASS — Analyst's Statistical Suite</div>
+      <nav class="links">
+        <a href="https://github.com/Solifugus/ass">GitHub</a>
+        <a href="https://github.com/Solifugus/ass/blob/main/README.md">Docs</a>
+        <a href="https://github.com/Solifugus/ass/blob/main/COMPATIBILITY.md">Compatibility</a>
+        <a href="https://github.com/Solifugus/ass/blob/main/CONTRIBUTING.md">Contributing</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div class="badge">Open source • Go • SAS-compatible workflow</div>
+      <h1>Run practical SAS-style analytics workflows with an open-source engine.</h1>
+      <p class="lead">
+        Analyst's Statistical Suite (ASS) is a clean-room implementation focused on behavioral compatibility for
+        everyday ETL and reporting workloads. It includes a lexer → macro → parser → runtime pipeline and executes
+        real programs end-to-end.
+      </p>
+      <div class="cta">
+        <a class="button primary" href="https://github.com/Solifugus/ass">View on GitHub</a>
+        <a class="button" href="https://github.com/Solifugus/ass/blob/main/README.md">Read the README</a>
+      </div>
+    </section>
+
+    <section>
+      <h2>What you get</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>DATA step runtime</h3>
+          <p class="muted">PDV-style execution with loops, BY-groups, arrays, merge/in=, retain, keep/drop, formats, and output control.</p>
+        </article>
+        <article class="card">
+          <h3>Core PROC support</h3>
+          <p class="muted">PROC PRINT, SORT, SQL, MEANS/SUMMARY, FREQ, REG/GLM, and FORMAT for practical tabular analytics.</p>
+        </article>
+        <article class="card">
+          <h3>Macro basics</h3>
+          <p class="muted">Use %let, %macro/%mend, parameterized expansion, %do loops, and conditional macro logic.</p>
+        </article>
+        <article class="card">
+          <h3>Compatibility-first testing</h3>
+          <p class="muted">Corpus-backed behavior checks with feature tags and per-item metadata, executed via <code>ass test</code>.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Quick start</h2>
+      <pre><code>go build -o ass ./cmd/ass
+go test ./...
+
+./ass run file.sas
+./ass test corpus/</code></pre>
+      <p class="muted">Note: PROC SQL uses SQLite via cgo, so a C compiler (e.g. gcc) is required.</p>
+    </section>
+
+    <section>
+      <h2>Project status</h2>
+      <ul>
+        <li>Working end-to-end execution pipeline</li>
+        <li>Compatibility corpus currently passing at 100%</li>
+        <li>Roadmap and deferred features tracked in <a href="https://github.com/Solifugus/ass/blob/main/PLAN.md">PLAN.md</a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Learn more</h2>
+      <ul>
+        <li><a href="https://github.com/Solifugus/ass/blob/main/README.md">README</a> — setup, usage, and feature summary</li>
+        <li><a href="https://github.com/Solifugus/ass/blob/main/ass-design.md">Design notes</a> — architecture and execution model</li>
+        <li><a href="https://github.com/Solifugus/ass/blob/main/COMPATIBILITY.md">Compatibility matrix</a> — implemented and deferred behaviors</li>
+        <li><a href="https://github.com/Solifugus/ass/blob/main/CONTRIBUTING.md">Contributing guide</a> — adding corpus-backed features</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      Analyst's Statistical Suite is an independent open-source project and is not affiliated with, endorsed by, or sponsored by SAS Institute Inc.
+      “SAS” is a trademark of SAS Institute Inc.
+    </div>
+  </footer>
+</body>
+</html>
