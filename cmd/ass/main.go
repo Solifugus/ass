@@ -8,6 +8,7 @@ import (
 
 	"github.com/solifugus/ass/lexer"
 	"github.com/solifugus/ass/log"
+	"github.com/solifugus/ass/macro"
 	"github.com/solifugus/ass/parser"
 	"github.com/solifugus/ass/runtime"
 	"github.com/solifugus/ass/table"
@@ -66,7 +67,10 @@ func runProgram(path string) error {
 	if err != nil {
 		return err
 	}
-	p := parser.New(string(src))
+	// The macro preprocessor runs before the lexer/parser, expanding %let/&var,
+	// %macro/%mend, and macro control flow into ordinary SAS source.
+	expanded := macro.Process(string(src))
+	p := parser.New(expanded)
 	prog := p.ParseProgram()
 	if errs := p.Errors(); len(errs) > 0 {
 		fmt.Fprintf(os.Stderr, "%d parse error(s):\n", len(errs))
@@ -87,7 +91,7 @@ func runParse(path string) error {
 	if err != nil {
 		return err
 	}
-	p := parser.New(string(src))
+	p := parser.New(macro.Process(string(src)))
 	prog := p.ParseProgram()
 	fmt.Println(prog.String())
 	if errs := p.Errors(); len(errs) > 0 {

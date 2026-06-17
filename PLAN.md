@@ -97,11 +97,11 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ## Phase 9 — Macro basics (Level 4)
 
-- [ ] **9.1 Macro variable store & `%let`.** In `macro/`, implement a symbol table and `%let name = value;`. Acceptance: store/retrieve tests pass.
-- [ ] **9.2 `&var` resolution.** Implement macro-variable reference expansion in source text (including `&&` and `.`-terminated refs) as a preprocessing pass before lexing. Acceptance: expansion tests pass, including nested refs.
-- [ ] **9.3 `%macro`/`%mend` + parameters.** Implement macro definition/invocation with positional and named parameters. Acceptance: a parameterized macro expands correctly.
-- [ ] **9.4 `%if/%then/%else` and `%do`.** Implement basic macro control flow during expansion. Acceptance: conditional/loop macro tests pass.
-- [ ] **9.5 Integrate preprocessor into pipeline.** Ensure macro expansion runs before the lexer in the CLI/runtime flow (matches the architecture diagram). Acceptance: a corpus item using macros runs end-to-end.
+- [x] **9.1 Macro variable store & `%let`.** In `macro/`, implement a symbol table and `%let name = value;`. Acceptance: store/retrieve tests pass.
+- [x] **9.2 `&var` resolution.** Implement macro-variable reference expansion in source text (including `&&` and `.`-terminated refs) as a preprocessing pass before lexing. Acceptance: expansion tests pass, including nested refs.
+- [x] **9.3 `%macro`/`%mend` + parameters.** Implement macro definition/invocation with positional and named parameters. Acceptance: a parameterized macro expands correctly.
+- [x] **9.4 `%if/%then/%else` and `%do`.** Implement basic macro control flow during expansion. Acceptance: conditional/loop macro tests pass.
+- [x] **9.5 Integrate preprocessor into pipeline.** Ensure macro expansion runs before the lexer in the CLI/runtime flow (matches the architecture diagram). Acceptance: a corpus item using macros runs end-to-end.
 
 ## Phase 10 — Advanced DATA step (Level 5)
 
@@ -374,3 +374,13 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: `splitStatements` splits on literal `;` (a `;` inside a SQL string would mis-split — no corpus item hits it; noted). SAS PROC SQL extensions (`calculated`, `monotonic()`, `INTO :mvar`, dictionary tables) not translated. SAS↔SQLite function-name shimming not done. Result column kind is inferred from values (string/[]byte→char else numeric), so an all-NULL column defaults numeric.
 - Verified: `go test ./...` green (incl. new `sql` pkg); `go vet` clean. End-to-end: all four `sql_*` corpus items match their documented expected results — select(where)→John/Mary; create-table adults→John/Mary then PROC PRINT; comma-join→name/score pairs; group-by sum+order→east 325/west 250.
 - Next: Phase 9 — macro basics (`%let`/`&var` resolution, `%macro`/`%mend`, simple `%if`). The macro preprocessor runs BEFORE the parser (text substitution). See the three `macro_*` corpus items (currently parse-error gracefully, awaiting this phase). After 9: Phase 10 (advanced DATA step: retain/arrays/merge/in=/by-group first.last. in the runtime), Phase 11 (the `ass test` harness — also revisits the deferred corpus output verification).
+
+### 2026-06-16 — Phase 9 (macro basics) — PHASE 9 COMPLETE
+- What changed: Implemented the macro preprocessor — a text pass that runs BEFORE the lexer (matching the architecture diagram) — and wired it into the CLI. All three `macro_*` corpus items now run end-to-end (they previously parse-errored).
+- Key files:
+  - `macro/macro.go` — `Processor` (macro-var store + macro defs); `Process(src)` expands everything. A rune `cursor` drives `expandInto`, which emits text, resolves `&name`/`&name.`/`&&`(collapsed) via `resolveAmp`, and dispatches `%let`, `%macro`/`%mend` (positional + keyword=default params), `%name(args)` calls (scoped param binding with save/restore), `%do v=a %to b [%by s]` + simple `%do;` blocks, and `%if cond %then … %else …` (with `%do` blocks or single `;`-statements). `captureBlock` balances nested `%do/%end`; `evalCond` handles symbolic + word comparison operators.
+  - `macro/macro_test.go` — %let + &resolve, trailing dot, nested let, positional param, keyword default, %do loop (x=1..3, no overrun), %if/%then/%else both branches, evalCond table.
+  - `cmd/ass/main.go` — `runProgram` and `runParse` now call `macro.Process` before `parser.New` (9.5).
+- Decisions/deviations: `&&` is collapsed (basic) rather than fully multi-pass rescanned — no corpus item needs deep `&&`. `%if` simple-statement branch ends at `;`; the `%do`-block form is the primary path. Positional args bind to positional params; keyword params (those with `=default`) bind by name or default (a positional arg won't fill a keyword param — matches SAS). Macro vars are global within a Process run except call params (scoped). Autocall/external macro libraries, `%sysfunc`, `%eval` arithmetic, and statement-level `%if` outside macros are out of scope for L4.
+- Verified: `go test ./...` green (incl. new `macro` pkg); `go vet` clean. End-to-end: macro_let_001 → adults John/Mary; macro_def_001 → PROC PRINT of people; macro_control_001 → NUMS x=1,2,3.
+- Next: Phase 10 — Advanced DATA step (L5): `retain`, arrays, BY-group processing in the runtime (`first.`/`last.` from `ComputeByGroups` already built in 7.3), `merge` + `in=`, sum statement, user formats. Then Phase 11 (the `ass test` harness — first-class deliverable; also revisits deferred corpus output verification). With Phases 0–9 done, all priority-1 corpus items (L1–L4) execute end-to-end.
