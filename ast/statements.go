@@ -26,6 +26,31 @@ func (s *SetStatement) String() string {
 	return "set " + strings.Join(s.Datasets, " ") + ";"
 }
 
+// DatasetRef is a dataset reference in a SET/MERGE statement, with optional
+// dataset options. In is the `in=` flag variable name ("" if absent).
+type DatasetRef struct {
+	Name string
+	In   string
+}
+
+// MergeStatement is `merge ds1 [ds2 ...];`, match-merged by the step's BY
+// variables. Each reference may carry an `in=` flag.
+type MergeStatement struct {
+	Refs []DatasetRef
+}
+
+func (m *MergeStatement) statementNode() {}
+func (m *MergeStatement) String() string {
+	parts := make([]string, len(m.Refs))
+	for i, r := range m.Refs {
+		parts[i] = r.Name
+		if r.In != "" {
+			parts[i] += "(in=" + r.In + ")"
+		}
+	}
+	return "merge " + strings.Join(parts, " ") + ";"
+}
+
 // InputVar is one variable in an INPUT statement; Char is true if it was marked
 // with `$` (character).
 type InputVar struct {

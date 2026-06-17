@@ -1,0 +1,15 @@
+id: data_step_merge_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - merge
+  - by-group
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 1
+notes: |
+  Match-merge of names and scores by id with in= flags; "if n and s" keeps only
+  ids present in both (inner join). Expected: id 1 John 95, id 2 Mary 85.

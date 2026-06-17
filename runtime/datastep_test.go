@@ -458,6 +458,66 @@ func TestDataStepByGroupAggregation(t *testing.T) {
 	}
 }
 
+func mergeInputs() string {
+	return "data names;\n  input id name $;\n  datalines;\n1 John\n2 Mary\n3 Tim\n;\nrun;\n" +
+		"data scores;\n  input id score;\n  datalines;\n1 95\n2 85\n4 70\n;\nrun;\n"
+}
+
+func TestDataStepMergeFull(t *testing.T) {
+	src := mergeInputs() +
+		"data m;\n  merge names(in=n) scores(in=s);\n  by id;\nrun;"
+	lib := runProgram(t, src)
+	ds, _ := lib.Get("m")
+	if ds.NObs() != 4 { // ids 1,2,3,4
+		t.Fatalf("NObs = %d, want 4", ds.NObs())
+	}
+	byID := map[float64]table.Row{}
+	for _, r := range ds.Rows {
+		byID[ds.Get(r, "id").Num] = r
+	}
+	if got := ds.Get(byID[1], "name"); got.Str != "John" {
+		t.Errorf("id1 name = %q, want John", got.Str)
+	}
+	if got := ds.Get(byID[1], "score"); got.Num != 95 {
+		t.Errorf("id1 score = %v, want 95", got.Display())
+	}
+	if got := ds.Get(byID[3], "score"); !got.IsMissing() {
+		t.Errorf("id3 score = %v, want missing (not in scores)", got.Display())
+	}
+	if got := ds.Get(byID[4], "name"); !got.IsMissing() {
+		t.Errorf("id4 name = %v, want missing (not in names)", got.Display())
+	}
+	if ds.HasColumn("n") || ds.HasColumn("s") {
+		t.Errorf("in= flags should not be output; columns = %v", ds.ColumnNames())
+	}
+}
+
+func TestDataStepMergeInnerJoin(t *testing.T) {
+	src := mergeInputs() +
+		"data both;\n  merge names(in=n) scores(in=s);\n  by id;\n  if n and s;\nrun;"
+	lib := runProgram(t, src)
+	ds, _ := lib.Get("both")
+	if ds.NObs() != 2 { // only ids 1 and 2 are in both
+		t.Fatalf("NObs = %d, want 2", ds.NObs())
+	}
+	for _, r := range ds.Rows {
+		id := ds.Get(r, "id").Num
+		if id != 1 && id != 2 {
+			t.Errorf("unexpected id %v in inner join", id)
+		}
+	}
+}
+
+func TestDataStepMergeLeftJoin(t *testing.T) {
+	src := mergeInputs() +
+		"data left;\n  merge names(in=n) scores(in=s);\n  by id;\n  if n;\nrun;"
+	lib := runProgram(t, src)
+	ds, _ := lib.Get("left")
+	if ds.NObs() != 3 { // ids 1,2,3 (all names)
+		t.Fatalf("NObs = %d, want 3", ds.NObs())
+	}
+}
+
 func TestDataStepDefaultDatasetName(t *testing.T) {
 	lib := runStep(t, `data; x = 1; run;`)
 	if !lib.Has("DATA1") {

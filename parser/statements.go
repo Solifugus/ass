@@ -29,6 +29,8 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return nil
 	case p.identIs("set"):
 		return p.parseSet()
+	case p.identIs("merge"):
+		return p.parseMerge()
 	case p.identIs("input"):
 		return p.parseInput()
 	case p.identIs("if"):
@@ -210,6 +212,38 @@ func (p *Parser) parseWhere() ast.Statement {
 func (p *Parser) parseSet() ast.Statement {
 	p.next() // 'set'
 	stmt := &ast.SetStatement{Datasets: p.parseDatasetNames()}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseMerge parses `merge ds1[(in=a)] ds2[(in=b)] ...;`.
+func (p *Parser) parseMerge() ast.Statement {
+	p.next() // 'merge'
+	stmt := &ast.MergeStatement{}
+	for p.curIs(lexer.IDENT) {
+		ref := ast.DatasetRef{Name: p.cur.Literal}
+		p.next()
+		if p.curIs(lexer.LPAREN) {
+			p.next() // '('
+			// Dataset options: only in= is interpreted; others are skipped.
+			for !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+				opt := strings.ToLower(p.cur.Literal)
+				p.next()
+				if p.curIs(lexer.EQ) {
+					p.next()
+					val := p.cur.Literal
+					p.next()
+					if opt == "in" {
+						ref.In = val
+					}
+				}
+			}
+			if p.curIs(lexer.RPAREN) {
+				p.next()
+			}
+		}
+		stmt.Refs = append(stmt.Refs, ref)
+	}
 	p.expectSemicolon()
 	return stmt
 }

@@ -42,8 +42,11 @@ type dataStep struct {
 	keep     map[string]bool  // if non-nil, only these vars are output (lowercased)
 	drop     map[string]bool  // these vars are excluded from output (lowercased)
 	wheres   []ast.Expression // WHERE conditions applied at read time
-	byVars   []string         // BY variables (DATA step BY-group processing)
-	byFlags  []ByFlags        // per-set-row first./last. flags (aligned to setRows)
+	byVars    []string        // BY variables (DATA step BY-group processing)
+	byFlags   []ByFlags       // per-set-row first./last. flags (aligned to setRows)
+	mergeRows []table.Row     // precomputed combined rows for MERGE
+	mergePtr  int             // next merge row to emit
+	inVars    map[string]bool // in= flag variable names (lowercased), excluded from output
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -83,7 +86,19 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	}
 	hasInput := hasInputStatement(ds.Body)
 
-	if hasSetStatement(ds.Body) {
+	if mrg := findMerge(ds.Body); mrg != nil {
+		// Match-merge: one iteration per precomputed combined row.
+		d.buildMerge(mrg, byVarsOf(ds.Body))
+		for d.mergePtr < len(d.mergeRows) {
+			start := d.mergePtr
+			if err := d.runIteration(ds.Body); err != nil {
+				return err
+			}
+			if d.mergePtr == start {
+				d.mergePtr++
+			}
+		}
+	} else if hasSetStatement(ds.Body) {
 		// Dataset-driven loop: one iteration per input row across all SET datasets.
 		d.setRows = d.collectSetRows(ds.Body)
 		d.setupByGroups(ds.Body)
@@ -187,6 +202,15 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		d.applySet(d.setRows[d.setPtr])
 		d.applyByFlags(d.setPtr)
 		d.setPtr++
+		return d.applyWhere()
+	case *ast.MergeStatement:
+		if d.mergePtr >= len(d.mergeRows) {
+			return flowDelete, nil
+		}
+		for name, v := range d.mergeRows[d.mergePtr] {
+			d.pdv.Set(name, v)
+		}
+		d.mergePtr++
 		return d.applyWhere()
 	case *ast.WhereStatement:
 		// WHERE is collected up front and applied at read time; nothing to do here.
@@ -366,7 +390,7 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 	row := make(table.Row)
 	for _, name := range d.pdv.Names() {
 		ln := strings.ToLower(name)
-		if automaticVars[ln] || isByFlagVar(ln) || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
+		if automaticVars[ln] || isByFlagVar(ln) || d.inVars[ln] || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
 			continue
 		}
 		v := d.pdv.Get(name)

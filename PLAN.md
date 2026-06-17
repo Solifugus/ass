@@ -108,7 +108,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 - [x] **10.1 `retain`.** Variables keep values across iterations. Acceptance: retain test (running total) passes. (Includes the sum statement `var + expr;`.)
 - [x] **10.2 Arrays.** Implement `array` declaration and subscripted references. Acceptance: array test passes.
 - [x] **10.3 BY-group processing in DATA step.** Use `first.`/`last.` (from 7.3) inside the implicit loop. Acceptance: by-group aggregation test passes.
-- [ ] **10.4 `merge` + `in=`.** Implement match-merge by BY variables with `in=` dataset flags. Acceptance: merge test passes.
+- [x] **10.4 `merge` + `in=`.** Implement match-merge by BY variables with `in=` dataset flags. Acceptance: merge test passes.
 - [ ] **10.5 Formats & informats.** Implement `formats/` core formats (e.g. numeric `w.d`, `dollar`, `date`/`datetime`) and informats; apply on input and on PRINT. Acceptance: format application tests pass.
 - [ ] **10.6 Date literals & user formats.** Support `'01JAN2020'd` date literals and `proc format` user-defined formats. Acceptance: date + user-format tests pass.
 
@@ -433,3 +433,16 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Decisions/deviations: Input is assumed pre-sorted by the BY variables (SAS requires it; no NOTSORTED/auto-sort check yet). BY in the DATA step is wired for SET only (not MERGE — that's 10.4) and not for datalines input. first./last. are recomputed up front over the concatenated SET rows.
 - Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 21/21 (100%).
 - Next: Phase 10.4 — `merge` + `in=`. Match-merge two+ datasets by BY variables, with `in=` flags (dataset-option form `set/merge ds(in=a)`) exposing whether each contributed to the current BY group. Needs `merge` statement parsing (+ the `(in=name)` dataset option) and a merge driver in the runtime. Add a corpus item (e.g. left-join-like merge).
+
+### 2026-06-16 — Phase 10.4 (merge + in=)
+- What changed: Match-merge of two+ datasets by BY variables, with `in=` dataset-option flags — enabling inner/left/full-join idioms in the DATA step.
+- Key files:
+  - `ast/statements.go` — `MergeStatement{Refs []DatasetRef}`, `DatasetRef{Name, In}`.
+  - `parser/statements.go` — `parseMerge` parses `merge ds1[(in=a)] ds2[(in=b)] ...;` (dataset options parsed; only `in=` interpreted, others skipped).
+  - `runtime/merge.go` — `buildMerge`: groups each source's rows by BY key, declares output columns in merge order, sorts distinct keys by BY values, and emits max(group sizes) rows per group. A short source holds its last values; its `in=` flag is 1 only on freshly-contributed rows. BY vars come from the group's representative (never overwritten with missing). Sets `first.`/`last.<byvar>` at group boundaries. `findMerge`/`byVarsOf`/`byKey`/`typedMissing` helpers.
+  - `runtime/datastep.go` — MERGE input mode (loops over precomputed `mergeRows`); MERGE statement applies the next combined row + WHERE; `in=` flag vars excluded from output (`inVars`).
+  - `runtime/datastep_test.go` — full merge (4 ids, missing fills, in= not output), inner join (`if n and s` → 2), left join (`if n` → 3).
+  - `corpus/data_step_merge_001/` — inner-join merge; harness now 22/22, 100%.
+- Decisions/deviations: Inputs assumed pre-sorted by BY (no auto-sort). `in=` flag = 1 on fresh-contribution rows, 0 on held rows (covers the common `if a`/`if a and b` idioms). first./last. set per full-key group (exact for single/innermost BY var; outer-var boundaries approximate for multi-key merges). Other dataset options (keep=/drop=/rename=) parsed-but-ignored. One-to-many holds the short side's last values (typical SAS behavior).
+- Verified: `go test ./...` green; `go vet` clean; `ass test corpus/` 22/22 (100%).
+- Next: Phase 10.5 — formats & informats. Implement `formats/` core numeric/char formats (`w.d`, `dollarw.d`, `commaw.d`, date/datetime) and informats; honor a FORMAT statement and apply formats in PROC PRINT and on output. Then 10.6 (date literals `'01JAN2020'd` + `proc format` user formats).
