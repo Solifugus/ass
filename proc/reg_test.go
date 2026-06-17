@@ -77,3 +77,38 @@ func TestOLSTooFewObs(t *testing.T) {
 		t.Error("expected error for too few observations")
 	}
 }
+
+func TestStudentTwoSided(t *testing.T) {
+	// Known two-tailed Student-t tail probabilities (cross-checked against R's
+	// 2*pt(-|t|, df)).
+	cases := []struct {
+		t    float64
+		df   int
+		want float64
+	}{
+		{2.3094, 3, 0.1041},
+		{0.5222, 3, 0.6376},
+		{0, 5, 1.0},
+		{2.5706, 5, 0.0500}, // the 5% two-sided critical value for 5 df
+	}
+	for _, c := range cases {
+		got := studentTwoSided(c.t, c.df)
+		if math.Abs(got-c.want) > 5e-4 {
+			t.Errorf("studentTwoSided(%v, %d) = %.4f, want %.4f", c.t, c.df, got, c.want)
+		}
+	}
+}
+
+func TestRegPValuesFromFit(t *testing.T) {
+	fit, err := ols(xyDS([]float64{1, 2, 3, 4, 5}, []float64{1, 3, 2, 5, 4}), "y", []string{"x"})
+	if err != nil {
+		t.Fatalf("ols: %v", err)
+	}
+	if fit.dfe != 3 {
+		t.Errorf("dfe = %d, want 3", fit.dfe)
+	}
+	// slope t≈2.31, df=3 -> p≈0.1041
+	if math.Abs(fit.pvalue[1]-0.1041) > 1e-3 {
+		t.Errorf("slope p = %.4f, want ~0.1041", fit.pvalue[1])
+	}
+}

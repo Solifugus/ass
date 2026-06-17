@@ -65,7 +65,7 @@ ass test corpus/
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
 - Informats (reading formatted input); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options: `where=`, `keep=`, `drop=`, `rename=` (statement forms work)
-- PROC REG/GLM significance probabilities (`Pr>|t|`) and GLM CLASS effects (OLS estimates/std-err/t/R² are supported)
+- PROC GLM CLASS effects / design-matrix coding (PROC REG/GLM OLS estimates, std-err, t-value, `Pr>|t|`, and R² are supported)
 - `--compare-output` / JSON harness output (tied to SAS-verified expected files)
 
 See `corpus/FEATURES.md` for the full feature-tag catalog and intended levels.

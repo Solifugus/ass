@@ -124,7 +124,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 - [x] **12.1 PROC MEANS / SUMMARY.** Descriptive stats (n, mean, std, min, max) with `class`/`by`. Acceptance: means corpus items pass.
 - [x] **12.2 PROC FREQ.** One- and two-way frequency tables. Acceptance: freq items pass. (One-way done; two-way cross-tabulation **NOW DONE** — `tables a*b;` renders a SAS-style crosstab with Frequency/Percent/Row Pct/Col Pct cells and margins; see the 2026-06-17 deferral-cleanup log.)
-- [x] **12.3 PROC REG / GLM (stretch).** Basic linear regression. Acceptance: reg item produces coefficients within tolerance. (Confirmed by user. OLS via normal equations; estimates/stderr/tvalue/R-square. Class effects & p-values deferred — see log.)
+- [x] **12.3 PROC REG / GLM (stretch).** Basic linear regression. Acceptance: reg item produces coefficients within tolerance. (Confirmed by user. OLS via normal equations; estimates/stderr/tvalue/R-square. **`Pr>|t|` p-values NOW DONE** via the regularized incomplete beta — see the 2026-06-17 log; GLM CLASS design-matrix effects still deferred.)
 
 ## Phase 13 — Final documentation & release
 
@@ -523,3 +523,10 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Not done: n-way (3+) tables (only the first two vars are crossed), `/ options` (nocol/norow/nopercent/chisq/etc.) are parsed-and-ignored, no chi-square or association statistics.
 - Verification: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` 29/29 (100%). Hand-checked: North/A 3 (30.00/60.00/75.00), North/B col 33.33, South/B 4 (40.00/80.00/66.67), col totals A=4 B=6, grand 10.
 - Status: **Deferral backlog 2 of 6 done.** Remaining: dataset options (`where=`/`keep=`/`drop=`/`rename=`); informats; `Pr>|t|` & GLM class effects; SAS-verified corpus outputs + `--compare-output`/JSON.
+
+### 2026-06-17 — Deferral cleanup: PROC REG Pr>|t| significance probabilities
+- What changed: PROC REG/GLM now reports the two-sided `Pr>|t|` p-value per parameter (deferral backlog item 5a; the GLM CLASS-effects half of item 5 remains).
+- Math: `studentTwoSided(t, df)` uses the identity Pr(|T|>t) = I_{df/(df+t²)}(df/2, 1/2); `betai`/`betacf` implement the regularized incomplete beta via the modified Lentz continued fraction — standard public-domain numerical math (no proprietary source). A new `Pr>|t|` column (format 7.4) joins Estimate/StdErr/tValue; degenerate fits (SSE=0 → MSE=0) yield a missing p-value.
+- Files: `proc/reg.go` (`olsFit.pvalue`/`dfe`, `studentTwoSided`/`betai`/`betacf`, output column), `proc/reg_test.go` (`TestStudentTwoSided` cross-checked against R's `2*pt(-|t|,df)`, `TestRegPValuesFromFit`).
+- Verification: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` 29/29. Hand-checked: x slope t=2.31, df=3 → p=0.1041; intercept t=0.52 → p=0.6376.
+- Status: **Deferral backlog 2.5 of 6 done** (item 5 split: p-values done, GLM CLASS effects pending). Remaining: dataset options (`where=`/`keep=`/`drop=`/`rename=`); informats; GLM CLASS effects; SAS-verified corpus outputs + `--compare-output`/JSON.

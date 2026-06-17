@@ -51,6 +51,7 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 	result.AddColumn(table.Column{Name: "Estimate", Kind: table.Numeric, Format: "12.5"})
 	result.AddColumn(table.Column{Name: "StdErr", Kind: table.Numeric, Format: "12.5"})
 	result.AddColumn(table.Column{Name: "tValue", Kind: table.Numeric, Format: "8.2"})
+	result.AddColumn(table.Column{Name: "Pr>|t|", Kind: table.Numeric, Format: "7.4"})
 
 	names := append([]string{"Intercept"}, model.Predictors...)
 	for i, nm := range names {
@@ -60,6 +61,7 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 			"estimate": table.Num(fit.beta[i]),
 			"stderr":   numOrMissing(fit.stderr[i]),
 			"tvalue":   numOrMissing(fit.tvalue[i]),
+			"pr>|t|":   numOrMissing(fit.pvalue[i]),
 		})
 	}
 
@@ -74,8 +76,10 @@ type olsFit struct {
 	beta    []float64
 	stderr  []float64
 	tvalue  []float64
+	pvalue  []float64 // two-sided Pr > |t|
 	rSquare float64
 	n       int
+	dfe     int
 }
 
 // ols fits y = b0 + b1*x1 + ... by ordinary least squares via the normal
@@ -148,21 +152,105 @@ func ols(ds *table.Dataset, response string, predictors []string) (olsFit, error
 
 	stderr := make([]float64, p)
 	tvalue := make([]float64, p)
+	pvalue := make([]float64, p)
 	for j := 0; j < p; j++ {
 		v := mse * inv[j][j]
 		if v > 0 {
 			stderr[j] = math.Sqrt(v)
 			tvalue[j] = beta[j] / stderr[j]
+			pvalue[j] = studentTwoSided(tvalue[j], dfe)
 		} else {
 			stderr[j] = math.NaN()
 			tvalue[j] = math.NaN()
+			pvalue[j] = math.NaN()
 		}
 	}
 	r2 := 0.0
 	if sst > 0 {
 		r2 = 1 - sse/sst
 	}
-	return olsFit{beta: beta, stderr: stderr, tvalue: tvalue, rSquare: r2, n: n}, nil
+	return olsFit{beta: beta, stderr: stderr, tvalue: tvalue, pvalue: pvalue, rSquare: r2, n: n, dfe: dfe}, nil
+}
+
+// studentTwoSided returns the two-sided tail probability Pr(|T| > |t|) for a
+// Student-t distribution with df degrees of freedom, using the identity
+// Pr(|T| > t) = I_{df/(df+t^2)}(df/2, 1/2) where I is the regularized
+// incomplete beta function.
+func studentTwoSided(t float64, df int) float64 {
+	if df <= 0 {
+		return math.NaN()
+	}
+	x := float64(df) / (float64(df) + t*t)
+	return betai(x, float64(df)/2, 0.5)
+}
+
+// betai is the regularized incomplete beta function I_x(a, b). It is standard
+// numerical mathematics (continued-fraction evaluation via the modified Lentz
+// algorithm) implemented from the public definition.
+func betai(x, a, b float64) float64 {
+	if x <= 0 {
+		return 0
+	}
+	if x >= 1 {
+		return 1
+	}
+	lbeta, _ := math.Lgamma(a + b)
+	la, _ := math.Lgamma(a)
+	lb, _ := math.Lgamma(b)
+	front := math.Exp(lbeta-la-lb+a*math.Log(x)+b*math.Log(1-x))
+	if x < (a+1)/(a+b+2) {
+		return front * betacf(x, a, b) / a
+	}
+	return 1 - front*betacf(1-x, b, a)/b
+}
+
+// betacf evaluates the continued fraction for the incomplete beta function.
+func betacf(x, a, b float64) float64 {
+	const (
+		maxIter = 200
+		eps     = 3e-14
+		tiny    = 1e-300
+	)
+	qab, qap, qam := a+b, a+1, a-1
+	c := 1.0
+	d := 1 - qab*x/qap
+	if math.Abs(d) < tiny {
+		d = tiny
+	}
+	d = 1 / d
+	h := d
+	for m := 1; m <= maxIter; m++ {
+		mf := float64(m)
+		// even step
+		aa := mf * (b - mf) * x / ((qam + 2*mf) * (a + 2*mf))
+		d = 1 + aa*d
+		if math.Abs(d) < tiny {
+			d = tiny
+		}
+		c = 1 + aa/c
+		if math.Abs(c) < tiny {
+			c = tiny
+		}
+		d = 1 / d
+		h *= d * c
+		// odd step
+		aa = -(a + mf) * (qab + mf) * x / ((a + 2*mf) * (qap + 2*mf))
+		d = 1 + aa*d
+		if math.Abs(d) < tiny {
+			d = tiny
+		}
+		c = 1 + aa/c
+		if math.Abs(c) < tiny {
+			c = tiny
+		}
+		d = 1 / d
+		del := d * c
+		h *= del
+		if math.Abs(del-1) < eps {
+			break
+		}
+	}
+	return h
 }
 
 // invert returns the inverse of a square matrix via Gauss-Jordan elimination
