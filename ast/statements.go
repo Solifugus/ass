@@ -361,14 +361,23 @@ func (c *ClassStatement) String() string {
 	return "class " + strings.Join(c.Vars, " ") + ";"
 }
 
-// TablesStatement is `tables <vars...>;` — the variables PROC FREQ tabulates.
+// TablesStatement is `tables <request...>;` — the tables PROC FREQ produces.
+// Each request is one or more variables crossed with `*`: a one-element request
+// is a one-way frequency table, a two-element request is a two-way
+// cross-tabulation. Vars is the flattened variable list (kept for callers that
+// only need one-way names).
 type TablesStatement struct {
-	Vars []string
+	Vars     []string
+	Requests [][]string
 }
 
 func (t *TablesStatement) statementNode() {}
 func (t *TablesStatement) String() string {
-	return "tables " + strings.Join(t.Vars, " ") + ";"
+	parts := make([]string, len(t.Requests))
+	for i, req := range t.Requests {
+		parts[i] = strings.Join(req, "*")
+	}
+	return "tables " + strings.Join(parts, " ") + ";"
 }
 
 // VarStatement is `var <vars...>;` (PROC PRINT column selection, etc.).

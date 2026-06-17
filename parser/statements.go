@@ -465,7 +465,7 @@ func (p *Parser) parseProcStatement() ast.Statement {
 	case p.identIs("class"):
 		return &ast.ClassStatement{Vars: p.parseProcNameList()}
 	case p.identIs("tables") || p.identIs("table"):
-		return &ast.TablesStatement{Vars: p.parseProcNameList()}
+		return p.parseTables()
 	case p.identIs("model"):
 		return p.parseModel()
 	case p.identIs("value"):
@@ -589,6 +589,38 @@ func (p *Parser) parseModel() ast.Statement {
 	}
 	for p.curIs(lexer.IDENT) {
 		stmt.Predictors = append(stmt.Predictors, p.cur.Literal)
+		p.next()
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseTables parses a PROC FREQ `tables <request ...> [/ options];` statement.
+// A request is one or more variables joined with `*` (e.g. `a` one-way,
+// `a*b` two-way). Space-separated requests are independent. Any `/ options`
+// tail is skipped.
+func (p *Parser) parseTables() ast.Statement {
+	p.next() // 'tables'/'table'
+	stmt := &ast.TablesStatement{}
+	var cur []string
+	for p.curIs(lexer.IDENT) || p.curIs(lexer.STAR) {
+		if p.curIs(lexer.STAR) {
+			p.next()
+			continue
+		}
+		cur = append(cur, p.cur.Literal)
+		stmt.Vars = append(stmt.Vars, p.cur.Literal)
+		p.next()
+		if !p.curIs(lexer.STAR) { // request ends unless the next token crosses it
+			stmt.Requests = append(stmt.Requests, cur)
+			cur = nil
+		}
+	}
+	if len(cur) > 0 {
+		stmt.Requests = append(stmt.Requests, cur)
+	}
+	// Skip any trailing `/ options` up to the terminating semicolon.
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
 		p.next()
 	}
 	p.expectSemicolon()

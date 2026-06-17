@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/solifugus/ass/table"
@@ -51,3 +52,44 @@ func TestFreqExcludesMissing(t *testing.T) {
 		t.Errorf("percent = %v, want 100 (2 of 2 non-missing)", got.Display())
 	}
 }
+
+func salesDS() *table.Dataset {
+	ds := table.NewDataset("", "sales")
+	ds.AddColumn(table.Column{Name: "region", Kind: table.Character})
+	ds.AddColumn(table.Column{Name: "product", Kind: table.Character})
+	rows := [][2]string{
+		{"North", "A"}, {"North", "A"}, {"North", "B"}, {"North", "A"}, {"North", "B"},
+		{"South", "A"}, {"South", "B"}, {"South", "B"}, {"South", "B"}, {"South", "B"},
+	}
+	for _, r := range rows {
+		ds.AppendRow(table.Row{"region": table.Char(r[0]), "product": table.Char(r[1])})
+	}
+	return ds
+}
+
+func TestFreqTwoWayCrossTab(t *testing.T) {
+	out := renderCrossTab(salesDS(), "region", "product")
+	// Header and structure.
+	for _, want := range []string{
+		"Table of region by product",
+		"Frequency", "Percent", "Row Pct", "Col Pct",
+		"North", "South", "Total",
+	} {
+		if !contains(out, want) {
+			t.Errorf("crosstab missing %q\n%s", want, out)
+		}
+	}
+	// Spot-check computed cells: North/A freq 3, row pct 60.00, col pct 75.00;
+	// North/B col pct 33.33; grand total 10.
+	for _, want := range []string{"60.00", "75.00", "33.33", "66.67"} {
+		if !contains(out, want) {
+			t.Errorf("crosstab missing computed value %q\n%s", want, out)
+		}
+	}
+	// Grand total line: column totals 4, 6 and grand 10.
+	if !contains(out, "100.00") {
+		t.Errorf("crosstab missing grand-total percent 100.00\n%s", out)
+	}
+}
+
+func contains(s, sub string) bool { return strings.Contains(s, sub) }

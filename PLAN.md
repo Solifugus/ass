@@ -123,7 +123,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 ## Phase 12 — Statistical procedures (Level 6, later)
 
 - [x] **12.1 PROC MEANS / SUMMARY.** Descriptive stats (n, mean, std, min, max) with `class`/`by`. Acceptance: means corpus items pass.
-- [x] **12.2 PROC FREQ.** One- and two-way frequency tables. Acceptance: freq items pass. (One-way done; two-way cross-tabulation deferred — see log.)
+- [x] **12.2 PROC FREQ.** One- and two-way frequency tables. Acceptance: freq items pass. (One-way done; two-way cross-tabulation **NOW DONE** — `tables a*b;` renders a SAS-style crosstab with Frequency/Percent/Row Pct/Col Pct cells and margins; see the 2026-06-17 deferral-cleanup log.)
 - [x] **12.3 PROC REG / GLM (stretch).** Basic linear regression. Acceptance: reg item produces coefficients within tolerance. (Confirmed by user. OLS via normal equations; estimates/stderr/tvalue/R-square. Class effects & p-values deferred — see log.)
 
 ## Phase 13 — Final documentation & release
@@ -514,3 +514,12 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Not done: PICTURE/INVALUE statements, format catalogs on disk (`library=`/`fmtlib`), applying user formats inside PROC MEANS/FREQ/SQL output (PROC PRINT covers the corpus). Informats still deferred.
 - Verification: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` 28/28 (100%). End-to-end check: ages 8/16/45/30 → Child/Teen/Adult/Adult; sex F/M/F/X → Female/Male/Female/Unknown.
 - Status: **Deferral backlog item 1 of 6 done.** Remaining: two-way PROC FREQ; dataset options (`where=`/`keep=`/`drop=`/`rename=`); informats; `Pr>|t|` & GLM class effects; SAS-verified corpus outputs + `--compare-output`/JSON.
+
+### 2026-06-17 — Deferral cleanup: two-way PROC FREQ cross-tabulation
+- What changed: `proc freq; tables a*b;` now produces a SAS-style two-way cross-tabulation (deferral backlog item 2 of 6). Previously `tables` parsed only space-separated one-way variable lists and the `*` crossing was unsupported.
+- Parser: new `parseTables` builds `TablesStatement.Requests [][]string` — each request is one var (one-way) or `v1*v2` (two-way); a trailing `/ options` tail is skipped. `TablesStatement` keeps a flattened `Vars` for one-way callers.
+- Rendering: `renderCrossTab` (in proc/freq.go) emits a corner legend (Frequency / Percent / Row Pct / Col Pct once) and one four-line band per row value; interior cells show frequency, percent of grand total, row pct, and col pct; right/bottom margins carry row/column totals (freq + pct) and the grand total. Missing values in either variable are excluded. Values sorted via `Value.Compare`; per-line trailing whitespace trimmed.
+- Files: `ast/statements.go` (`TablesStatement.Requests`), `parser/statements.go` (`parseTables` + dispatch; + test), `proc/freq.go` (`Run` dispatch on request arity, `sortedDistinct`, `renderCrossTab`; + crosstab test). Corpus item `proc_freq_002`.
+- Not done: n-way (3+) tables (only the first two vars are crossed), `/ options` (nocol/norow/nopercent/chisq/etc.) are parsed-and-ignored, no chi-square or association statistics.
+- Verification: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` 29/29 (100%). Hand-checked: North/A 3 (30.00/60.00/75.00), North/B col 33.33, South/B 4 (40.00/80.00/66.67), col totals A=4 B=6, grand 10.
+- Status: **Deferral backlog 2 of 6 done.** Remaining: dataset options (`where=`/`keep=`/`drop=`/`rename=`); informats; `Pr>|t|` & GLM class effects; SAS-verified corpus outputs + `--compare-output`/JSON.

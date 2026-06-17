@@ -174,3 +174,31 @@ run;`
 		}
 	}
 }
+
+func TestParseTablesCrossing(t *testing.T) {
+	src := `proc freq data=d; tables a b c*d / nocol; run;`
+	p := New(src)
+	prog := p.ParseProgram()
+	if errs := p.Errors(); len(errs) != 0 {
+		t.Fatalf("parse errors: %v", errs)
+	}
+	ps := prog.Steps[0].(*ast.ProcStep)
+	var tab *ast.TablesStatement
+	for _, s := range ps.Body {
+		if ts, ok := s.(*ast.TablesStatement); ok {
+			tab = ts
+		}
+	}
+	if tab == nil {
+		t.Fatal("no TablesStatement parsed")
+	}
+	if len(tab.Requests) != 3 {
+		t.Fatalf("requests = %v, want 3 (a, b, c*d)", tab.Requests)
+	}
+	if len(tab.Requests[0]) != 1 || tab.Requests[0][0] != "a" {
+		t.Errorf("request 0 = %v, want [a]", tab.Requests[0])
+	}
+	if len(tab.Requests[2]) != 2 || tab.Requests[2][0] != "c" || tab.Requests[2][1] != "d" {
+		t.Errorf("request 2 = %v, want [c d]", tab.Requests[2])
+	}
+}

@@ -1,0 +1,16 @@
+id: proc_freq_002
+source: hand-written
+license: MIT
+features:
+  - proc-freq
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC FREQ two-way cross-tabulation of region by product. Cells stack
+  Frequency, Percent (of grand total), Row Pct, Col Pct, with row/column
+  total margins and a grand total of 10. Expected North/A: 3, 30.00%, row
+  60.00%, col 75.00%; North/B col 33.33%; South/B 4, 40.00%, row 80.00%,
+  col 66.67%. Column totals A=4, B=6.

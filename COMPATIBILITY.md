@@ -37,7 +37,7 @@ ass test corpus/
 | macro-let | 1/1 | 100.0% |
 | macro-var | 3/3 | 100.0% |
 | merge | 1/1 | 100.0% |
-| proc-freq | 1/1 | 100.0% |
+| proc-freq | 2/2 | 100.0% |
 | proc-means | 1/1 | 100.0% |
 | proc-print | 17/17 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
@@ -61,7 +61,7 @@ ass test corpus/
 
 ## Known unsupported / deferred constructs
 
-- Two-way PROC FREQ cross-tabulation (one-way only)
+- PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
 - Informats (reading formatted input); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options: `where=`, `keep=`, `drop=`, `rename=` (statement forms work)
