@@ -31,6 +31,19 @@ func New(input string) *Parser {
 // Errors returns any errors accumulated during parsing.
 func (p *Parser) Errors() []string { return p.errors }
 
+// ParseExpressionString parses a single SAS expression in isolation, returning
+// the expression node (or nil on a parse error). It is a convenience for callers
+// — such as the runtime's tests and any future expression-only contexts — that
+// need to evaluate an expression outside a full step.
+func ParseExpressionString(src string) ast.Expression {
+	p := New(src)
+	expr := p.parseExpression(pLOWEST)
+	if len(p.errors) > 0 {
+		return nil
+	}
+	return expr
+}
+
 func (p *Parser) next() {
 	p.cur = p.peek
 	p.peek = p.l.NextToken()
