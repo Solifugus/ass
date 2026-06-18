@@ -1,0 +1,17 @@
+id: data_step_dataset_options_001
+source: hand-written
+license: MIT
+features:
+  - dataset-options
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  Dataset options on SET (where= keeps age>=30, keep= selects id/age/dept,
+  rename= turns age into years) and on PROC PRINT data= (where=(dept='B')).
+  ADULTS has 3 rows (years 40/33/55) with columns id, years, dept. The second
+  PROC PRINT shows the two dept='B' rows (id 2 and 5).

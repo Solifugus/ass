@@ -74,8 +74,9 @@ func (p *Parser) parseDataStep() ast.Step {
 	p.next() // consume DATA
 	ds := &ast.DataStep{}
 	for p.curIs(lexer.IDENT) {
-		ds.Datasets = append(ds.Datasets, p.cur.Literal)
-		p.next()
+		ref := p.parseDatasetRef()
+		ds.Datasets = append(ds.Datasets, ref.Name)
+		ds.Outputs = append(ds.Outputs, ref)
 	}
 	p.expectSemicolon()
 	ds.Body = p.parseStepBody(p.parseDataStatement)
@@ -97,11 +98,13 @@ func (p *Parser) parseProcStep() ast.Step {
 		p.next()
 		if p.curIs(lexer.EQ) {
 			p.next()
-			value := p.cur.Literal
-			p.next()
-			if name == "data" {
-				ps.Data = value
+			if name == "data" && p.curIs(lexer.IDENT) {
+				ref := p.parseDatasetRef()
+				ps.Data = ref.Name
+				ps.DataOptions = ref.Options
 			} else {
+				value := p.cur.Literal
+				p.next()
 				ps.Options = append(ps.Options, ast.ProcOption{Name: name, Value: value})
 			}
 		} else {

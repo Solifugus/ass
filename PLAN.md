@@ -78,7 +78,7 @@ If you are a fresh Claude Code instance with no memory of prior work:
 ## Phase 6 — Expressions, functions & filtering polish
 
 - [x] **6.1 Expand function library.** Add commonly-used DATA step functions: `substr`, `trim`, `left`, `length`, `scan`, `index`, `int`, `round`, `abs`, `min`, `max`, `mean`/`sum` (varargs). Table-test each. Acceptance: function tests pass.
-- [x] **6.2 `where` vs subsetting if.** Ensure `where` clauses (DATA step option and statement) filter correctly and document the difference from subsetting `if`. Acceptance: where tests pass. (Statement form done; `data=ds(where=...)` dataset-option form deferred — see progress log.)
+- [x] **6.2 `where` vs subsetting if.** Ensure `where` clauses (DATA step option and statement) filter correctly and document the difference from subsetting `if`. Acceptance: where tests pass. (Statement form done; `data=ds(where=...)` dataset-option form **NOW DONE** alongside `keep=`/`drop=`/`rename=` — see the 2026-06-17 dataset-options log.)
 - [x] **6.3 Type coercion & formatting basics.** Implement automatic numeric↔character coercion rules and default numeric printing (BEST. format approximation). Acceptance: coercion tests pass.
 
 ## Phase 7 — PROC SORT
@@ -539,3 +539,12 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Not done: column/formatted input (`input name $ 1-10 age 11-13;`), `@`/`#` pointer controls, time/datetime informats, `proc format` user-defined INVALUE informats.
 - Verification: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` 30/30 (100%). Hand-checked: "1,234"→1234 ($1,234.00), "15JAN2020" via date9. == "01/15/2020" via mmddyy10.
 - Status: **Deferral backlog: 4 of 6 substantially done** (PROC FORMAT, two-way FREQ, REG p-values, informats). Remaining: dataset options (`where=`/`keep=`/`drop=`/`rename=`) — the large ETL one; GLM CLASS effects; SAS-verified corpus outputs + `--compare-output`/JSON.
+
+### 2026-06-17 — Deferral cleanup: dataset options (keep=/drop=/rename=/where=)
+- What changed: dataset options in parentheses after a dataset name are now parsed and applied at all four sites (deferral backlog item 5 of 6; the project's stated ETL-first priority): SET sources, MERGE sources, DATA output datasets, and PROC `data=`. Previously only MERGE's `in=` was interpreted and other options were silently skipped.
+- Parser: a shared `parseDatasetRef` / `parseDatasetOptionParen` handles `(keep= drop= rename=(o=n ...) where=(...) in=...)`; `keep`/`drop` take space-separated var lists, `rename` a paren list, `where` a parsed expression (via `parseParenCond`), unknown options are skipped. `SetStatement` migrated from `Datasets []string` to `Refs []DatasetRef`; `DatasetRef` gained `Options`; `DataStep` gained `Outputs []DatasetRef`; `ProcStep` gained `DataOptions`.
+- Runtime: `applyDatasetOptions(src, opts)` (runtime/dataset_options.go) returns a non-mutating view — WHERE filters rows (evaluated via the PDV/`Eval`), KEEP/DROP select columns, RENAME renames; on input, KEEP/DROP/WHERE use original names and RENAME applies after (SAS order). Wired into `collectSetRows`, `buildMerge`, the DATA output save loop, and PROC dispatch (`runProcStep` registers a temp filtered view under `_dataopt_<name>`, runs the proc against it, then `lib.Delete`s it). Added `table.Library.Delete`.
+- Not done: `firstobs=`/`obs=`/`rename=` on output collision edge cases, numbered var-list ranges in keep/drop (`keep=x1-x5`), `where=` referencing renamed names, dataset options on PROC `out=`.
+- Files: `ast/statements.go`, `ast/ast.go`, `parser/parser.go`, `parser/statements.go` (+test), `runtime/dataset_options.go` (new, +test), `runtime/datastep.go`, `runtime/merge.go`, `runtime/program.go`, `table/library.go`. Corpus item `data_step_dataset_options_001`; FEATURES `dataset-options`.
+- Verification: `go build`/`go vet`/`go test ./...` clean; `ass test corpus/` 31/31 (100%). Hand-checked SET where+keep+rename, PROC where, DATA drop, MERGE in=+rename all produce correct columns/rows.
+- Status: **Deferral backlog: 5 of 6 done.** Remaining: GLM CLASS effects (categorical design-matrix coding); SAS-verified corpus outputs + `--compare-output`/JSON (blocked on real-SAS reference output, per the standing 5.2 decision).

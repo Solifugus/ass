@@ -31,6 +31,11 @@ func (l *Library) Get(name string) (*Dataset, bool) {
 	return ds, ok
 }
 
+// Delete removes a dataset by name (case-insensitive). It is a no-op if absent.
+func (l *Library) Delete(name string) {
+	delete(l.datasets, strings.ToUpper(datasetKey(name)))
+}
+
 // Has reports whether a dataset with the given name exists.
 func (l *Library) Has(name string) bool {
 	_, ok := l.Get(name)

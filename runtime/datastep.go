@@ -91,7 +91,9 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 
 	if mrg := findMerge(ds.Body); mrg != nil {
 		// Match-merge: one iteration per precomputed combined row.
-		d.buildMerge(mrg, byVarsOf(ds.Body))
+		if err := d.buildMerge(mrg, byVarsOf(ds.Body)); err != nil {
+			return err
+		}
 		for d.mergePtr < len(d.mergeRows) {
 			start := d.mergePtr
 			if err := d.runIteration(ds.Body); err != nil {
@@ -103,7 +105,11 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 		}
 	} else if hasSetStatement(ds.Body) {
 		// Dataset-driven loop: one iteration per input row across all SET datasets.
-		d.setRows = d.collectSetRows(ds.Body)
+		setRows, err := d.collectSetRows(ds.Body)
+		if err != nil {
+			return err
+		}
+		d.setRows = setRows
 		d.setupByGroups(ds.Body)
 		for d.setPtr < len(d.setRows) {
 			start := d.setPtr
@@ -133,9 +139,18 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 		}
 	}
 
-	for _, out := range d.outputs {
-		d.lib.Put(out)
-		logger.DatasetNote(out.Lib, out.Name, out.NObs(), len(out.Columns))
+	for i, out := range d.outputs {
+		final := out
+		if i < len(ds.Outputs) && !ds.Outputs[i].Options.IsEmpty() {
+			view, err := applyDatasetOptions(out, ds.Outputs[i].Options)
+			if err != nil {
+				return err
+			}
+			view.Lib, view.Name = out.Lib, out.Name
+			final = view
+		}
+		d.lib.Put(final)
+		logger.DatasetNote(final.Lib, final.Name, final.NObs(), len(final.Columns))
 	}
 	return nil
 }
@@ -495,24 +510,28 @@ func (d *dataStep) applySet(sr sourceRow) {
 // collectSetRows resolves the SET statement's datasets from the library and
 // returns their rows concatenated in statement order (SAS reads each dataset to
 // completion before the next). Unknown datasets are skipped.
-func (d *dataStep) collectSetRows(stmts []ast.Statement) []sourceRow {
+func (d *dataStep) collectSetRows(stmts []ast.Statement) ([]sourceRow, error) {
 	var rows []sourceRow
 	for _, s := range stmts {
 		set, ok := s.(*ast.SetStatement)
 		if !ok {
 			continue
 		}
-		for _, name := range set.Datasets {
-			src, found := d.lib.Get(name)
+		for _, ref := range set.Refs {
+			src, found := d.lib.Get(ref.Name)
 			if !found {
 				continue
 			}
-			for _, r := range src.Rows {
-				rows = append(rows, sourceRow{row: r, ds: src})
+			view, err := applyDatasetOptions(src, ref.Options)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range view.Rows {
+				rows = append(rows, sourceRow{row: r, ds: view})
 			}
 		}
 	}
-	return rows
+	return rows, nil
 }
 
 // defineArrays registers every ARRAY statement's element list in the PDV and

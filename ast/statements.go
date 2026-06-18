@@ -16,21 +16,43 @@ func (a *AssignmentStatement) String() string {
 	return a.Name + " = " + str(a.Value) + ";"
 }
 
-// SetStatement is `set <datasets...>;`.
+// DatasetOptions are the options that may follow a dataset name in parentheses,
+// e.g. `ds(keep=a b rename=(x=y) where=(a>0))`. Any combination may be present;
+// an empty DatasetOptions (or nil) means no filtering. Rename maps a lowercased
+// original variable name to its new name.
+type DatasetOptions struct {
+	Keep   []string
+	Drop   []string
+	Rename map[string]string
+	Where  Expression
+}
+
+// IsEmpty reports whether the options impose no transformation.
+func (o *DatasetOptions) IsEmpty() bool {
+	return o == nil || (len(o.Keep) == 0 && len(o.Drop) == 0 && len(o.Rename) == 0 && o.Where == nil)
+}
+
+// SetStatement is `set <dataset[(options)] ...>;`.
 type SetStatement struct {
-	Datasets []string
+	Refs []DatasetRef
 }
 
 func (s *SetStatement) statementNode() {}
 func (s *SetStatement) String() string {
-	return "set " + strings.Join(s.Datasets, " ") + ";"
+	parts := make([]string, len(s.Refs))
+	for i, r := range s.Refs {
+		parts[i] = r.Name
+	}
+	return "set " + strings.Join(parts, " ") + ";"
 }
 
-// DatasetRef is a dataset reference in a SET/MERGE statement, with optional
-// dataset options. In is the `in=` flag variable name ("" if absent).
+// DatasetRef is a dataset reference in a SET/MERGE/DATA statement, with optional
+// dataset options. In is the `in=` flag variable name ("" if absent); Options is
+// nil when no parenthesized options were given.
 type DatasetRef struct {
-	Name string
-	In   string
+	Name    string
+	In      string
+	Options *DatasetOptions
 }
 
 // MergeStatement is `merge ds1 [ds2 ...];`, match-merged by the step's BY

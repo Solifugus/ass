@@ -25,12 +25,14 @@ ass test corpus/
 | assignment | 4/4 | 100.0% |
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
-| data-step | 24/24 | 100.0% |
+| data-step | 26/26 | 100.0% |
+| dataset-options | 1/1 | 100.0% |
 | datalines | 5/5 | 100.0% |
 | do-loop | 2/2 | 100.0% |
 | expressions | 2/2 | 100.0% |
 | formats | 3/3 | 100.0% |
 | if-then-else | 3/3 | 100.0% |
+| informats | 1/1 | 100.0% |
 | input | 5/5 | 100.0% |
 | macro-control | 1/1 | 100.0% |
 | macro-def | 2/2 | 100.0% |
@@ -39,7 +41,7 @@ ass test corpus/
 | merge | 1/1 | 100.0% |
 | proc-freq | 2/2 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 17/17 | 100.0% |
+| proc-print | 19/19 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
 | proc-sort | 3/3 | 100.0% |
 | proc-sql | 4/4 | 100.0% |
@@ -64,7 +66,7 @@ ass test corpus/
 - PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
 - Column/pointer input (`input name $ 1-10 age 11-13;`, `@`/`#`) and time/datetime informats (list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
-- Dataset options: `where=`, `keep=`, `drop=`, `rename=` (statement forms work)
+- Dataset options `firstobs=`/`obs=`, numbered var-list ranges in `keep=`/`drop=` (e.g. `keep=x1-x5`), and options on PROC `out=` (`keep=`/`drop=`/`rename=`/`where=` on SET/MERGE/DATA/PROC `data=` are supported)
 - PROC GLM CLASS effects / design-matrix coding (PROC REG/GLM OLS estimates, std-err, t-value, `Pr>|t|`, and R² are supported)
 - `--compare-output` / JSON harness output (tied to SAS-verified expected files)
 

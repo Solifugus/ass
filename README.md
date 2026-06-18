@@ -66,6 +66,7 @@ Obs  name  age
 | Area | Highlights |
 |------|------------|
 | DATA step | `input`/`datalines`, `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `output` |
+| Dataset options | `(keep= drop= rename=(o=n) where=(...))` on `set`/`merge`/`data`/proc `data=` |
 | Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
 | PROC PRINT | `var`, `noobs`, `label`, applied formats |
 | PROC SORT | `by` (+ `descending`), `out=`, `nodupkey` |
@@ -78,7 +79,7 @@ Obs  name  age
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
 
-Not yet supported (selected): dataset options (`where=`/`keep=`/`rename=`), column/pointer input, PROC FREQ n-way tables and association statistics, PROC GLM CLASS effects. See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
+Not yet supported (selected): column/pointer input, PROC FREQ n-way tables and association statistics, PROC GLM CLASS effects. See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
 
 ## Contributing
 

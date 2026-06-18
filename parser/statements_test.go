@@ -225,3 +225,34 @@ func TestParseInputInformats(t *testing.T) {
 		t.Errorf("d: %+v", in.Vars[3])
 	}
 }
+
+func TestParseDatasetOptions(t *testing.T) {
+	body := dataBody(t, "data out; set a(where=(x>0) keep=x y rename=(x=z) in=ina); run;")
+	set, ok := body[0].(*ast.SetStatement)
+	if !ok {
+		t.Fatalf("stmt 0 is %T, want SetStatement", body[0])
+	}
+	if len(set.Refs) != 1 {
+		t.Fatalf("got %d refs, want 1", len(set.Refs))
+	}
+	ref := set.Refs[0]
+	if ref.Name != "a" {
+		t.Errorf("name = %q, want a", ref.Name)
+	}
+	if ref.In != "ina" {
+		t.Errorf("in = %q, want ina", ref.In)
+	}
+	o := ref.Options
+	if o == nil {
+		t.Fatal("options nil")
+	}
+	if len(o.Keep) != 2 || o.Keep[0] != "x" || o.Keep[1] != "y" {
+		t.Errorf("keep = %v, want [x y]", o.Keep)
+	}
+	if o.Rename["x"] != "z" {
+		t.Errorf("rename = %v, want x->z", o.Rename)
+	}
+	if o.Where == nil {
+		t.Error("where not parsed")
+	}
+}

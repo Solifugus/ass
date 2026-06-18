@@ -19,10 +19,36 @@ func RunProgram(prog *ast.Program, lib *table.Library, logger *log.Logger) error
 				return err
 			}
 		case *ast.ProcStep:
-			if err := proc.Run(lib, s, logger); err != nil {
+			if err := runProcStep(s, lib, logger); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// runProcStep dispatches a PROC step, first applying any dataset options on its
+// data= source. The filtered view is registered under a temporary name the proc
+// reads from, then removed so it does not leak into the library.
+func runProcStep(s *ast.ProcStep, lib *table.Library, logger *log.Logger) error {
+	if s.DataOptions.IsEmpty() {
+		return proc.Run(lib, s, logger)
+	}
+	src, ok := lib.Get(s.Data)
+	if !ok {
+		return proc.Run(lib, s, logger) // let the proc report the missing dataset
+	}
+	view, err := applyDatasetOptions(src, s.DataOptions)
+	if err != nil {
+		return err
+	}
+	tmp := "_dataopt_" + s.Data
+	view.Name = tmp
+	lib.Put(view)
+	defer lib.Delete(tmp)
+
+	clone := *s
+	clone.Data = tmp
+	clone.DataOptions = nil
+	return proc.Run(lib, &clone, logger)
 }

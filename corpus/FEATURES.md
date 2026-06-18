@@ -19,6 +19,7 @@ level it first becomes relevant at, matching the build order in `PLAN.md`.
 | `missing-values` | 1 | Numeric `.` and character `''` missing values and their propagation. |
 | `set` | 1 | Reading rows from an existing dataset with `set <ds>;`. |
 | `keep-drop` | 1 | Column selection via `keep`/`drop` statements or dataset options. |
+| `dataset-options` | 5 | Dataset options `(keep= drop= rename=(o=n) where=(...))` on SET/MERGE/DATA/PROC `data=`. |
 | `expressions` | 1 | Arithmetic, comparison, and logical operator evaluation. |
 | `functions` | 1 | Built-in DATA step functions (`substr`, `trim`, `round`, `sum`, ...). |
 | `where` | 2 | `where` filtering (DATA step option and statement), vs. subsetting `if`. |

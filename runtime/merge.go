@@ -41,7 +41,7 @@ type mergeSource struct {
 // in= flag is 1 only on rows it freshly contributes. BY variables are taken from
 // whichever source has the group (never overwritten with missing). Automatic
 // first./last.<byvar> are set at group boundaries.
-func (d *dataStep) buildMerge(m *ast.MergeStatement, byVars []string) {
+func (d *dataStep) buildMerge(m *ast.MergeStatement, byVars []string) error {
 	d.byVars = byVars
 	d.inVars = make(map[string]bool)
 
@@ -54,9 +54,13 @@ func (d *dataStep) buildMerge(m *ast.MergeStatement, byVars []string) {
 	// merge order (so column layout is dataset1 then dataset2's new vars).
 	var sources []mergeSource
 	for _, ref := range m.Refs {
-		ds, ok := d.lib.Get(ref.Name)
+		raw, ok := d.lib.Get(ref.Name)
 		if !ok {
 			continue
+		}
+		ds, err := applyDatasetOptions(raw, ref.Options)
+		if err != nil {
+			return err
 		}
 		src := mergeSource{ref: ref, ds: ds, groups: map[string][]table.Row{}}
 		for _, r := range ds.Rows {
@@ -155,6 +159,7 @@ func (d *dataStep) buildMerge(m *ast.MergeStatement, byVars []string) {
 			}
 		}
 	}
+	return nil
 }
 
 // byKey builds a canonical grouping key from a row's BY-variable values.

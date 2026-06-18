@@ -245,41 +245,155 @@ func (p *Parser) parseWhere() ast.Statement {
 // parseSet parses `set <dataset...>;`.
 func (p *Parser) parseSet() ast.Statement {
 	p.next() // 'set'
-	stmt := &ast.SetStatement{Datasets: p.parseDatasetNames()}
+	stmt := &ast.SetStatement{}
+	for p.curIs(lexer.IDENT) {
+		stmt.Refs = append(stmt.Refs, p.parseDatasetRef())
+	}
 	p.expectSemicolon()
 	return stmt
 }
 
-// parseMerge parses `merge ds1[(in=a)] ds2[(in=b)] ...;`.
+// parseMerge parses `merge ds1[(opts)] ds2[(opts)] ...;` where opts may include
+// in=, keep=, drop=, rename=(...), where=(...).
 func (p *Parser) parseMerge() ast.Statement {
 	p.next() // 'merge'
 	stmt := &ast.MergeStatement{}
 	for p.curIs(lexer.IDENT) {
-		ref := ast.DatasetRef{Name: p.cur.Literal}
-		p.next()
-		if p.curIs(lexer.LPAREN) {
-			p.next() // '('
-			// Dataset options: only in= is interpreted; others are skipped.
-			for !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
-				opt := strings.ToLower(p.cur.Literal)
-				p.next()
-				if p.curIs(lexer.EQ) {
-					p.next()
-					val := p.cur.Literal
-					p.next()
-					if opt == "in" {
-						ref.In = val
-					}
-				}
-			}
-			if p.curIs(lexer.RPAREN) {
-				p.next()
-			}
-		}
-		stmt.Refs = append(stmt.Refs, ref)
+		stmt.Refs = append(stmt.Refs, p.parseDatasetRef())
 	}
 	p.expectSemicolon()
 	return stmt
+}
+
+// parseDatasetRef parses a (possibly library-qualified) dataset name followed by
+// an optional parenthesized dataset-option list.
+func (p *Parser) parseDatasetRef() ast.DatasetRef {
+	ref := ast.DatasetRef{Name: p.parseQualifiedName()}
+	if p.curIs(lexer.LPAREN) {
+		ref.In, ref.Options = p.parseDatasetOptionParen()
+	}
+	return ref
+}
+
+// parseQualifiedName reads `name` or `lib.name`.
+func (p *Parser) parseQualifiedName() string {
+	name := p.cur.Literal
+	p.next()
+	if p.curIs(lexer.DOT) {
+		p.next()
+		if p.curIs(lexer.IDENT) {
+			name += "." + p.cur.Literal
+			p.next()
+		}
+	}
+	return name
+}
+
+// parseDatasetOptionParen parses `(keep=... drop=... rename=(o=n ...) where=(...)
+// in=flag)`. It returns the in= flag (if any) and the remaining options (nil if
+// none impose a transformation). Assumes cur is the opening LPAREN.
+func (p *Parser) parseDatasetOptionParen() (in string, opts *ast.DatasetOptions) {
+	p.next() // '('
+	opts = &ast.DatasetOptions{}
+	for !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+		if !p.curIs(lexer.IDENT) {
+			p.next()
+			continue
+		}
+		key := strings.ToLower(p.cur.Literal)
+		p.next()
+		if !p.curIs(lexer.EQ) {
+			continue
+		}
+		p.next() // '='
+		switch key {
+		case "keep":
+			opts.Keep = append(opts.Keep, p.parseOptionVarList()...)
+		case "drop":
+			opts.Drop = append(opts.Drop, p.parseOptionVarList()...)
+		case "rename":
+			if opts.Rename == nil {
+				opts.Rename = map[string]string{}
+			}
+			p.parseRenameList(opts.Rename)
+		case "where":
+			opts.Where = p.parseParenCond()
+		case "in":
+			if p.curIs(lexer.IDENT) {
+				in = p.cur.Literal
+				p.next()
+			}
+		default:
+			p.skipOptionValue()
+		}
+	}
+	if p.curIs(lexer.RPAREN) {
+		p.next()
+	}
+	if opts.IsEmpty() {
+		opts = nil
+	}
+	return in, opts
+}
+
+// parseOptionVarList collects a space-separated variable list (for keep=/drop=),
+// stopping at `)`, `;`, or the start of the next `option=` clause.
+func (p *Parser) parseOptionVarList() []string {
+	var vars []string
+	for p.curIs(lexer.IDENT) {
+		if p.peek.Type == lexer.EQ { // this ident begins the next option
+			break
+		}
+		vars = append(vars, p.cur.Literal)
+		p.next()
+	}
+	return vars
+}
+
+// parseRenameList parses `(old=new old2=new2 ...)` into m (keys lowercased).
+func (p *Parser) parseRenameList(m map[string]string) {
+	if !p.curIs(lexer.LPAREN) {
+		return
+	}
+	p.next() // '('
+	for p.curIs(lexer.IDENT) {
+		old := p.cur.Literal
+		p.next()
+		if p.curIs(lexer.EQ) {
+			p.next()
+			if p.curIs(lexer.IDENT) {
+				m[strings.ToLower(old)] = p.cur.Literal
+				p.next()
+			}
+		}
+	}
+	if p.curIs(lexer.RPAREN) {
+		p.next()
+	}
+}
+
+// skipOptionValue consumes an unrecognized option's value: a parenthesized group
+// or a single token.
+func (p *Parser) skipOptionValue() {
+	if p.curIs(lexer.LPAREN) {
+		depth := 0
+		for !p.curIs(lexer.EOF) {
+			if p.curIs(lexer.LPAREN) {
+				depth++
+			} else if p.curIs(lexer.RPAREN) {
+				depth--
+				if depth == 0 {
+					p.next()
+					return
+				}
+			}
+			p.next()
+		}
+		return
+	}
+	if !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+		p.next()
+	}
 }
 
 // parseInput parses `input <var [$]>...;`.
