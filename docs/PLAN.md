@@ -1,6 +1,6 @@
 # ASS Development Plan
 
-Living plan for building Analyst's Statistical Suite (ASS), a SAS-compatible ETL/analytics engine in Go. See `ass-design.md` for the design rationale and `CLAUDE.md` for architecture notes.
+Living plan for building Analyst's Statistical Suite (ASS), a SAS-compatible ETL/analytics engine in Go. See [`design.md`](design.md) for the design rationale and [`../CLAUDE.md`](../CLAUDE.md) for architecture notes.
 
 ---
 

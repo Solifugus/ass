@@ -16,7 +16,7 @@ ASS targets **value/result compatibility** with SAS, not byte-identical output:
   same result set, computed statistics match (within numeric tolerance). This is what a SAS
   migration or a results validation actually depends on, and — because SAS's data semantics
   are deterministic — it is verifiable by hand-deriving expected values, no SAS license
-  required. Corpus items assert this via `expected.datasets` (see `corpus/README.md`).
+  required. Corpus items assert this via `expected.datasets` (see [`../corpus/README.md`](../corpus/README.md)).
 - **Best-effort** — listing/report layout is readable and stable. The harness can guard ASS's
   *own* listing format against drift via an optional `expected_output.txt` golden file, treated
   as an ASS baseline.
@@ -78,7 +78,7 @@ passing cosmetic check.
 
 > 100% means every corpus item *currently authored* for a feature passes — it is
 > a regression signal, not a claim of full SAS coverage. Coverage grows by adding
-> corpus items (see `CONTRIBUTING.md`). Output is compared by parse/execute
+> corpus items (see [`CONTRIBUTING.md`](CONTRIBUTING.md)). Output is compared by parse/execute
 > success; byte-level output verification against real SAS is pending (corpus
 > items are marked `output: unverified`).
 

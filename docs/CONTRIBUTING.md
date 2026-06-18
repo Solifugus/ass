@@ -1,8 +1,8 @@
 # Contributing to ASS
 
 ASS grows one tested, corpus-backed feature at a time. The DATA step runtime is
-the core; everything else orbits it. Please read `ass-design.md` (rationale),
-`CLAUDE.md` (architecture), and `PLAN.md` (development log) before starting.
+the core; everything else orbits it. Please read [`design.md`](design.md) (rationale),
+[`../CLAUDE.md`](../CLAUDE.md) (architecture), and [`PLAN.md`](PLAN.md) (development log) before starting.
 
 ## Prerequisites
 

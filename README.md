@@ -1,12 +1,17 @@
 # ASS — Analyst's Statistical Suite
 
+<p align="center">
+  <img src="mascot.png" alt="The ASS mascot: a scholarly donkey in spectacles, bow tie, and tweed jacket presenting a chart" width="320"><br>
+  <em>Analyze. Model. Understand. — open source, evidence-based, built for analysts.</em>
+</p>
+
 ASS is an open-source, SAS-compatible data processing and analytics engine written in Go and driven from the command line. It aims for **behavioral compatibility** with a practical subset of SAS programs — the DATA step, PROC PRINT/SORT/SQL, formats, and macro basics — prioritizing real-world ETL and reporting over advanced statistics.
 
-See [`ass-design.md`](ass-design.md) for the design rationale, [`PLAN.md`](PLAN.md) for the development log, and [`COMPATIBILITY.md`](COMPATIBILITY.md) for the current compatibility matrix.
+Documentation lives in [`docs/`](docs/): [`design.md`](docs/design.md) (design rationale), [`PLAN.md`](docs/PLAN.md) (development log), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
 
 ## Status
 
-Working engine. The lexer → macro → parser → runtime pipeline runs real SAS programs end to end; the bundled compatibility corpus passes **100%** (see `ass test`). Built one tested, corpus-backed feature at a time along the compatibility levels in the design doc — currently through **Level 5 (advanced DATA step) plus PROC SQL, macros, and basic statistical procedures**.
+Working engine. The lexer → macro → parser → runtime pipeline runs real SAS programs end to end; the bundled compatibility corpus passes **100%** (see `ass test`). Built one tested, corpus-backed feature at a time along the compatibility levels in the design doc — through the advanced DATA step (informats, dataset options, merge/BY-groups, arrays, retain), PROC PRINT/SORT/SQL/MEANS/FREQ (one- and two-way)/REG/GLM (incl. CLASS)/FORMAT, and macro basics. Compatibility is measured at the level of **values/results**, not byte-identical SAS presentation — see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 ## Building
 
@@ -79,11 +84,11 @@ Obs  name  age
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
 
-Not yet supported (selected): column/pointer input, PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
+Not yet supported (selected): column/pointer input, PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to add a corpus item, run the harness, and implement a new PROC or function.
+See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for how to add a corpus item, run the harness, and implement a new PROC or function.
 
 ## Disclaimer
 

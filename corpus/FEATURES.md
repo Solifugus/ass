@@ -2,10 +2,10 @@
 
 This is the **canonical list of feature tags** used in corpus item `meta.yaml` files
 (`features:` list). Every tag a corpus item claims must appear here. Keep this list in
-sync with the compatibility levels in `ass-design.md` (§3) and the classification in §9.
+sync with the compatibility levels in [`../docs/design.md`](../docs/design.md) (§3) and the classification in §9.
 
 Tags are lowercase, hyphenated. The "Level" column maps each tag to the compatibility
-level it first becomes relevant at, matching the build order in `PLAN.md`.
+level it first becomes relevant at, matching the build order in [`../docs/PLAN.md`](../docs/PLAN.md).
 
 | Tag | Level | Meaning |
 |-----|-------|---------|
