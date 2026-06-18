@@ -9,6 +9,13 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    running:
+      columns: [total, sale]
+      rows:
+        - [10, 10]
+        - [30, 20]
+        - [60, 30]
 priority: 1
 notes: |
   retain initializes total to 0 and keeps it across iterations; the sum statement

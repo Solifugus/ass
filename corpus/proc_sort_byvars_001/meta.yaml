@@ -9,6 +9,14 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    people:
+      columns: [name, age]
+      rows:
+        - ["Tim", 12]
+        - ["Ann", 17]
+        - ["John", 25]
+        - ["Mary", 30]
 priority: 1
 notes: |
   PROC SORT in place by a single numeric key (age). Expected order after sort:

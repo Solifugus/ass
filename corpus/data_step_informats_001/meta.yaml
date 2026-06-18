@@ -9,6 +9,14 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    t:
+      columns: [id, name, pay, hired]
+      rows:
+        # hired: SAS day numbers (01JAN2020 = 21915, anchor): 15JAN2020 = 21929,
+        # 01JUL2021 = 22462.
+        - [1, "Anna", 1234, 21929]
+        - [2, "Bob", 56789, 22462]
 priority: 2
 notes: |
   List input with informats: comma8. reads "1,234"/"56,789" into numbers,

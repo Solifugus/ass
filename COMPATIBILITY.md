@@ -8,14 +8,33 @@ Each percentage is the share of corpus items tagged with a feature that pass
 ass test corpus/
 ```
 
+## What compatibility means
+
+ASS targets **value/result compatibility** with SAS, not byte-identical output:
+
+- **The goal** — produced datasets have the same columns and values, PROC SQL returns the
+  same result set, computed statistics match (within numeric tolerance). This is what a SAS
+  migration or a results validation actually depends on, and — because SAS's data semantics
+  are deterministic — it is verifiable by hand-deriving expected values, no SAS license
+  required. Corpus items assert this via `expected.datasets` (see `corpus/README.md`).
+- **Best-effort** — listing/report layout is readable and stable. The harness can guard ASS's
+  *own* listing format against drift via an optional `expected_output.txt` golden file, treated
+  as an ASS baseline.
+- **A non-goal** — byte-for-byte identical PROC listings and log wording versus real SAS.
+
+Where a procedure's *values* would differ from SAS by convention rather than by error (e.g. a
+regression parameterization), that is called out explicitly below rather than hidden behind a
+passing cosmetic check.
+
 ## Overall
 
 | Metric | Result |
 |--------|--------|
-| Items | 26 |
-| Parsed | 26 (100.0%) |
-| Executed | 26 (100.0%) |
-| Passed | 26 (100.0%) |
+| Items | 31 |
+| Parsed | 31 (100.0%) |
+| Executed | 31 (100.0%) |
+| Passed | 31 (100.0%) |
+| Value-verified | 6 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -68,6 +87,6 @@ ass test corpus/
 - Column/pointer input (`input name $ 1-10 age 11-13;`, `@`/`#`) and time/datetime informats (list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options `firstobs=`/`obs=`, numbered var-list ranges in `keep=`/`drop=` (e.g. `keep=x1-x5`), and options on PROC `out=` (`keep=`/`drop=`/`rename=`/`where=` on SET/MERGE/DATA/PROC `data=` are supported)
 - PROC GLM CLASS effects / design-matrix coding (PROC REG/GLM OLS estimates, std-err, t-value, `Pr>|t|`, and R² are supported)
-- `--compare-output` / JSON harness output (tied to SAS-verified expected files)
+- JSON harness output (machine-readable report); SAS-byte-identical listing comparison (a non-goal — see "What compatibility means" above; value comparison via `expected.datasets` is the supported mechanism)
 
 See `corpus/FEATURES.md` for the full feature-tag catalog and intended levels.

@@ -53,10 +53,11 @@ Correctness is measured against a tagged corpus, not just unit tests. The harnes
 ass test corpus/                 # full run
 ass test --parse-only corpus/    # parse without executing
 ass test --feature data-step     # filter by feature tag
-ass test --compare-output expected/
 ```
 
-Each corpus item carries YAML metadata (`id`, `source`, `license`, `features`, `expected.parse/execute/output`, `priority`) and each run reports parsed / executed / log-compatible / output-compatible plus unsupported features, rolling up to per-feature compatibility percentages. When implementing a feature, add corpus items tagged with that feature rather than only Go unit tests.
+**Compatibility is measured at the level of VALUES, not byte-identical presentation.** ASS targets value/result compatibility (same dataset columns/values, same SQL result sets, same computed statistics) — the SAS data semantics are deterministic, so expected values are hand-derivable and verifiable without a SAS license. Byte-for-byte identical PROC listings/log wording versus real SAS are an explicit non-goal. See `COMPATIBILITY.md` ("What compatibility means") and `corpus/README.md`.
+
+Each corpus item carries YAML metadata (`id`, `source`, `license`, `features`, `expected.parse/execute/output`, `priority`) plus the primary correctness check `expected.datasets` (hand-derived expected values per output dataset). Each run reports parsed / executed / passed and a value-verified count, rolling up to per-feature percentages. When implementing a feature, add a corpus item tagged with that feature and assert its output values via `expected.datasets` rather than only Go unit tests.
 
 ## Build & test commands
 

@@ -30,6 +30,8 @@ type Result struct {
 	Skipped    bool // execution intentionally skipped (expected.execute: skip)
 	OutChecked bool // expected_output.txt existed and was compared
 	OutPass    bool // captured output matched expected_output.txt
+	ValChecked bool // expected.datasets declared and value-compared
+	ValPass    bool // produced dataset values matched the expected values
 	Detail     string
 }
 
@@ -42,6 +44,9 @@ func (r Result) Pass() bool {
 		return false
 	}
 	if r.OutChecked && !r.OutPass {
+		return false
+	}
+	if r.ValChecked && !r.ValPass {
 		return false
 	}
 	return true
@@ -109,7 +114,136 @@ func runItem(it Item, opts Options) Result {
 			res.Detail = "output mismatch"
 		}
 	}
+
+	// Value compatibility: compare produced datasets against the hand-derived
+	// expected values. This is the primary correctness bar (see corpus/README.md).
+	if execOK && len(it.Expected.Datasets) > 0 {
+		res.ValChecked = true
+		res.ValPass = true
+		for _, name := range sortedKeys(it.Expected.Datasets) {
+			if ok, detail := checkDataset(lib, name, it.Expected.Datasets[name]); !ok {
+				res.ValPass = false
+				res.Detail = detail
+				break
+			}
+		}
+	}
 	return res
+}
+
+// sortedKeys returns the dataset names in deterministic order.
+func sortedKeys(m map[string]ExpectedDataset) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// checkDataset compares one produced dataset in lib against its expected
+// columns and row values. It returns a failure detail on the first mismatch.
+func checkDataset(lib *table.Library, name string, exp ExpectedDataset) (bool, string) {
+	ds, ok := lib.Get(name)
+	if !ok {
+		return false, fmt.Sprintf("dataset %s not found in library", strings.ToUpper(name))
+	}
+	cols := exp.Columns
+	if len(cols) > 0 {
+		got := ds.ColumnNames()
+		if !sameColumns(got, cols) {
+			return false, fmt.Sprintf("%s columns = %v, want %v", name, got, cols)
+		}
+	} else {
+		cols = ds.ColumnNames()
+	}
+	if len(ds.Rows) != len(exp.Rows) {
+		return false, fmt.Sprintf("%s nobs = %d, want %d", name, len(ds.Rows), len(exp.Rows))
+	}
+	for i, erow := range exp.Rows {
+		for j, ecell := range erow {
+			if j >= len(cols) {
+				break
+			}
+			act := ds.Get(ds.Rows[i], cols[j])
+			if !valueMatches(ecell, act) {
+				return false, fmt.Sprintf("%s row %d %s: got %q, want %v",
+					name, i+1, cols[j], act.Display(), ecell)
+			}
+		}
+	}
+	return true, ""
+}
+
+// sameColumns reports whether two column-name lists match in order
+// (case-insensitive).
+func sameColumns(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if !strings.EqualFold(got[i], want[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// valueMatches compares one expected cell (from YAML: number, string, "." or
+// null) against a produced table.Value. Numbers compare with tolerance; strings
+// compare exactly against character values (or the display of a numeric); "."
+// and null mean missing.
+func valueMatches(exp interface{}, act table.Value) bool {
+	switch e := exp.(type) {
+	case nil:
+		return act.IsMissing()
+	case bool:
+		n := 0.0
+		if e {
+			n = 1
+		}
+		return !act.IsMissing() && act.Kind == table.Numeric && act.Num == n
+	case int:
+		return numMatch(float64(e), act)
+	case int64:
+		return numMatch(float64(e), act)
+	case float64:
+		return numMatch(e, act)
+	case string:
+		if e == "." {
+			return act.IsMissing()
+		}
+		if act.IsMissing() {
+			return false
+		}
+		if act.Kind == table.Character {
+			return act.Str == e
+		}
+		return act.Display() == e
+	}
+	return false
+}
+
+func numMatch(want float64, act table.Value) bool {
+	if act.IsMissing() || act.Kind != table.Numeric {
+		return false
+	}
+	d := act.Num - want
+	if d < 0 {
+		d = -d
+	}
+	tol := 1e-6
+	if a := absf(want); a > 1 {
+		tol = 1e-9 * a
+	}
+	return d <= tol
+}
+
+func absf(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
 }
 
 // captureStdout runs fn with os.Stdout redirected to a pipe and returns what was
@@ -206,8 +340,19 @@ func (rep Report) WriteReport(w io.Writer, verbose bool) {
 	}
 
 	total, parsed, executed, passed := rep.Summary()
+	valChecked, valPass := 0, 0
+	for _, r := range rep.Results {
+		if r.ValChecked {
+			valChecked++
+			if r.ValPass {
+				valPass++
+			}
+		}
+	}
 	fmt.Fprintf(w, "\nTotals: %d items | parsed %d (%.1f%%) | executed %d (%.1f%%) | passed %d (%.1f%%)\n",
 		total, parsed, pct(parsed, total), executed, pct(executed, total), passed, pct(passed, total))
+	fmt.Fprintf(w, "Value-verified: %d/%d items declare expected dataset values and match (%.1f%%)\n",
+		valPass, valChecked, pct(valPass, valChecked))
 }
 
 func pct(n, d int) float64 {

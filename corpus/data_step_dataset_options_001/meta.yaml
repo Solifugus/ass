@@ -9,6 +9,13 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    adults:
+      columns: [id, years, dept]
+      rows:
+        - [2, 40, "B"]
+        - [3, 33, "A"]
+        - [5, 55, "B"]
 priority: 2
 notes: |
   Dataset options on SET (where= keeps age>=30, keep= selects id/age/dept,

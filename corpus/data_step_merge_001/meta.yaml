@@ -9,6 +9,12 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    matched:
+      columns: [id, name, score]
+      rows:
+        - [1, "John", 95]
+        - [2, "Mary", 85]
 priority: 1
 notes: |
   Match-merge of names and scores by id with in= flags; "if n and s" keeps only

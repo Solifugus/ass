@@ -9,10 +9,27 @@ import (
 )
 
 // Expected captures the expected outcomes for a corpus item (from meta.yaml).
+//
+// Compatibility is measured at the level of VALUES, not byte-identical
+// presentation: an item declares the expected contents of one or more output
+// datasets under Datasets, hand-derived from SAS's documented semantics (which
+// are deterministic and so verifiable without a SAS instance). The legacy
+// Output/expected_output.txt byte-comparison remains for the rare case of a
+// canonical listing, but is not the primary bar. See corpus/README.md.
 type Expected struct {
-	Parse   string `yaml:"parse"`   // pass | fail
-	Execute string `yaml:"execute"` // pass | fail | skip
-	Output  string `yaml:"output"`  // verified | unverified | none
+	Parse    string                     `yaml:"parse"`   // pass | fail
+	Execute  string                     `yaml:"execute"` // pass | fail | skip
+	Output   string                     `yaml:"output"`  // verified | unverified | none (legacy byte listing)
+	Datasets map[string]ExpectedDataset `yaml:"datasets"`
+}
+
+// ExpectedDataset is the hand-derived expected contents of one output dataset.
+// Columns (optional) asserts the column names and their order; Rows asserts the
+// values, one inner list per observation in dataset order. A cell may be a
+// number, a quoted string, "." (a missing value), or null.
+type ExpectedDataset struct {
+	Columns []string        `yaml:"columns"`
+	Rows    [][]interface{} `yaml:"rows"`
 }
 
 // Item is a single compatibility-test item loaded from disk.

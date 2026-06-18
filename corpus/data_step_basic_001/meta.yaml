@@ -10,6 +10,12 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    people:
+      columns: [name, age]
+      rows:
+        - ["John", 25]
+        - ["Mary", 30]
 priority: 1
 notes: |
   Canonical minimal DATA step + PROC PRINT (design doc milestones 3 and 4).

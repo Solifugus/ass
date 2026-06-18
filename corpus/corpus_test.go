@@ -65,3 +65,52 @@ func TestParseOnlySkipsExecution(t *testing.T) {
 		}
 	}
 }
+
+// TestValueVerificationCatchesMismatch proves the value-comparison harness fails
+// when produced dataset values differ from the declared expectations (not just
+// that correct items pass).
+func TestValueVerificationCatchesMismatch(t *testing.T) {
+	src := "data t;\n  input id v;\n  datalines;\n1 10\n2 20\n;\nrun;"
+
+	good := Item{
+		ID:    "vv_good",
+		Input: src,
+		Expected: Expected{Parse: "pass", Execute: "pass", Datasets: map[string]ExpectedDataset{
+			"t": {Columns: []string{"id", "v"}, Rows: [][]interface{}{{1, 10}, {2, 20}}},
+		}},
+	}
+	r := runItem(good, Options{})
+	if !r.ValChecked || !r.ValPass || !r.Pass() {
+		t.Errorf("correct values should pass: %+v (%s)", r, r.Detail)
+	}
+
+	badVal := good
+	badVal.ID = "vv_badval"
+	badVal.Expected.Datasets = map[string]ExpectedDataset{
+		"t": {Columns: []string{"id", "v"}, Rows: [][]interface{}{{1, 10}, {2, 999}}},
+	}
+	r = runItem(badVal, Options{})
+	if r.ValPass || r.Pass() {
+		t.Errorf("wrong value should fail; detail=%q", r.Detail)
+	}
+
+	badShape := good
+	badShape.ID = "vv_badshape"
+	badShape.Expected.Datasets = map[string]ExpectedDataset{
+		"t": {Rows: [][]interface{}{{1, 10}}}, // wrong row count
+	}
+	r = runItem(badShape, Options{})
+	if r.ValPass || r.Pass() {
+		t.Errorf("wrong nobs should fail; detail=%q", r.Detail)
+	}
+
+	missing := good
+	missing.ID = "vv_missing"
+	missing.Expected.Datasets = map[string]ExpectedDataset{
+		"nope": {Rows: [][]interface{}{{1}}},
+	}
+	r = runItem(missing, Options{})
+	if r.ValPass {
+		t.Errorf("missing dataset should fail; detail=%q", r.Detail)
+	}
+}

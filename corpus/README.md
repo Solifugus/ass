@@ -6,6 +6,29 @@ to measure and track compatibility per feature.
 
 See [`FEATURES.md`](FEATURES.md) for the canonical list of feature tags.
 
+## What "compatible" means here
+
+ASS targets **value/result compatibility**, not byte-identical presentation. The bar is:
+the output *datasets* have the same columns and values, PROC SQL returns the same result
+set, and computed statistics match — because that is what someone migrating SAS programs
+or validating results actually depends on. SAS's exact listing spacing and log wording are
+**explicitly a non-goal**.
+
+That distinction is what makes the corpus verifiable without a SAS license: SAS's data and
+numeric semantics are deterministic, so the expected *values* of a program can be hand-derived
+and asserted. Accordingly, the primary correctness signal is **`expected.datasets`** — the
+hand-derived contents of one or more output datasets, which the harness compares against the
+datasets the program actually produced (numeric values within tolerance, character values
+exact, `.`/null = missing).
+
+Three levels of checking, in priority order:
+
+1. **Value compatibility** (`expected.datasets`) — the real bar; hand-derived, verifiable now.
+2. **Presentation regression** (`expected_output.txt`) — optional golden file guarding against
+   drift in ASS's *own* listing format. It is an ASS baseline, **not** a claim of byte-equality
+   with SAS, and is only used when present.
+3. **Byte-identical-to-SAS** — out of scope.
+
 ## On-disk layout
 
 Each corpus item is its own directory named by a unique `id`:
@@ -37,10 +60,14 @@ features:                       # one or more tags from FEATURES.md
 expected:
   parse: pass                  # pass | fail  — should the parser accept it?
   execute: pass                # pass | fail | skip — should it run without error?
-  output: verified             # verified | unverified | none
-                               #   verified   = expected_output.txt is known-correct (hand-derived from SAS)
-                               #   unverified = expected_output.txt absent or not confirmed against SAS
-                               #   none       = no output expected (e.g. parse-only items)
+  output: unverified           # verified | unverified | none — LEGACY byte-listing check
+                               #   (only used if expected_output.txt is present; not the bar)
+  datasets:                    # PRIMARY check: hand-derived expected values per output dataset
+    people:
+      columns: [name, age]     # optional: asserts column names AND order (case-insensitive)
+      rows:                    # one inner list per observation, in dataset order
+        - ["John", 25]         #   numbers compare with tolerance; strings exact; "."/null = missing
+        - ["Mary", 30]         #   provide fewer cells than columns to check a prefix of the row
 priority: 1                    # 1 = core/early, 2 = secondary, 3 = stretch
 notes: |                       # optional free text
   Optional explanation, caveats, or what this item specifically exercises.
@@ -52,9 +79,12 @@ notes: |                       # optional free text
   marks a negative test (the parser *should* reject it); pair with the `unsupported` tag.
 - **`expected.execute: skip`** — use when the item parses but execution isn't implemented
   yet, so the harness counts it as parsed-not-executed rather than a failure.
-- **`expected.output: unverified`** — set this when you cannot confidently hand-derive the
-  exact SAS output. The harness will not fail the item on output mismatch, but will report
-  it as unverified so it can be confirmed later against real SAS.
+- **`expected.datasets`** — the primary correctness check. Declare the datasets whose values
+  you can hand-derive from SAS semantics; the harness compares them to what the program produced
+  and fails the item on any mismatch. Prefer this over `expected_output.txt` for new items.
+- **`expected.output`** — the legacy byte-listing comparison. Only checked when `verified` *and*
+  an `expected_output.txt` is present; treat it as an ASS-baseline regression guard, not a claim
+  of byte-equality with SAS. New items should usually leave it `unverified` and rely on `datasets`.
 
 ## Worked example
 
@@ -87,20 +117,19 @@ features:
 expected:
   parse: pass
   execute: pass
-  output: verified
+  output: unverified
+  datasets:
+    people:
+      columns: [name, age]
+      rows:
+        - ["John", 25]
+        - ["Mary", 30]
 priority: 1
 notes: |
   Canonical minimal DATA step + PROC PRINT (design doc milestones 3 and 4).
 ```
 
-`expected_output.txt`
-```
-Obs    name    age
-
-  1    John     25
-  2    Mary     30
-```
-
-> The exact column widths/spacing in `expected_output.txt` are defined by the PROC PRINT
-> renderer (Phase 5). Until that renderer is finalized, mark such items
-> `expected.output: unverified` and tighten them once the renderer is stable.
+The `datasets` block asserts that the program builds `people` with columns `name, age` and the
+two expected observations — a value check that holds regardless of how PROC PRINT spaces its
+listing. An `expected_output.txt` may still be added as an ASS-baseline regression guard, but it
+is optional and is **not** treated as a byte-for-byte SAS equivalence claim.
