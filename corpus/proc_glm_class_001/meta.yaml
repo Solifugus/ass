@@ -1,0 +1,22 @@
+id: proc_glm_class_001
+source: hand-written
+license: MIT
+features:
+  - proc-glm
+  - class
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 3
+notes: |
+  PROC GLM with a CLASS variable, reference-cell coding (last level = reference).
+  Group means: A=11, B=20.667, C=30. With C as reference: Intercept=30,
+  grp A = -19, grp B = -9.333, grp C = 0 (ref). R-Square ~= 0.977.
+
+  NOTE: reference-cell coding is INTENTIONALLY not byte/parameter-identical to
+  SAS GLM's generalized-inverse parameterization (which keeps all levels and
+  flags the aliased one "Biased"). The fit, predictions, and level-vs-reference
+  differences are correct; the intercept and per-level estimates differ from SAS
+  by that convention. Value-checked via proc/reg_test.go (TestGLMClass*), since
+  PROC GLM writes its table to stdout rather than a library dataset.

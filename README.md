@@ -73,13 +73,13 @@ Obs  name  age
 | PROC SQL | `select`/`where`/`order by`/joins/`group by`, `create table as` (via embedded SQLite) |
 | PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max with `class`/`by` |
 | PROC FREQ | one-way frequency tables and two-way cross-tabulation (`tables a*b`) |
-| PROC REG/GLM | OLS linear regression: estimates, std err, t-value, `Pr>|t|`, R² |
+| PROC REG/GLM | OLS linear regression: estimates, std err, t-value, `Pr>|t|`, R²; CLASS categorical predictors (reference-cell coding) |
 | PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT |
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
 
-Not yet supported (selected): column/pointer input, PROC FREQ n-way tables and association statistics, PROC GLM CLASS effects. See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
+Not yet supported (selected): column/pointer input, PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`COMPATIBILITY.md`](COMPATIBILITY.md) and `corpus/FEATURES.md`.
 
 ## Contributing
 

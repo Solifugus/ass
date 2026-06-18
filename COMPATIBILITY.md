@@ -30,10 +30,10 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 31 |
-| Parsed | 31 (100.0%) |
-| Executed | 31 (100.0%) |
-| Passed | 31 (100.0%) |
+| Items | 32 |
+| Parsed | 32 (100.0%) |
+| Executed | 32 (100.0%) |
+| Passed | 32 (100.0%) |
 | Value-verified | 6 items assert dataset values; all match |
 
 ## Per-feature
@@ -44,6 +44,7 @@ passing cosmetic check.
 | assignment | 4/4 | 100.0% |
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
+| class | 1/1 | 100.0% |
 | data-step | 26/26 | 100.0% |
 | dataset-options | 1/1 | 100.0% |
 | datalines | 5/5 | 100.0% |
@@ -59,6 +60,7 @@ passing cosmetic check.
 | macro-var | 3/3 | 100.0% |
 | merge | 1/1 | 100.0% |
 | proc-freq | 2/2 | 100.0% |
+| proc-glm | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
 | proc-print | 19/19 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
@@ -86,7 +88,7 @@ passing cosmetic check.
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
 - Column/pointer input (`input name $ 1-10 age 11-13;`, `@`/`#`) and time/datetime informats (list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options `firstobs=`/`obs=`, numbered var-list ranges in `keep=`/`drop=` (e.g. `keep=x1-x5`), and options on PROC `out=` (`keep=`/`drop=`/`rename=`/`where=` on SET/MERGE/DATA/PROC `data=` are supported)
-- PROC GLM CLASS effects / design-matrix coding (PROC REG/GLM OLS estimates, std-err, t-value, `Pr>|t|`, and R² are supported)
+- PROC GLM with SAS's generalized-inverse (sweep) parameterization, Type I/III SS, F tests, and LSMEANS/CONTRAST/ESTIMATE. CLASS effects **are** supported via **reference-cell coding** (k−1 indicators, last level = reference at estimate 0) — numerically correct for the fit, predictions, and level-vs-reference differences, but the intercept and per-level estimates **differ from SAS by convention** (SAS keeps all levels and flags the aliased one "Biased"). This is a deliberate, documented divergence; the design→solve seam allows a future sweep-based upgrade when a real-SAS reference is available.
 - JSON harness output (machine-readable report); SAS-byte-identical listing comparison (a non-goal — see "What compatibility means" above; value comparison via `expected.datasets` is the supported mechanism)
 
 See `corpus/FEATURES.md` for the full feature-tag catalog and intended levels.

@@ -52,6 +52,7 @@ level it first becomes relevant at, matching the build order in `PLAN.md`.
 | `proc-summary` | 6 | `proc summary` aggregation. |
 | `proc-reg` | 6 | `proc reg` linear regression. |
 | `proc-glm` | 6 | `proc glm` general linear models. |
+| `class` | 6 | CLASS categorical predictors in PROC REG/GLM (reference-cell coding). |
 | `ods` | — | ODS / output destination handling (not yet scheduled). |
 | `graphics` | — | Graphics procedures (out of scope for now). |
 | `unsupported` | — | Vendor-specific or intentionally unsupported constructs (negative tests). |

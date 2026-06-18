@@ -3,6 +3,7 @@ package proc
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
@@ -15,10 +16,20 @@ func init() {
 	Register("glm", regProc{}) // GLM with continuous predictors reduces to OLS
 }
 
-// regProc implements a basic PROC REG / PROC GLM: ordinary least-squares linear
-// regression for `model y = x1 x2 ...;`. It reports the parameter estimates
-// (Estimate, StdErr, tValue) and the model R-square. Class effects, multiple
-// MODEL statements, and significance probabilities are not implemented.
+// regProc implements PROC REG / PROC GLM: ordinary least-squares linear
+// regression for `model y = x1 x2 ...;`, with categorical predictors named in a
+// `class` statement expanded into indicator variables. It reports the parameter
+// estimates (Estimate, StdErr, tValue, Pr>|t|) and the model R-square.
+//
+// CLASS effects use REFERENCE-CELL coding: a class variable with k levels
+// contributes k-1 indicators, with its last (highest-sorted) level as the
+// reference (estimate fixed at 0). This is numerically correct for the fit and
+// for level-vs-reference differences, but is INTENTIONALLY NOT identical to SAS
+// GLM's singular/generalized-inverse parameterization (which keeps all levels
+// and flags the aliased one "Biased"). The intercept and per-level estimates
+// will therefore differ from SAS even though predictions and contrasts agree.
+// See the design→solve→render split: swapping reference coding for SAS's sweep
+// is localized to buildDesign + olsSolve.
 type regProc struct{}
 
 func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error {
@@ -28,10 +39,15 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 		return nil
 	}
 	var model *ast.ModelStatement
+	var classVars []string
 	for _, s := range step.Body {
-		if m, ok := s.(*ast.ModelStatement); ok {
-			model = m
-			break
+		switch st := s.(type) {
+		case *ast.ModelStatement:
+			if model == nil {
+				model = st
+			}
+		case *ast.ClassStatement:
+			classVars = append(classVars, st.Vars...)
 		}
 	}
 	if model == nil {
@@ -39,39 +55,57 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 		return nil
 	}
 
-	fit, err := ols(src, model.Response, model.Predictors)
+	fit, dsg, err := fitModel(src, model.Response, model.Predictors, classVars)
 	if err != nil {
 		logger.Error("PROC REG: %v", err)
 		return nil
 	}
 
 	result := table.NewDataset("", "_reg_")
-	result.AddColumn(table.Column{Name: "Variable", Kind: table.Character})
+	result.AddColumn(table.Column{Name: "Parameter", Kind: table.Character})
 	result.AddColumn(table.Column{Name: "DF", Kind: table.Numeric})
 	result.AddColumn(table.Column{Name: "Estimate", Kind: table.Numeric, Format: "12.5"})
 	result.AddColumn(table.Column{Name: "StdErr", Kind: table.Numeric, Format: "12.5"})
 	result.AddColumn(table.Column{Name: "tValue", Kind: table.Numeric, Format: "8.2"})
 	result.AddColumn(table.Column{Name: "Pr>|t|", Kind: table.Numeric, Format: "7.4"})
 
-	names := append([]string{"Intercept"}, model.Predictors...)
-	for i, nm := range names {
+	hasRef := false
+	for _, prm := range dsg.params {
+		if prm.reference {
+			hasRef = true
+			result.AppendRow(table.Row{
+				"parameter": table.Char(prm.label + " (ref)"),
+				"df":        table.Num(0),
+				"estimate":  table.Num(0),
+				"stderr":    table.MissingNum(),
+				"tvalue":    table.MissingNum(),
+				"pr>|t|":    table.MissingNum(),
+			})
+			continue
+		}
+		j := prm.col
 		result.AppendRow(table.Row{
-			"variable": table.Char(nm),
-			"df":       table.Num(1),
-			"estimate": table.Num(fit.beta[i]),
-			"stderr":   numOrMissing(fit.stderr[i]),
-			"tvalue":   numOrMissing(fit.tvalue[i]),
-			"pr>|t|":   numOrMissing(fit.pvalue[i]),
+			"parameter": table.Char(prm.label),
+			"df":        table.Num(1),
+			"estimate":  table.Num(fit.beta[j]),
+			"stderr":    numOrMissing(fit.stderr[j]),
+			"tvalue":    numOrMissing(fit.tvalue[j]),
+			"pr>|t|":    numOrMissing(fit.pvalue[j]),
 		})
 	}
 
 	fmt.Printf("Dependent Variable: %s\n", model.Response)
 	fmt.Printf("R-Square: %.5f   Observations: %d\n\n", fit.rSquare, fit.n)
 	fmt.Print(renderListing(result, printOptions{}))
+	if hasRef {
+		fmt.Println("\nNOTE: (ref) marks a class variable's reference level (estimate fixed at 0;")
+		fmt.Println("      reference-cell coding, not SAS GLM's generalized-inverse parameterization).")
+	}
 	return nil
 }
 
-// olsFit holds a fitted model's coefficients and diagnostics.
+// olsFit holds a fitted model's solved coefficients and diagnostics. beta and
+// the diagnostic slices are indexed by design-matrix column.
 type olsFit struct {
 	beta    []float64
 	stderr  []float64
@@ -82,40 +116,164 @@ type olsFit struct {
 	dfe     int
 }
 
-// ols fits y = b0 + b1*x1 + ... by ordinary least squares via the normal
-// equations. Only complete cases (no missing in response/predictors) are used.
+// designParam is one row of the parameter-estimates table. col is the index of
+// the parameter's column in the design matrix; a reference level is not an
+// estimated column (col is unused, reference is true, estimate is fixed at 0).
+type designParam struct {
+	label     string
+	col       int
+	reference bool
+}
+
+// design is a built model matrix plus the parameter rows to display. ncols is
+// the number of estimated columns (intercept + continuous + non-reference
+// indicators).
+type design struct {
+	X      [][]float64
+	y      []float64
+	params []designParam
+	ncols  int
+}
+
+// ols is the no-CLASS entry point retained for callers/tests that only need the
+// fit (beta indexed as [intercept, predictors...]).
 func ols(ds *table.Dataset, response string, predictors []string) (olsFit, error) {
-	p := len(predictors) + 1 // + intercept
-	var X [][]float64
-	var y []float64
+	fit, _, err := fitModel(ds, response, predictors, nil)
+	return fit, err
+}
+
+// fitModel builds the design matrix (expanding CLASS variables) and solves it.
+// The data→design step and the linear-algebra solve are separated so that
+// replacing reference-cell coding with SAS's sweep/generalized-inverse later is
+// a localized change.
+func fitModel(ds *table.Dataset, response string, predictors, classVars []string) (olsFit, *design, error) {
+	dsg, err := buildDesign(ds, response, predictors, classVars)
+	if err != nil {
+		return olsFit{}, nil, err
+	}
+	fit, err := olsSolve(dsg.X, dsg.y, dsg.ncols)
+	if err != nil {
+		return olsFit{}, nil, err
+	}
+	return fit, dsg, nil
+}
+
+// buildDesign constructs the design matrix and the display parameters. Only
+// complete cases (no missing response/continuous/class value) are used. CLASS
+// variables expand to reference-cell indicators (last sorted level = reference).
+func buildDesign(ds *table.Dataset, response string, predictors, classVars []string) (*design, error) {
+	isClass := map[string]bool{}
+	for _, c := range classVars {
+		isClass[strings.ToLower(c)] = true
+	}
+
+	// 1. Complete-case rows: response and every predictor present.
+	var rows []table.Row
 	for _, r := range ds.Rows {
-		yv := ds.Get(r, response)
-		if yv.IsMissing() {
+		if ds.Get(r, response).IsMissing() {
 			continue
 		}
-		row := make([]float64, p)
-		row[0] = 1
 		ok := true
-		for j, xv := range predictors {
-			v := ds.Get(r, xv)
-			if v.IsMissing() {
+		for _, p := range predictors {
+			if ds.Get(r, p).IsMissing() {
 				ok = false
 				break
 			}
-			row[j+1] = v.Num
 		}
-		if !ok {
-			continue
+		if ok {
+			rows = append(rows, r)
 		}
-		X = append(X, row)
-		y = append(y, yv.Num)
-	}
-	n := len(y)
-	if n <= p {
-		return olsFit{}, fmt.Errorf("not enough complete observations (%d) for %d parameters", n, p)
 	}
 
-	// Normal equations: (X'X) beta = X'y.
+	// 2. For each class predictor, its sorted distinct levels (over complete cases).
+	levels := map[string][]string{}
+	for _, p := range predictors {
+		if isClass[strings.ToLower(p)] {
+			levels[p] = classLevels(ds, rows, p)
+		}
+	}
+
+	// 3. Assign columns and display parameters in MODEL order.
+	dsg := &design{}
+	dsg.params = append(dsg.params, designParam{label: "Intercept", col: 0})
+	ncol := 1 // intercept is column 0
+	type colSpec struct {
+		predictor string
+		level     string // "" => continuous
+	}
+	specs := []colSpec{{}} // column 0 = intercept (sentinel)
+	for _, p := range predictors {
+		if !isClass[strings.ToLower(p)] {
+			dsg.params = append(dsg.params, designParam{label: p, col: ncol})
+			specs = append(specs, colSpec{predictor: p})
+			ncol++
+			continue
+		}
+		lv := levels[p]
+		for i, l := range lv {
+			label := fmt.Sprintf("%s %s", p, l)
+			if i == len(lv)-1 { // last level is the reference
+				dsg.params = append(dsg.params, designParam{label: label, reference: true})
+				continue
+			}
+			dsg.params = append(dsg.params, designParam{label: label, col: ncol})
+			specs = append(specs, colSpec{predictor: p, level: l})
+			ncol++
+		}
+	}
+	dsg.ncols = ncol
+
+	n := len(rows)
+	if n <= ncol {
+		return nil, fmt.Errorf("not enough complete observations (%d) for %d parameters", n, ncol)
+	}
+
+	// 4. Materialize X and y.
+	dsg.y = make([]float64, n)
+	dsg.X = make([][]float64, n)
+	for k, r := range rows {
+		dsg.y[k] = ds.Get(r, response).Num
+		row := make([]float64, ncol)
+		row[0] = 1 // intercept
+		for c := 1; c < ncol; c++ {
+			sp := specs[c]
+			if sp.level == "" { // continuous
+				row[c] = ds.Get(r, sp.predictor).Num
+			} else if ds.Get(r, sp.predictor).Display() == sp.level {
+				row[c] = 1
+			}
+		}
+		dsg.X[k] = row
+	}
+	return dsg, nil
+}
+
+// classLevels returns the sorted distinct display values of a class variable
+// over the given rows.
+func classLevels(ds *table.Dataset, rows []table.Row, v string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range rows {
+		val := ds.Get(r, v)
+		if val.IsMissing() {
+			continue
+		}
+		k := val.Display()
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// olsSolve fits y = X*beta by ordinary least squares via the normal equations,
+// returning the estimates and their diagnostics. This is the linear-algebra
+// seam: a future SAS-compatible variant swaps invert() for a generalized
+// (sweep) inverse here.
+func olsSolve(X [][]float64, y []float64, p int) (olsFit, error) {
+	n := len(y)
 	xtx := make([][]float64, p)
 	xty := make([]float64, p)
 	for i := 0; i < p; i++ {
@@ -133,7 +291,6 @@ func ols(ds *table.Dataset, response string, predictors []string) (olsFit, error
 	}
 	beta := matVec(inv, xty)
 
-	// Residuals, SSE, SST.
 	var sse, sst, ybar float64
 	for _, yv := range y {
 		ybar += yv
