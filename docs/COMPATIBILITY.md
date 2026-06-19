@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Generated from the compatibility corpus via `ass test corpus/` (2026-06-20).
+Generated from the compatibility corpus via `ass test corpus/` (2026-06-19).
 Each percentage is the share of corpus items tagged with a feature that pass
 (parse + execute as the item's `meta.yaml` expects). Regenerate with:
 
@@ -30,11 +30,11 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 35 |
-| Parsed | 35 (100.0%) |
-| Executed | 35 (100.0%) |
-| Passed | 35 (100.0%) |
-| Value-verified | 9 items assert dataset values; all match |
+| Items | 37 |
+| Parsed | 37 (100.0%) |
+| Executed | 37 (100.0%) |
+| Passed | 37 (100.0%) |
+| Value-verified | 11 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -45,17 +45,17 @@ passing cosmetic check.
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
 | class | 1/1 | 100.0% |
-| data-step | 29/29 | 100.0% |
+| data-step | 31/31 | 100.0% |
 | dataset-options | 1/1 | 100.0% |
 | datalines | 5/5 | 100.0% |
 | do-loop | 2/2 | 100.0% |
 | expressions | 2/2 | 100.0% |
-| file-put | 1/1 | 100.0% |
+| file-put | 2/2 | 100.0% |
 | formats | 3/3 | 100.0% |
 | if-then-else | 3/3 | 100.0% |
 | infile | 2/2 | 100.0% |
 | informats | 1/1 | 100.0% |
-| input | 5/5 | 100.0% |
+| input | 7/7 | 100.0% |
 | macro-control | 1/1 | 100.0% |
 | macro-def | 2/2 | 100.0% |
 | macro-let | 1/1 | 100.0% |
@@ -66,7 +66,7 @@ passing cosmetic check.
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 22/22 | 100.0% |
+| proc-print | 24/24 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
 | proc-sort | 3/3 | 100.0% |
 | proc-sql | 4/4 | 100.0% |
@@ -90,10 +90,10 @@ passing cosmetic check.
 
 - PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
-- Column/pointer input (`input name $ 1-10 age 11-13;`, `@`/`#`) and time/datetime informats (list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
+- Multi-line input/output (`#n` line pointers, trailing `@`/`@@` line-hold) and time/datetime informats (column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options `firstobs=`/`obs=`, numbered var-list ranges in `keep=`/`drop=` (e.g. `keep=x1-x5`), and options on PROC `out=` (`keep=`/`drop=`/`rename=`/`where=` on SET/MERGE/DATA/PROC `data=` are supported)
 - PROC GLM with SAS's generalized-inverse (sweep) parameterization, Type I/III SS, F tests, and LSMEANS/CONTRAST/ESTIMATE. CLASS effects **are** supported via **reference-cell coding** (k−1 indicators, last level = reference at estimate 0) — numerically correct for the fit, predictions, and level-vs-reference differences, but the intercept and per-level estimates **differ from SAS by convention** (SAS keeps all levels and flags the aliased one "Biased"). This is a deliberate, documented divergence; the design→solve seam allows a future sweep-based upgrade when a real-SAS reference is available.
-- Flat-file **reading** via `infile "<path>"` + list `input` is supported, including `dlm=`/`delimiter=`, `dsd` (CSV-style quoted fields, embedded delimiters, consecutive-delimiter missings), `firstobs=`, and `obs=`. Flat-file **writing** via `file "<path>"` + `put` is supported, including `dlm=`/`dsd` (the delimiter joins items; DSD quotes values containing the delimiter or a quote), string literals, inline/associated formats, and `data _null_` (a side-effect-only step that creates no dataset). Note: a missing numeric writes as `.` and a missing character as empty, as the DATA step `put` does (not the empty-field convention of PROC EXPORT). `PROC IMPORT`/`PROC EXPORT` handle delimited files (`dbms=csv`/`tab`/`dlm`): IMPORT reads the header for column names (`getnames=`, default yes), honors `datarow=` and `delimiter=`/`dlm=`, and sniffs each column's type (numeric if every non-empty value parses, else character); EXPORT writes a header row (`putnames=`, default yes), DSD-quotes values containing the delimiter/quote, and writes a missing value as an empty field. Not yet: column/pointer input and output (`@`/`#`, fixed-width ranges), `put _all_`/named output (`var=`), `infile`/`file` options beyond the above (e.g. `lrecl=`, `pad`, `end=`, `mod`, multi-line `/`), and non-delimited IMPORT/EXPORT targets (`.xlsx`, `.sas7bdat`).
+- Flat-file **reading** via `infile "<path>"` + list `input` is supported, including `dlm=`/`delimiter=`, `dsd` (CSV-style quoted fields, embedded delimiters, consecutive-delimiter missings), `firstobs=`, and `obs=`. Flat-file **writing** via `file "<path>"` + `put` is supported, including `dlm=`/`dsd` (the delimiter joins items; DSD quotes values containing the delimiter or a quote), string literals, inline/associated formats, and `data _null_` (a side-effect-only step that creates no dataset). Note: a missing numeric writes as `.` and a missing character as empty, as the DATA step `put` does (not the empty-field convention of PROC EXPORT). `PROC IMPORT`/`PROC EXPORT` handle delimited files (`dbms=csv`/`tab`/`dlm`): IMPORT reads the header for column names (`getnames=`, default yes), honors `datarow=` and `delimiter=`/`dlm=`, and sniffs each column's type (numeric if every non-empty value parses, else character); EXPORT writes a header row (`putnames=`, default yes), DSD-quotes values containing the delimiter/quote, and writes a missing value as an empty field. **Column/pointer input and output** are supported: column input reads each variable from a 1-based column range (`input id 1-3 name $ 5-14 age 16-17;`), formatted input reads an informat width from the column pointer, and `@n`/`+n` move the pointer; column output positions each `put` item by range or pointer (`put name $ 1-10 age 11-13;`, `put @5 label $ @10 id 3.;`), left-justifying character and right-justifying numeric values within an explicit range. Not yet: `put _all_`/named output (`var=`), multi-line `#n` line pointers and trailing `@`/`@@` line-hold, `infile`/`file` options beyond the above (e.g. `lrecl=`, `pad`, `end=`, `mod`), and non-delimited IMPORT/EXPORT targets (`.xlsx`, `.sas7bdat`).
 - External-database LIBNAME engines are supported **read-only** for Postgres, SQL Server, and Oracle (`libname pg postgres "…"; … set pg.table;`). Not yet: writing datasets back to a database, implicit query pushdown (ASS reads the table and computes locally — same results, full transfer), PROC SQL pass-through to external librefs, DB2 (needs the CGo IBM CLI driver), and the long tail of SAS/ACCESS options. See [`databases.md`](databases.md).
 - JSON harness output (machine-readable report); SAS-byte-identical listing comparison (a non-goal — see "What compatibility means" above; value comparison via `expected.datasets` is the supported mechanism)
 

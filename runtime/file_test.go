@@ -64,6 +64,46 @@ run;`, out))
 	}
 }
 
+func TestFilePutColumnOutput(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.txt")
+	runProg(t, fmt.Sprintf(`data src;
+  name = "Mary Ann"; age = 42; output;
+  name = "Bob"; age = 7; output;
+run;
+data _null_;
+  set src;
+  file "%s";
+  put name $ 1-10 age 11-13;
+run;`, out))
+
+	got := readFile(t, out)
+	// NAME left-justified in cols 1-10, AGE right-justified in cols 11-13.
+	// Trailing blanks are trimmed from each line.
+	want := "Mary Ann   42\nBob         7\n"
+	if got != want {
+		t.Errorf("column output:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestFilePutPointerOutput(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.txt")
+	runProg(t, fmt.Sprintf(`data src;
+  id = 7; label = "X"; output;
+run;
+data _null_;
+  set src;
+  file "%s";
+  put @5 label $ @10 id 3.;
+run;`, out))
+
+	got := readFile(t, out)
+	// label "X" placed at col 5; id formatted (3.) "7" placed starting at col 10.
+	want := "    X    7\n"
+	if got != want {
+		t.Errorf("pointer output:\n got %q\nwant %q", got, want)
+	}
+}
+
 func TestFilePutListDefault(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out.txt")
 	runProg(t, fmt.Sprintf(`data src;

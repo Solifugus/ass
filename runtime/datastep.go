@@ -465,6 +465,10 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 // PDV. A `$` variable is character; otherwise the field is parsed as a number.
 // Missing fields, "." , and unparseable numbers become the typed missing value.
 func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
+	if columnMode(st) {
+		d.applyColumnInput(st, line)
+		return
+	}
 	fields := d.splitFields(line)
 	for i, v := range st.Vars {
 		var val table.Value
@@ -484,6 +488,120 @@ func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
 		}
 		d.pdv.Set(v.Name, val)
 	}
+}
+
+// columnMode reports whether an INPUT statement uses column/pointer input
+// (explicit column ranges or `@n`/`+n` pointers) rather than delimited list
+// input. In that mode fields are read by character position, not by splitting on
+// a delimiter.
+func columnMode(st *ast.InputStatement) bool {
+	for _, v := range st.Vars {
+		if v.ColStart > 0 || v.At > 0 || v.Plus > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// applyColumnInput reads each variable from a fixed character position in the
+// record. A 1-based column pointer advances as fields are read: `@n` sets it
+// absolutely, `+n` skips forward, an explicit `start-end` range reads that span,
+// an informat reads its width from the pointer, and a bare variable scans a
+// whitespace-delimited token from the pointer.
+func (d *dataStep) applyColumnInput(st *ast.InputStatement, line string) {
+	col := 1 // 1-based next read column
+	for _, v := range st.Vars {
+		if v.At > 0 {
+			col = v.At
+		}
+		if v.Plus > 0 {
+			col += v.Plus
+		}
+
+		var field string
+		switch {
+		case v.ColStart > 0:
+			start := v.ColStart
+			end := v.ColEnd
+			if end == 0 {
+				end = start
+			}
+			field = colSlice(line, start, end)
+			col = end + 1
+		case v.Informat != "":
+			if w := informatWidth(v.Informat); w > 0 {
+				field = colSlice(line, col, col+w-1)
+				col += w
+			} else { // no explicit width — scan a token
+				field, col = scanToken(line, col)
+			}
+		default:
+			field, col = scanToken(line, col)
+		}
+
+		var val table.Value
+		switch {
+		case v.Informat != "":
+			val = formats.ParseInput(field, v.Informat)
+		case v.Char:
+			val = table.Char(strings.TrimRight(field, " "))
+		default:
+			val = parseNum(strings.TrimSpace(field))
+		}
+		d.pdv.Set(v.Name, val)
+	}
+}
+
+// colSlice returns the 1-based inclusive [start,end] substring of line, clamped
+// to the line's bounds (a range past the end yields the empty string).
+func colSlice(line string, start, end int) string {
+	if start < 1 {
+		start = 1
+	}
+	if start > len(line) {
+		return ""
+	}
+	if end > len(line) {
+		end = len(line)
+	}
+	if end < start {
+		return ""
+	}
+	return line[start-1 : end]
+}
+
+// scanToken reads a whitespace-delimited token starting at or after the 1-based
+// column, returning the token and the 1-based column just past it.
+func scanToken(line string, col int) (string, int) {
+	i := col - 1
+	if i < 0 {
+		i = 0
+	}
+	for i < len(line) && line[i] == ' ' {
+		i++
+	}
+	start := i
+	for i < len(line) && line[i] != ' ' {
+		i++
+	}
+	return line[start:i], i + 1
+}
+
+// informatWidth returns the field width declared by an informat spec (e.g.
+// "$10." -> 10, "comma8.2" -> 8), or 0 when none is given.
+func informatWidth(informat string) int {
+	s := strings.TrimPrefix(informat, "$")
+	// width is the run of digits before the dot.
+	dot := strings.IndexByte(s, '.')
+	if dot < 0 {
+		dot = len(s)
+	}
+	j := dot
+	for j > 0 && s[j-1] >= '0' && s[j-1] <= '9' {
+		j--
+	}
+	w, _ := strconv.Atoi(s[j:dot])
+	return w
 }
 
 // parseNum converts an input field to a numeric value, yielding numeric missing
@@ -744,6 +862,9 @@ func writeFileOutput(f *ast.FileStatement, lines []string) error {
 // associated format; under DSD, values containing the delimiter or a quote are
 // wrapped in double quotes (embedded quotes doubled).
 func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
+	if putColumnMode(st) {
+		return d.buildPutColumnLine(st)
+	}
 	sep := " "
 	dsd := false
 	if d.file != nil {
@@ -772,6 +893,98 @@ func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, sep)
+}
+
+// putColumnMode reports whether a PUT statement uses column/pointer output
+// (explicit column ranges or `@n`/`+n` pointers) rather than delimiter-joined
+// list output.
+func putColumnMode(st *ast.PutStatement) bool {
+	for _, it := range st.Items {
+		if it.ColStart > 0 || it.At > 0 || it.Plus > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// buildPutColumnLine renders a PUT statement that positions its items by column.
+// A 1-based cursor advances as items are written: `@n` sets it absolutely, `+n`
+// skips forward, an explicit `start-end` range writes into that span (character
+// left-justified, numeric right-justified within the width), and any other item
+// is written starting at the cursor. Trailing blanks are trimmed from the line.
+func (d *dataStep) buildPutColumnLine(st *ast.PutStatement) string {
+	var buf []byte
+	col := 1 // 1-based next write column
+	place := func(text string, start, width int) {
+		// Pad the buffer up to the write span.
+		end := start + len(text) - 1
+		if width > 0 {
+			end = start + width - 1
+		}
+		for len(buf) < end {
+			buf = append(buf, ' ')
+		}
+		for k, ch := range []byte(text) {
+			if start-1+k < len(buf) {
+				buf[start-1+k] = ch
+			}
+		}
+	}
+	for _, it := range st.Items {
+		if it.At > 0 {
+			col = it.At
+		}
+		if it.Plus > 0 {
+			col += it.Plus
+		}
+
+		var text string
+		if it.IsLiteral {
+			text = it.Literal
+		} else {
+			format := it.Format
+			if format == "" {
+				format = d.formats[strings.ToLower(it.Var)]
+			}
+			v := d.pdv.Get(it.Var)
+			text = strings.TrimSpace(formats.Apply(v, format))
+			if it.ColStart > 0 {
+				width := 1
+				if it.ColEnd > 0 {
+					width = it.ColEnd - it.ColStart + 1
+				}
+				text = justify(text, width, v.Kind == table.Character)
+			}
+		}
+
+		switch {
+		case it.ColStart > 0:
+			start := it.ColStart
+			width := 1
+			if it.ColEnd > 0 {
+				width = it.ColEnd - it.ColStart + 1
+			}
+			place(text, start, width)
+			col = start + width
+		default:
+			place(text, col, 0)
+			col += len(text)
+		}
+	}
+	return strings.TrimRight(string(buf), " ")
+}
+
+// justify fits text into a fixed width: character values are left-justified,
+// numeric values right-justified; either is truncated if too long.
+func justify(text string, width int, char bool) string {
+	if len(text) >= width {
+		return text[:width]
+	}
+	pad := strings.Repeat(" ", width-len(text))
+	if char {
+		return text + pad
+	}
+	return pad + text
 }
 
 // readInfile reads the external flat file named by an INFILE statement into one

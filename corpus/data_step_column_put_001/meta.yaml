@@ -1,0 +1,27 @@
+id: data_step_column_put_001
+source: hand-written
+license: MIT
+features:
+  - file-put
+  - input
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    back:
+      columns: [name, age]
+      rows:
+        # PUT wrote NAME left-justified in cols 1-10 and AGE right-justified in
+        # cols 11-13; column INPUT read the same spans back, trimming blanks.
+        - ["Mary Ann", 42]
+        - ["Bob", 7]
+priority: 2
+notes: |
+  Round-trips a dataset through a fixed-width flat file: column/pointer PUT
+  output (`put name $ 1-10 age 11-13;`) writes each value into its column span,
+  and the matching column INPUT reads it back. Confirms character values are
+  left-justified, numeric values right-justified, and embedded blanks survive.
+  @TMP@ is a per-run temp directory supplied by the harness.

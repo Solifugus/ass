@@ -42,6 +42,29 @@ func TestParseAssignmentAndInput(t *testing.T) {
 	}
 }
 
+func TestParseColumnAndPointerInput(t *testing.T) {
+	body := dataBody(t, "data s; input name $ 1-10 age 11-13 @1 id $5. +2 x 3.; run;")
+	in, ok := body[0].(*ast.InputStatement)
+	if !ok {
+		t.Fatalf("stmt 0 is %T, want InputStatement", body[0])
+	}
+	if len(in.Vars) != 4 {
+		t.Fatalf("got %d vars, want 4: %+v", len(in.Vars), in.Vars)
+	}
+	if v := in.Vars[0]; !v.Char || v.ColStart != 1 || v.ColEnd != 10 {
+		t.Errorf("var0 = %+v, want name $ 1-10", v)
+	}
+	if v := in.Vars[1]; v.Char || v.ColStart != 11 || v.ColEnd != 13 {
+		t.Errorf("var1 = %+v, want age 11-13", v)
+	}
+	if v := in.Vars[2]; v.At != 1 || v.Informat != "$5." || !v.Char {
+		t.Errorf("var2 = %+v, want @1 id $5.", v)
+	}
+	if v := in.Vars[3]; v.Plus != 2 || v.Informat != "3." {
+		t.Errorf("var3 = %+v, want +2 x 3.", v)
+	}
+}
+
 func TestParseSetAndSubsettingIf(t *testing.T) {
 	body := dataBody(t, "data adults; set people; if age >= 18; run;")
 	if _, ok := body[0].(*ast.SetStatement); !ok {

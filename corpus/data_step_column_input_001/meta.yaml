@@ -1,0 +1,26 @@
+id: data_step_column_input_001
+source: hand-written
+license: MIT
+features:
+  - input
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    people:
+      columns: [id, name, age]
+      rows:
+        # NAME (cols 5-14) keeps its embedded blank; column input does not split
+        # "Mary Ann" the way delimited list input would. ID is cols 1-3, AGE
+        # cols 16-17.
+        - [1, "Mary Ann", 42]
+        - [12, "Bob", 7]
+priority: 2
+notes: |
+  Fixed-width column input: `input id 1-3 name $ 5-14 age 16-17;`. Each variable
+  is read from its 1-based inclusive column range rather than by splitting the
+  record on whitespace, so the space inside "Mary Ann" is preserved and trailing
+  blanks are trimmed.

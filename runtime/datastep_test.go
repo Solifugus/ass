@@ -189,6 +189,57 @@ func TestDataStepInputDatalines(t *testing.T) {
 	}
 }
 
+func TestDataStepColumnInput(t *testing.T) {
+	// Fixed-width column input: name in 1-10, age in 11-13. Note "Mary Ann"
+	// contains a blank that list input would split on; column input keeps it.
+	src := "data people;\n  input name $ 1-10 age 11-13;\n  datalines;\n" +
+		"Mary Ann   42\n" +
+		"Bob        7\n" +
+		";\nrun;"
+	lib := runStep(t, src)
+	ds, ok := lib.Get("people")
+	if !ok {
+		t.Fatal("dataset PEOPLE not created")
+	}
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2", ds.NObs())
+	}
+	if got := ds.Get(ds.Rows[0], "name"); got.Str != "Mary Ann" {
+		t.Errorf("row0 name = %q, want %q", got.Str, "Mary Ann")
+	}
+	if got := ds.Get(ds.Rows[0], "age"); got.Num != 42 {
+		t.Errorf("row0 age = %v, want 42", got.Display())
+	}
+	if got := ds.Get(ds.Rows[1], "name"); got.Str != "Bob" {
+		t.Errorf("row1 name = %q, want %q", got.Str, "Bob")
+	}
+	if got := ds.Get(ds.Rows[1], "age"); got.Num != 7 {
+		t.Errorf("row1 age = %v, want 7", got.Display())
+	}
+}
+
+func TestDataStepPointerFormattedInput(t *testing.T) {
+	// Pointer + formatted input: @1 reads a $5. name, @7 reads a comma-numeric
+	// salary of width 7, then +1 skips a space and reads a 2-digit age.
+	src := "data emp;\n  input @1 name $5. @7 salary comma7. age 2.;\n  datalines;\n" +
+		"Anna  12,500 30\n" +
+		";\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("emp")
+	if ds.NObs() != 1 {
+		t.Fatalf("NObs = %d, want 1", ds.NObs())
+	}
+	if got := ds.Get(ds.Rows[0], "name"); got.Str != "Anna" {
+		t.Errorf("name = %q, want Anna", got.Str)
+	}
+	if got := ds.Get(ds.Rows[0], "salary"); got.Num != 12500 {
+		t.Errorf("salary = %v, want 12500", got.Display())
+	}
+	if got := ds.Get(ds.Rows[0], "age"); got.Num != 30 {
+		t.Errorf("age = %v, want 30", got.Display())
+	}
+}
+
 func TestDataStepInputWithComputedColumn(t *testing.T) {
 	src := "data out;\n  input x;\n  y = x * 2;\n  datalines;\n1\n2\n3\n;\nrun;"
 	lib := runStep(t, src)

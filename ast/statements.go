@@ -76,10 +76,21 @@ func (m *MergeStatement) String() string {
 // InputVar is one variable in an INPUT statement; Char is true if it was marked
 // with `$` (character). Informat, when non-empty, is the informat spec used to
 // read the field (e.g. "comma8.", "date9.", "$20.").
+//
+// Column/pointer input adds explicit positioning. ColStart>0 marks column input:
+// the value is read from the 1-based inclusive column range ColStart..ColEnd
+// (ColEnd==0 means a single column at ColStart). At>0 is a `@n` absolute column
+// pointer set before reading this variable; Plus>0 is a `+n` relative skip. Any
+// of these (or a formatted read that follows a pointer) puts the INPUT statement
+// in column/pointer mode rather than delimited list mode.
 type InputVar struct {
 	Name     string
 	Char     bool
 	Informat string
+	ColStart int
+	ColEnd   int
+	At       int
+	Plus     int
 }
 
 // InputStatement is `input <var [$]>...;`.
@@ -136,11 +147,22 @@ func (f *FileStatement) String() string { return "file \"" + f.Path + "\";" }
 // PutItem is one element of a PUT statement: either a quoted string literal
 // (IsLiteral) or a variable reference. Format, when non-empty, is the inline
 // format spec written after the variable (e.g. "dollar8.2", "$10").
+//
+// Column/pointer output adds explicit positioning, mirroring INPUT: ColStart>0
+// writes the value into the 1-based inclusive range ColStart..ColEnd (character
+// left-justified, numeric right-justified within the width); At>0 is a `@n`
+// absolute column pointer set before writing this item; Plus>0 is a `+n` relative
+// skip. Any of these put the PUT statement in column/pointer mode rather than
+// delimiter-joined list mode.
 type PutItem struct {
 	IsLiteral bool
 	Literal   string
 	Var       string
 	Format    string
+	ColStart  int
+	ColEnd    int
+	At        int
+	Plus      int
 }
 
 // PutStatement is `put <item>...;`, writing the items as one line to the current

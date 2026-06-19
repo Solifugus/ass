@@ -528,6 +528,7 @@ func (p *Parser) parsePut() ast.Statement {
 // otherwise it is a variable name.
 func parsePutItems(raw string) []ast.PutItem {
 	var items []ast.PutItem
+	var pendAt, pendPlus int
 	runes := []rune(raw)
 	for i := 0; i < len(runes); {
 		r := runes[i]
@@ -552,7 +553,8 @@ func parsePutItems(raw string) []ast.PutItem {
 				b.WriteRune(runes[i])
 				i++
 			}
-			items = append(items, ast.PutItem{IsLiteral: true, Literal: b.String()})
+			items = append(items, ast.PutItem{IsLiteral: true, Literal: b.String(), At: pendAt, Plus: pendPlus})
+			pendAt, pendPlus = 0, 0
 			continue
 		}
 		var b strings.Builder
@@ -561,7 +563,32 @@ func parsePutItems(raw string) []ast.PutItem {
 			i++
 		}
 		tok := b.String()
-		if strings.Contains(tok, ".") { // a format spec for the most recent variable
+		switch {
+		case tok == "$": // character marker in column output — kind is known at runtime
+			continue
+		case strings.HasPrefix(tok, "@") && isDigits(tok[1:]): // @n absolute column pointer
+			pendAt, _ = strconv.Atoi(tok[1:])
+			continue
+		case strings.HasPrefix(tok, "+") && len(tok) > 1 && isDigits(tok[1:]): // +n relative skip
+			pendPlus, _ = strconv.Atoi(tok[1:])
+			continue
+		case isColRange(tok): // `1-10` column range for the most recent variable
+			for j := len(items) - 1; j >= 0; j-- {
+				if !items[j].IsLiteral {
+					items[j].ColStart, items[j].ColEnd = splitColRange(tok)
+					break
+				}
+			}
+			continue
+		case isDigits(tok): // single column for the most recent variable
+			for j := len(items) - 1; j >= 0; j-- {
+				if !items[j].IsLiteral {
+					items[j].ColStart, _ = strconv.Atoi(tok)
+					break
+				}
+			}
+			continue
+		case strings.Contains(tok, "."): // a format spec for the most recent variable
 			for j := len(items) - 1; j >= 0; j-- {
 				if !items[j].IsLiteral {
 					items[j].Format = strings.TrimSuffix(tok, ".")
@@ -570,7 +597,8 @@ func parsePutItems(raw string) []ast.PutItem {
 			}
 			continue
 		}
-		items = append(items, ast.PutItem{Var: tok})
+		items = append(items, ast.PutItem{Var: tok, At: pendAt, Plus: pendPlus})
+		pendAt, pendPlus = 0, 0
 	}
 	return items
 }
@@ -601,16 +629,61 @@ func (p *Parser) parseInput() ast.Statement {
 	p.expectSemicolon()
 
 	// Tokenize on whitespace: a field is a variable name, a bare `$` (character
-	// marker), a `:`/`&` list-input modifier (ignored), or an informat spec
-	// (the only field that contains `.`, optionally `$`-prefixed for character).
+	// marker), a `:`/`&` list-input modifier (ignored), an informat spec (the
+	// only field that contains `.`, optionally `$`-prefixed for character), a
+	// `@n`/`+n` column pointer, or a column spec (`1-10` range or a single `5`).
+	// Pointers (`@n`/`+n`) bind to the next variable read; ranges/columns and
+	// informats bind to the most recent variable.
 	stmt := &ast.InputStatement{}
-	for _, tok := range strings.Fields(raw) {
+	toks := strings.Fields(raw)
+	var pendAt, pendPlus int
+	for i := 0; i < len(toks); i++ {
+		tok := toks[i]
 		switch {
 		case tok == ":" || tok == "&":
 			// list-input modifier — informat still applies to the same variable
 		case tok == "$":
 			if n := len(stmt.Vars); n > 0 {
 				stmt.Vars[n-1].Char = true
+			}
+		case strings.HasPrefix(tok, "@"): // @n absolute column pointer
+			num := strings.TrimPrefix(tok, "@")
+			if num == "" && i+1 < len(toks) { // spaced form `@ 5`
+				i++
+				num = toks[i]
+			}
+			if v, err := strconv.Atoi(num); err == nil {
+				pendAt = v
+			}
+		case strings.HasPrefix(tok, "+") && len(tok) > 1 && isDigits(tok[1:]): // +n relative skip
+			if v, err := strconv.Atoi(tok[1:]); err == nil {
+				pendPlus = v
+			}
+		case tok == "+": // spaced form `+ 2`
+			if i+1 < len(toks) && isDigits(toks[i+1]) {
+				i++
+				if v, err := strconv.Atoi(toks[i]); err == nil {
+					pendPlus = v
+				}
+			}
+		case tok == "-": // spaced range tail: `1 - 10`
+			if n := len(stmt.Vars); n > 0 && i+1 < len(toks) && isDigits(toks[i+1]) {
+				i++
+				if v, err := strconv.Atoi(toks[i]); err == nil {
+					stmt.Vars[n-1].ColEnd = v
+				}
+			}
+		case isColRange(tok): // `1-10` column range for the most recent variable
+			if n := len(stmt.Vars); n > 0 {
+				s, e := splitColRange(tok)
+				stmt.Vars[n-1].ColStart = s
+				stmt.Vars[n-1].ColEnd = e
+			}
+		case isDigits(tok): // single column for the most recent variable
+			if n := len(stmt.Vars); n > 0 {
+				if v, err := strconv.Atoi(tok); err == nil {
+					stmt.Vars[n-1].ColStart = v
+				}
 			}
 		case strings.Contains(tok, "."): // an informat for the most recent variable
 			if n := len(stmt.Vars); n > 0 {
@@ -627,10 +700,42 @@ func (p *Parser) parseInput() ast.Statement {
 				name = strings.TrimSuffix(name, "$")
 				char = true
 			}
-			stmt.Vars = append(stmt.Vars, ast.InputVar{Name: name, Char: char})
+			stmt.Vars = append(stmt.Vars, ast.InputVar{Name: name, Char: char, At: pendAt, Plus: pendPlus})
+			pendAt, pendPlus = 0, 0
 		}
 	}
 	return stmt
+}
+
+// isDigits reports whether s is non-empty and all ASCII digits.
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isColRange reports whether tok is a `start-end` column range (digits, a single
+// hyphen, digits).
+func isColRange(tok string) bool {
+	dash := strings.IndexByte(tok, '-')
+	if dash <= 0 || dash == len(tok)-1 {
+		return false
+	}
+	return isDigits(tok[:dash]) && isDigits(tok[dash+1:])
+}
+
+// splitColRange parses a validated `start-end` range into its 1-based bounds.
+func splitColRange(tok string) (int, int) {
+	dash := strings.IndexByte(tok, '-')
+	s, _ := strconv.Atoi(tok[:dash])
+	e, _ := strconv.Atoi(tok[dash+1:])
+	return s, e
 }
 
 // parseIf parses both `if <cond> then <stmt>; [else <stmt>;]` and the bare
