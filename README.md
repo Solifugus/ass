@@ -73,6 +73,7 @@ Obs  name  age
 | DATA step | `input`/`datalines`, `infile` (external flat files), `file`/`put` (write flat files), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `output`, `data _null_` |
 | Flat-file input | `infile "path"` with `dlm=`/`delimiter=`, `dsd` (CSV: quoted fields, embedded delimiters, missing), `firstobs=`, `obs=` |
 | Flat-file output | `file "path"` with `dlm=`/`dsd` (CSV: quotes values containing the delimiter); `put` of variables, string literals, and formatted values |
+| PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files: `dbms=csv/tab/dlm`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row |
 | Dataset options | `(keep= drop= rename=(o=n) where=(...))` on `set`/`merge`/`data`/proc `data=` |
 | Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset — Postgres, SQL Server, Oracle (read-only); see [`docs/databases.md`](docs/databases.md) |
 | Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
@@ -87,7 +88,7 @@ Obs  name  age
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
 
-Not yet supported (selected): `PROC IMPORT`/`EXPORT` (flat-file *reading* via `infile` and *writing* via `file`/`put` are supported), column/pointer input and output, PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
+Not yet supported (selected): column/pointer input and output (`@`/`#`, fixed-width ranges), PROC IMPORT/EXPORT for non-delimited formats (`.xlsx`, `.sas7bdat`; delimited CSV/TAB/DLM are supported), PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
 
 ## Contributing
 

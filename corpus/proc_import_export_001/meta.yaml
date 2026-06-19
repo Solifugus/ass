@@ -1,0 +1,27 @@
+id: proc_import_export_001
+source: hand-written
+license: MIT
+features:
+  - proc-export
+  - proc-import
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    back:
+      columns: [name, salary]
+      rows:
+        # EXPORT quoted "Smith, John" (embedded comma) into the CSV; IMPORT read
+        # it back unquoted. SALARY was sniffed numeric from the data rows.
+        - ["Smith, John", 52000]
+        - ["Mary", 48500]
+priority: 2
+notes: |
+  Round-trips a dataset through a CSV file with PROC EXPORT and PROC IMPORT.
+  EXPORT writes a header row (column names) and DSD-quotes the embedded comma;
+  IMPORT uses the header for names (GETNAMES=YES default) and sniffs the numeric
+  column from the data values. @TMP@ is a per-run temp directory supplied by the
+  harness.

@@ -2,11 +2,11 @@ package runtime
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/flatfile"
 	"github.com/solifugus/ass/formats"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
@@ -732,13 +732,8 @@ func findFile(stmts []ast.Statement) *ast.FileStatement {
 // per line with a trailing newline. A FILE with no PUT output still produces an
 // (empty) file, matching SAS.
 func writeFileOutput(f *ast.FileStatement, lines []string) error {
-	var b strings.Builder
-	for _, ln := range lines {
-		b.WriteString(ln)
-		b.WriteByte('\n')
-	}
-	if err := os.WriteFile(f.Path, []byte(b.String()), 0o644); err != nil {
-		return fmt.Errorf("file %q: %w", f.Path, err)
+	if err := flatfile.WriteLines(f.Path, lines); err != nil {
+		return fmt.Errorf("file %w", err)
 	}
 	return nil
 }
@@ -772,48 +767,21 @@ func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
 		}
 		s := strings.TrimSpace(formats.Apply(d.pdv.Get(it.Var), format))
 		if dsd {
-			s = dsdQuote(s, sep)
+			s = flatfile.Quote(s, sep)
 		}
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, sep)
 }
 
-// dsdQuote wraps s in double quotes (doubling embedded quotes) when it contains
-// the delimiter, a quote, or a newline — the DSD output convention.
-func dsdQuote(s, sep string) string {
-	if strings.Contains(s, sep) || strings.Contains(s, "\"") || strings.Contains(s, "\n") {
-		return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
-	}
-	return s
-}
-
 // readInfile reads the external flat file named by an INFILE statement into one
-// record per line, applying FIRSTOBS=/OBS= line bounds (1-based; 0 = unset).
-// CRLF is normalized to LF and a single trailing newline is dropped.
+// record per line, applying FIRSTOBS=/OBS= line bounds.
 func readInfile(in *ast.InfileStatement) ([]string, error) {
-	data, err := os.ReadFile(in.Path)
+	lines, err := flatfile.ReadLines(in.Path, in.Firstobs, in.Obs)
 	if err != nil {
-		return nil, fmt.Errorf("infile %q: %w", in.Path, err)
+		return nil, fmt.Errorf("infile %w", err)
 	}
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	text = strings.TrimSuffix(text, "\n")
-	if text == "" {
-		return nil, nil
-	}
-	lines := strings.Split(text, "\n")
-	first := in.Firstobs
-	if first < 1 {
-		first = 1
-	}
-	if first > len(lines) {
-		return nil, nil
-	}
-	last := len(lines)
-	if in.Obs > 0 && in.Obs < last {
-		last = in.Obs
-	}
-	return lines[first-1 : last], nil
+	return lines, nil
 }
 
 // splitFields breaks an input record into fields according to the active INFILE
@@ -830,47 +798,7 @@ func (d *dataStep) splitFields(line string) []string {
 	if delim == "" {
 		return strings.Fields(line)
 	}
-	sep := rune(delim[0])
-	if d.infile.DSD {
-		return splitDSD(line, sep)
-	}
-	// DLM without DSD: consecutive delimiters collapse to one (SAS behavior).
-	return strings.FieldsFunc(line, func(r rune) bool { return r == sep })
-}
-
-// splitDSD parses one delimited line with DSD semantics: fields may be wrapped
-// in double quotes (a delimiter inside quotes is literal; "" is an escaped
-// quote), and consecutive delimiters yield empty (missing) fields.
-func splitDSD(line string, sep rune) []string {
-	var fields []string
-	var b strings.Builder
-	inQuotes := false
-	runes := []rune(line)
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-		switch {
-		case inQuotes:
-			if r == '"' {
-				if i+1 < len(runes) && runes[i+1] == '"' {
-					b.WriteRune('"')
-					i++
-				} else {
-					inQuotes = false
-				}
-			} else {
-				b.WriteRune(r)
-			}
-		case r == '"':
-			inQuotes = true
-		case r == sep:
-			fields = append(fields, b.String())
-			b.Reset()
-		default:
-			b.WriteRune(r)
-		}
-	}
-	fields = append(fields, b.String())
-	return fields
+	return flatfile.SplitDelim(line, rune(delim[0]), d.infile.DSD)
 }
 
 // hasInputStatement reports whether the body contains an INPUT statement.
