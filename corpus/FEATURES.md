@@ -14,6 +14,8 @@ level it first becomes relevant at, matching the build order in [`../docs/PLAN.m
 | `datalines` | 1 | Inline raw data via `datalines;`/`cards;` up to a terminating `;`. |
 | `infile` | 1 | External flat-file input via `infile "<path>"` (`dlm=`/`dsd`/`firstobs=`/`obs=`) feeding `input`. |
 | `file-put` | 1 | External flat-file output via `file "<path>"` (`dlm=`/`dsd`) and `put` (variables, literals, inline formats); `data _null_`. |
+| `libname` | 2 | `libname <ref> <engine> "<conn>";` binding a libref to an external library (base/directory of `.sas7bdat` files, or a database engine). |
+| `sas7bdat` | 2 | Reading native SAS dataset files (`.sas7bdat`) as datasets (clean-room reader; 32/64-bit little-endian, uncompressed). |
 | `assignment` | 1 | Variable assignment expressions, e.g. `x = a + b;`. |
 | `if-then-else` | 1 | Conditional execution `if cond then ...; else ...;` and subsetting `if cond;`. |
 | `do-loop` | 1 | Iterative `do`/`do while`/`do until` ... `end;`. |

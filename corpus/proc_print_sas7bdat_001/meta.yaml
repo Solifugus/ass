@@ -1,0 +1,65 @@
+id: proc_print_sas7bdat_001
+source: hand-written
+license: MIT
+features:
+  - sas7bdat
+  - libname
+  - set
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    one:
+      # keep= preserves the source column order, not the keep-list order.
+      columns: [actual, predict, country, region, product, year]
+      rows:
+        - [925, 850, "CANADA", "EAST", "SOFA", 1993]
+    years:
+      columns: [year]
+      rows:
+        - [1948]
+        - [1949]
+        - [1950]
+        - [1951]
+        - [1952]
+        - [1953]
+        - [1954]
+        - [1955]
+        - [1956]
+        - [1957]
+        - [1958]
+        - [1959]
+        - [1960]
+        - [1961]
+        - [1962]
+        - [1963]
+        - [1964]
+        - [1965]
+        - [1966]
+        - [1967]
+        - [1968]
+        - [1969]
+        - [1970]
+        - [1971]
+        - [1972]
+        - [1973]
+        - [1974]
+        - [1975]
+        - [1976]
+        - [1977]
+        - [1978]
+        - [1979]
+priority: 2
+notes: |
+  Reads two native .sas7bdat files through a base/directory LIBNAME engine
+  (`libname lib "@DIR@";` then `set lib.member;`). The clean-room reader is
+  implemented from the public reverse-engineering literature on the format
+  (ReadStat/sas7bdat projects, Shotwell's notes) — never from proprietary SAS
+  material. Covers 32-bit little-endian uncompressed files with numeric (incl.
+  truncated) and character columns. The productsales filter isolates one unique
+  observation to value-verify character reads; airline's YEAR verifies numeric
+  reads as clean integers. The fixtures are public-domain samples from the
+  pandas test corpus.
