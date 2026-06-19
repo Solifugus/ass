@@ -6,6 +6,7 @@ Project documentation for **Analyst's Statistical Suite (ASS)**. Start with the
 | Document | What it covers |
 |----------|----------------|
 | [`design.md`](design.md) | Design rationale: what ASS is, the interpreter pipeline, execution model, and compatibility levels (L0–L6). |
+| [`databases.md`](databases.md) | Reading external databases via the `LIBNAME` engine (Postgres/SQL Server/Oracle): assignment, type mapping, and limitations. |
 | [`COMPATIBILITY.md`](COMPATIBILITY.md) | What "compatible" means here (value/result compatibility, not byte-identical output), the per-feature compatibility matrix, and known deferrals. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to add a corpus item, run the harness, and implement a new PROC or function (clean-room rules included). |
 | [`PLAN.md`](PLAN.md) | The living, resumable development plan and dated progress log — the source of truth for what's done. |

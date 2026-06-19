@@ -72,6 +72,7 @@ Obs  name  age
 |------|------------|
 | DATA step | `input`/`datalines`, `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `output` |
 | Dataset options | `(keep= drop= rename=(o=n) where=(...))` on `set`/`merge`/`data`/proc `data=` |
+| Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset — Postgres, SQL Server, Oracle (read-only); see [`docs/databases.md`](docs/databases.md) |
 | Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
 | PROC PRINT | `var`, `noobs`, `label`, applied formats |
 | PROC SORT | `by` (+ `descending`), `out=`, `nodupkey` |

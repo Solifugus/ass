@@ -38,6 +38,26 @@ type Step interface {
 	stepNode()
 }
 
+// LibnameStatement is a global `libname <ref> <engine> "<connection>";` (or
+// `libname <ref> clear;`). It binds a libref to an external library engine
+// (e.g. a database) for the rest of the program. Engine is lowercased
+// (postgres, sqlserver, oracle, db2, ...); Connection is the DSN/connection
+// string. Clear is true for an unassign.
+type LibnameStatement struct {
+	Libref     string
+	Engine     string
+	Connection string
+	Clear      bool
+}
+
+func (l *LibnameStatement) stepNode() {}
+func (l *LibnameStatement) String() string {
+	if l.Clear {
+		return "libname " + l.Libref + " clear;"
+	}
+	return "libname " + l.Libref + " " + l.Engine + " \"" + l.Connection + "\";"
+}
+
 // Program is a whole SAS source file: an ordered list of steps.
 type Program struct {
 	Steps []Step

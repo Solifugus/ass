@@ -57,16 +57,57 @@ func (p *Parser) addError(msg string)           { p.errors = append(p.errors, ms
 func (p *Parser) ParseProgram() *ast.Program {
 	prog := &ast.Program{}
 	for !p.curIs(lexer.EOF) {
-		switch p.cur.Type {
-		case lexer.DATA:
+		switch {
+		case p.curIs(lexer.DATA):
 			prog.Steps = append(prog.Steps, p.parseDataStep())
-		case lexer.PROC:
+		case p.curIs(lexer.PROC):
 			prog.Steps = append(prog.Steps, p.parseProcStep())
+		case p.identIs("libname"):
+			if st := p.parseLibname(); st != nil {
+				prog.Steps = append(prog.Steps, st)
+			}
 		default:
 			p.next() // skip anything not starting a step
 		}
 	}
 	return prog
+}
+
+// parseLibname parses a global `libname <ref> <engine> "<connection>";` or
+// `libname <ref> clear;`. The connection string is a quoted DSN; bare key=value
+// option lists are not yet supported.
+func (p *Parser) parseLibname() ast.Step {
+	p.next() // consume 'libname'
+	st := &ast.LibnameStatement{}
+	if p.curIs(lexer.IDENT) {
+		st.Libref = p.cur.Literal
+		p.next()
+	}
+	switch {
+	case p.identIs("clear"):
+		st.Clear = true
+		p.next()
+	case p.curIs(lexer.IDENT): // engine name, then a quoted connection string
+		st.Engine = strings.ToLower(p.cur.Literal)
+		p.next()
+		if p.curIs(lexer.STRING) {
+			st.Connection = p.cur.Literal
+			p.next()
+		}
+	case p.curIs(lexer.STRING):
+		// `libname ref "path";` — a base/directory library; unsupported engine.
+		st.Connection = p.cur.Literal
+		p.next()
+	}
+	// Consume any trailing option tokens up to the terminating semicolon.
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+		p.next()
+	}
+	p.expectSemicolon()
+	if st.Libref == "" {
+		return nil
+	}
+	return st
 }
 
 // parseDataStep parses `data <names...>; <body> run;`.

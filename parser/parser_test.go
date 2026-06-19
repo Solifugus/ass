@@ -93,3 +93,24 @@ func TestNoParseErrorsOnCleanInput(t *testing.T) {
 		t.Errorf("unexpected parse errors: %v", errs)
 	}
 }
+
+func TestParseLibname(t *testing.T) {
+	prog := New(`libname pg postgres "host=localhost dbname=demo";
+data out; set pg.customers; run;
+libname pg clear;`).ParseProgram()
+
+	if len(prog.Steps) != 3 {
+		t.Fatalf("got %d steps, want 3", len(prog.Steps))
+	}
+	ln, ok := prog.Steps[0].(*ast.LibnameStatement)
+	if !ok {
+		t.Fatalf("step 0 is %T, want *ast.LibnameStatement", prog.Steps[0])
+	}
+	if ln.Libref != "pg" || ln.Engine != "postgres" || ln.Connection != "host=localhost dbname=demo" {
+		t.Errorf("libname parsed wrong: %+v", ln)
+	}
+	clear, ok := prog.Steps[2].(*ast.LibnameStatement)
+	if !ok || !clear.Clear || clear.Libref != "pg" {
+		t.Errorf("clear libname parsed wrong: %+v", prog.Steps[2])
+	}
+}

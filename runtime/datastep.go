@@ -518,7 +518,10 @@ func (d *dataStep) collectSetRows(stmts []ast.Statement) ([]sourceRow, error) {
 			continue
 		}
 		for _, ref := range set.Refs {
-			src, found := d.lib.Get(ref.Name)
+			src, found, err := d.lib.Resolve(ref.Name)
+			if err != nil {
+				return nil, err
+			}
 			if !found {
 				continue
 			}

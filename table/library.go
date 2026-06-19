@@ -2,20 +2,66 @@ package table
 
 import "strings"
 
-// Library is an in-memory collection of datasets keyed by name, modeling a SAS
-// library such as WORK. Names are case-insensitive (stored uppercased), as in
-// SAS. This is how steps pass data to one another.
+// Backend is an external library engine (e.g. a relational database) assigned to
+// a libref via a LIBNAME statement. Load materializes one member (table) as a
+// dataset; ok is false when the member does not exist. Read-only for now; write
+// support (LIBNAME engines as DATA-step targets) will extend this interface.
+type Backend interface {
+	Load(member string) (ds *Dataset, ok bool, err error)
+}
+
+// Library models a SAS session's libraries. The unnamed in-memory store is WORK
+// (where steps pass datasets to one another); additional librefs may be bound to
+// external Backends via Assign (the LIBNAME statement). Names are
+// case-insensitive (uppercased), as in SAS.
 type Library struct {
-	datasets map[string]*Dataset
+	datasets map[string]*Dataset // the WORK in-memory store
+	backends map[string]Backend  // libref (uppercased) -> external engine
 
 	// Formats holds user-defined formats created by PROC FORMAT during the run.
 	// It is scoped to the library so definitions never leak between programs.
 	Formats *FormatCatalog
 }
 
-// NewLibrary creates an empty library.
+// NewLibrary creates an empty library (WORK only).
 func NewLibrary() *Library {
-	return &Library{datasets: make(map[string]*Dataset), Formats: NewFormatCatalog()}
+	return &Library{
+		datasets: make(map[string]*Dataset),
+		backends: make(map[string]Backend),
+		Formats:  NewFormatCatalog(),
+	}
+}
+
+// Assign binds a libref to an external Backend (the LIBNAME statement).
+func (l *Library) Assign(libref string, b Backend) {
+	l.backends[strings.ToUpper(libref)] = b
+}
+
+// Unassign removes a libref binding (`libname <ref> clear;`). WORK cannot be
+// unassigned here.
+func (l *Library) Unassign(libref string) {
+	delete(l.backends, strings.ToUpper(libref))
+}
+
+// IsExternal reports whether a (possibly qualified) name refers to a member of a
+// libref bound to an external Backend.
+func (l *Library) IsExternal(name string) bool {
+	_, ok := l.backends[strings.ToUpper(librefOf(name))]
+	return ok
+}
+
+// Resolve returns the dataset for a (possibly qualified) name. A name qualified
+// with a libref bound to an external Backend is loaded from that backend;
+// everything else resolves to the WORK store. Unlike Get, it can perform I/O and
+// so returns an error.
+func (l *Library) Resolve(name string) (*Dataset, bool, error) {
+	if ref := strings.ToUpper(librefOf(name)); ref != "" {
+		if b, ok := l.backends[ref]; ok {
+			return b.Load(datasetKey(name))
+		}
+	}
+	ds, ok := l.Get(name)
+	return ds, ok, nil
 }
 
 // Put stores (or replaces) a dataset under its name.
@@ -51,11 +97,20 @@ func (l *Library) Names() []string {
 	return names
 }
 
-// datasetKey extracts the dataset component from a possibly-qualified name
-// ("work.people" -> "people").
+// datasetKey extracts the dataset (member) component from a possibly-qualified
+// name ("work.people" -> "people").
 func datasetKey(name string) string {
 	if i := strings.LastIndex(name, "."); i >= 0 {
 		return name[i+1:]
 	}
 	return name
+}
+
+// librefOf extracts the library reference from a qualified name ("pg.customers"
+// -> "pg"), or "" when the name is unqualified.
+func librefOf(name string) string {
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		return name[:i]
+	}
+	return ""
 }

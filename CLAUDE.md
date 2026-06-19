@@ -34,6 +34,7 @@ Planned package layout (from the design doc):
 - `proc/` — PROC implementations
 - `formats/` — formats and informats
 - `sql/` — PROC SQL bridge or engine (may be backed by DuckDB/SQLite/PostgreSQL or a Go-native engine)
+- `dbio/` — external-database LIBNAME engines (`table.Backend` over `database/sql`); read-only Postgres/SQL Server/Oracle via pure-Go drivers. See `docs/databases.md`
 - `log/` — SAS-style logging
 - `corpus/` + `tests/` — compatibility corpus and tests
 
