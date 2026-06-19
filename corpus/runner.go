@@ -72,7 +72,13 @@ func Run(items []Item, opts Options) Report {
 func runItem(it Item, opts Options) Result {
 	res := Result{Item: it}
 
-	expanded := macro.Process(it.Input)
+	// @DIR@ resolves to the item's directory so a program can reference a
+	// companion data file (e.g. `infile "@DIR@/data.csv";`) portably.
+	input := it.Input
+	if it.Dir != "" {
+		input = strings.ReplaceAll(input, "@DIR@", it.Dir)
+	}
+	expanded := macro.Process(input)
 	p := parser.New(expanded)
 	prog := p.ParseProgram()
 	parseOK := len(p.Errors()) == 0

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -36,8 +37,9 @@ type dataStep struct {
 	outputs  []*table.Dataset // datasets this step writes
 	explicit bool             // step contains at least one OUTPUT statement
 	n        int              // current iteration (_N_)
-	records  []string         // inline data lines (datalines)
-	recPtr   int              // next datalines record to read
+	records  []string         // data lines (datalines or infile file contents)
+	recPtr   int              // next data record to read
+	infile   *ast.InfileStatement // external flat-file record source (nil = datalines)
 	setRows  []sourceRow      // rows from SET input datasets (concatenated)
 	setPtr   int              // next SET row to read
 	keep     map[string]bool  // if non-nil, only these vars are output (lowercased)
@@ -79,7 +81,16 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	}
 
 	d.explicit = containsOutput(ds.Body)
-	d.records = collectDatalines(ds.Body)
+	d.infile = findInfile(ds.Body)
+	if d.infile != nil {
+		recs, err := readInfile(d.infile)
+		if err != nil {
+			return err
+		}
+		d.records = recs
+	} else {
+		d.records = collectDatalines(ds.Body)
+	}
 	d.keep, d.drop = collectKeepDrop(ds.Body)
 	d.formats = collectFormats(ds.Body)
 	d.wheres = collectWheres(ds.Body)
@@ -212,6 +223,9 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		return d.applyWhere()
 	case *ast.DatalinesStatement:
 		// The data is collected up front; the statement itself does nothing.
+		return flowNormal, nil
+	case *ast.InfileStatement:
+		// The file is read up front; the statement itself does nothing.
 		return flowNormal, nil
 	case *ast.SetStatement:
 		if d.setPtr >= len(d.setRows) {
@@ -423,7 +437,7 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 // PDV. A `$` variable is character; otherwise the field is parsed as a number.
 // Missing fields, "." , and unparseable numbers become the typed missing value.
 func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
-	fields := strings.Fields(line)
+	fields := d.splitFields(line)
 	for i, v := range st.Vars {
 		var val table.Value
 		switch {
@@ -664,6 +678,101 @@ func collectDatalines(stmts []ast.Statement) []string {
 		}
 	}
 	return nil
+}
+
+// findInfile returns the INFILE statement in the body, or nil if none.
+func findInfile(stmts []ast.Statement) *ast.InfileStatement {
+	for _, s := range stmts {
+		if in, ok := s.(*ast.InfileStatement); ok {
+			return in
+		}
+	}
+	return nil
+}
+
+// readInfile reads the external flat file named by an INFILE statement into one
+// record per line, applying FIRSTOBS=/OBS= line bounds (1-based; 0 = unset).
+// CRLF is normalized to LF and a single trailing newline is dropped.
+func readInfile(in *ast.InfileStatement) ([]string, error) {
+	data, err := os.ReadFile(in.Path)
+	if err != nil {
+		return nil, fmt.Errorf("infile %q: %w", in.Path, err)
+	}
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	text = strings.TrimSuffix(text, "\n")
+	if text == "" {
+		return nil, nil
+	}
+	lines := strings.Split(text, "\n")
+	first := in.Firstobs
+	if first < 1 {
+		first = 1
+	}
+	if first > len(lines) {
+		return nil, nil
+	}
+	last := len(lines)
+	if in.Obs > 0 && in.Obs < last {
+		last = in.Obs
+	}
+	return lines[first-1 : last], nil
+}
+
+// splitFields breaks an input record into fields according to the active INFILE
+// delimiter settings: whitespace list input by default, a fixed delimiter with
+// DLM=, and CSV-style quoted/missing-aware parsing with DSD.
+func (d *dataStep) splitFields(line string) []string {
+	if d.infile == nil {
+		return strings.Fields(line)
+	}
+	delim := d.infile.Delimiter
+	if delim == "" && d.infile.DSD {
+		delim = ","
+	}
+	if delim == "" {
+		return strings.Fields(line)
+	}
+	sep := rune(delim[0])
+	if d.infile.DSD {
+		return splitDSD(line, sep)
+	}
+	// DLM without DSD: consecutive delimiters collapse to one (SAS behavior).
+	return strings.FieldsFunc(line, func(r rune) bool { return r == sep })
+}
+
+// splitDSD parses one delimited line with DSD semantics: fields may be wrapped
+// in double quotes (a delimiter inside quotes is literal; "" is an escaped
+// quote), and consecutive delimiters yield empty (missing) fields.
+func splitDSD(line string, sep rune) []string {
+	var fields []string
+	var b strings.Builder
+	inQuotes := false
+	runes := []rune(line)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch {
+		case inQuotes:
+			if r == '"' {
+				if i+1 < len(runes) && runes[i+1] == '"' {
+					b.WriteRune('"')
+					i++
+				} else {
+					inQuotes = false
+				}
+			} else {
+				b.WriteRune(r)
+			}
+		case r == '"':
+			inQuotes = true
+		case r == sep:
+			fields = append(fields, b.String())
+			b.Reset()
+		default:
+			b.WriteRune(r)
+		}
+	}
+	fields = append(fields, b.String())
+	return fields
 }
 
 // hasInputStatement reports whether the body contains an INPUT statement.

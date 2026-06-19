@@ -31,6 +31,8 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseSet()
 	case p.identIs("merge"):
 		return p.parseMerge()
+	case p.identIs("infile"):
+		return p.parseInfile()
 	case p.identIs("input"):
 		return p.parseInput()
 	case p.identIs("if"):
@@ -394,6 +396,84 @@ func (p *Parser) skipOptionValue() {
 	if !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
 		p.next()
 	}
+}
+
+// parseInfile parses `infile "<path>" <options>;`. Recognized options:
+// dlm=/delimiter="<c>", dsd, firstobs=<n>, obs=<n>, missover, truncover. The
+// path may be a quoted string (the usual form) or a bare token (a fileref-style
+// word, taken literally). Unknown tokens are skipped for forward compatibility.
+func (p *Parser) parseInfile() ast.Statement {
+	p.next() // 'infile'
+	stmt := &ast.InfileStatement{}
+	if p.curIs(lexer.STRING) {
+		stmt.Path = p.cur.Literal
+		p.next()
+	} else if p.curIs(lexer.IDENT) {
+		stmt.Path = p.cur.Literal
+		p.next()
+	}
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		if !p.curIs(lexer.IDENT) {
+			p.next()
+			continue
+		}
+		key := strings.ToLower(p.cur.Literal)
+		switch key {
+		case "dlm", "delimiter":
+			p.next()
+			if p.curIs(lexer.EQ) {
+				p.next()
+			}
+			if p.curIs(lexer.STRING) || p.curIs(lexer.IDENT) {
+				stmt.Delimiter = p.cur.Literal
+				p.next()
+			}
+		case "dsd":
+			stmt.DSD = true
+			p.next()
+		case "missover":
+			stmt.Missover = true
+			p.next()
+		case "truncover":
+			stmt.Truncover = true
+			p.next()
+		case "firstobs":
+			p.next()
+			if p.curIs(lexer.EQ) {
+				p.next()
+			}
+			if p.curIs(lexer.NUMBER) {
+				stmt.Firstobs = atoiSafe(p.cur.Literal)
+				p.next()
+			}
+		case "obs":
+			p.next()
+			if p.curIs(lexer.EQ) {
+				p.next()
+			}
+			if p.curIs(lexer.NUMBER) {
+				stmt.Obs = atoiSafe(p.cur.Literal)
+				p.next()
+			}
+		default:
+			p.next()
+		}
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// atoiSafe parses a non-negative integer from a numeric literal, ignoring any
+// fractional part; returns 0 on failure.
+func atoiSafe(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
 }
 
 // parseInput parses `input <var [$]>...;`.

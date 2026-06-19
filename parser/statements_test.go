@@ -256,3 +256,26 @@ func TestParseDatasetOptions(t *testing.T) {
 		t.Error("where not parsed")
 	}
 }
+
+func TestParseInfileOptions(t *testing.T) {
+	body := dataBody(t, `data t; infile "data.csv" dsd dlm=";" firstobs=2 obs=10 missover; input x y; run;`)
+	in, ok := body[0].(*ast.InfileStatement)
+	if !ok {
+		t.Fatalf("stmt 0 is %T, want *ast.InfileStatement", body[0])
+	}
+	if in.Path != "data.csv" {
+		t.Errorf("Path = %q, want data.csv", in.Path)
+	}
+	if !in.DSD {
+		t.Error("DSD = false, want true")
+	}
+	if in.Delimiter != ";" {
+		t.Errorf("Delimiter = %q, want ;", in.Delimiter)
+	}
+	if in.Firstobs != 2 || in.Obs != 10 {
+		t.Errorf("Firstobs/Obs = %d/%d, want 2/10", in.Firstobs, in.Obs)
+	}
+	if !in.Missover {
+		t.Error("Missover = false, want true")
+	}
+}

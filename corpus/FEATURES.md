@@ -12,6 +12,7 @@ level it first becomes relevant at, matching the build order in [`../docs/PLAN.m
 | `data-step` | 1 | A basic DATA step: `data <name>; ... run;` with the implicit row loop. |
 | `input` | 1 | The `input` statement reading variables (list input; `$` marks character vars). |
 | `datalines` | 1 | Inline raw data via `datalines;`/`cards;` up to a terminating `;`. |
+| `infile` | 1 | External flat-file input via `infile "<path>"` (`dlm=`/`dsd`/`firstobs=`/`obs=`) feeding `input`. |
 | `assignment` | 1 | Variable assignment expressions, e.g. `x = a + b;`. |
 | `if-then-else` | 1 | Conditional execution `if cond then ...; else ...;` and subsetting `if cond;`. |
 | `do-loop` | 1 | Iterative `do`/`do while`/`do until` ... `end;`. |

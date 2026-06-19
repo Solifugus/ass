@@ -100,6 +100,26 @@ func (in *InputStatement) String() string {
 	return "input " + strings.Join(parts, " ") + ";"
 }
 
+// InfileStatement is `infile "<path>" <options>;` — it names an external flat
+// file as the record source for subsequent INPUT statements (in place of inline
+// DATALINES). Delimiter is the field delimiter (empty = whitespace list input);
+// DSD enables CSV-style parsing (quoted fields, consecutive delimiters yield
+// missing). Firstobs/Obs (1-based, 0 = unset) bound the line range.
+type InfileStatement struct {
+	Path      string
+	Delimiter string
+	DSD       bool
+	Firstobs  int
+	Obs       int
+	Missover  bool
+	Truncover bool
+}
+
+func (in *InfileStatement) statementNode() {}
+func (in *InfileStatement) String() string {
+	return "infile \"" + in.Path + "\";"
+}
+
 // DatalinesStatement carries the raw inline data block, one element per line.
 type DatalinesStatement struct {
 	Lines []string

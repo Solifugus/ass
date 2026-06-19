@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Generated from the compatibility corpus via `ass test corpus/` (2026-06-17).
+Generated from the compatibility corpus via `ass test corpus/` (2026-06-19).
 Each percentage is the share of corpus items tagged with a feature that pass
 (parse + execute as the item's `meta.yaml` expects). Regenerate with:
 
@@ -30,11 +30,11 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 32 |
-| Parsed | 32 (100.0%) |
-| Executed | 32 (100.0%) |
-| Passed | 32 (100.0%) |
-| Value-verified | 6 items assert dataset values; all match |
+| Items | 33 |
+| Parsed | 33 (100.0%) |
+| Executed | 33 (100.0%) |
+| Passed | 33 (100.0%) |
+| Value-verified | 7 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -45,13 +45,14 @@ passing cosmetic check.
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
 | class | 1/1 | 100.0% |
-| data-step | 26/26 | 100.0% |
+| data-step | 27/27 | 100.0% |
 | dataset-options | 1/1 | 100.0% |
 | datalines | 5/5 | 100.0% |
 | do-loop | 2/2 | 100.0% |
 | expressions | 2/2 | 100.0% |
 | formats | 3/3 | 100.0% |
 | if-then-else | 3/3 | 100.0% |
+| infile | 1/1 | 100.0% |
 | informats | 1/1 | 100.0% |
 | input | 5/5 | 100.0% |
 | macro-control | 1/1 | 100.0% |
@@ -62,7 +63,7 @@ passing cosmetic check.
 | proc-freq | 2/2 | 100.0% |
 | proc-glm | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 19/19 | 100.0% |
+| proc-print | 20/20 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
 | proc-sort | 3/3 | 100.0% |
 | proc-sql | 4/4 | 100.0% |
@@ -89,6 +90,7 @@ passing cosmetic check.
 - Column/pointer input (`input name $ 1-10 age 11-13;`, `@`/`#`) and time/datetime informats (list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options `firstobs=`/`obs=`, numbered var-list ranges in `keep=`/`drop=` (e.g. `keep=x1-x5`), and options on PROC `out=` (`keep=`/`drop=`/`rename=`/`where=` on SET/MERGE/DATA/PROC `data=` are supported)
 - PROC GLM with SAS's generalized-inverse (sweep) parameterization, Type I/III SS, F tests, and LSMEANS/CONTRAST/ESTIMATE. CLASS effects **are** supported via **reference-cell coding** (k−1 indicators, last level = reference at estimate 0) — numerically correct for the fit, predictions, and level-vs-reference differences, but the intercept and per-level estimates **differ from SAS by convention** (SAS keeps all levels and flags the aliased one "Biased"). This is a deliberate, documented divergence; the design→solve seam allows a future sweep-based upgrade when a real-SAS reference is available.
+- Flat-file **reading** via `infile "<path>"` + list `input` is supported, including `dlm=`/`delimiter=`, `dsd` (CSV-style quoted fields, embedded delimiters, consecutive-delimiter missings), `firstobs=`, and `obs=`. Not yet: flat-file **writing** (`file`/`put`), `PROC IMPORT`/`PROC EXPORT`, column/pointer input (`@`/`#`, fixed-width ranges), and `infile` options beyond the above (e.g. `lrecl=`, `pad`, `end=`, multi-line `/`).
 - External-database LIBNAME engines are supported **read-only** for Postgres, SQL Server, and Oracle (`libname pg postgres "…"; … set pg.table;`). Not yet: writing datasets back to a database, implicit query pushdown (ASS reads the table and computes locally — same results, full transfer), PROC SQL pass-through to external librefs, DB2 (needs the CGo IBM CLI driver), and the long tail of SAS/ACCESS options. See [`databases.md`](databases.md).
 - JSON harness output (machine-readable report); SAS-byte-identical listing comparison (a non-goal — see "What compatibility means" above; value comparison via `expected.datasets` is the supported mechanism)
 

@@ -1,0 +1,27 @@
+id: data_step_infile_001
+source: hand-written
+license: MIT
+features:
+  - infile
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    people:
+      columns: [name, age, city]
+      rows:
+        # DSD parsing: the quoted first field keeps its embedded comma; the empty
+        # age field (two consecutive delimiters) reads as numeric missing; the
+        # quoted "New York" keeps its space. firstobs=2 skips the header row.
+        - ["Smith, John", 25, "Boston"]
+        - ["Mary", 30, "New York"]
+        - ["Tim", ".", "Chicago"]
+priority: 2
+notes: |
+  Reads an external CSV via `infile "@DIR@/people.csv" dsd firstobs=2;` and list
+  INPUT. Exercises DSD field parsing (quoted fields with embedded commas/spaces,
+  consecutive-delimiter missing values) and the FIRSTOBS= header skip. @DIR@ is
+  substituted by the harness with the item directory so the path is portable.
