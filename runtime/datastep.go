@@ -32,25 +32,29 @@ const (
 
 // dataStep holds the per-execution state of one DATA step.
 type dataStep struct {
-	lib      *table.Library
-	pdv      *PDV
-	outputs  []*table.Dataset // datasets this step writes
-	explicit bool             // step contains at least one OUTPUT statement
-	n        int              // current iteration (_N_)
-	records  []string         // data lines (datalines or infile file contents)
-	recPtr   int              // next data record to read
-	infile   *ast.InfileStatement // external flat-file record source (nil = datalines)
-	setRows  []sourceRow      // rows from SET input datasets (concatenated)
-	setPtr   int              // next SET row to read
-	keep     map[string]bool  // if non-nil, only these vars are output (lowercased)
-	drop     map[string]bool  // these vars are excluded from output (lowercased)
-	wheres   []ast.Expression // WHERE conditions applied at read time
-	byVars    []string        // BY variables (DATA step BY-group processing)
-	byFlags   []ByFlags       // per-set-row first./last. flags (aligned to setRows)
-	mergeRows []table.Row       // precomputed combined rows for MERGE
-	mergePtr  int               // next merge row to emit
-	inVars    map[string]bool   // in= flag variable names (lowercased), excluded from output
-	formats   map[string]string // variable (lowercased) -> display format
+	lib       *table.Library
+	pdv       *PDV
+	logger    *log.Logger           // step logger (PUT without FILE writes here)
+	outputs   []*table.Dataset      // datasets this step writes
+	outOpts   []*ast.DatasetOptions // dataset options per output (aligned to outputs)
+	explicit  bool                  // step contains at least one OUTPUT statement
+	n         int                   // current iteration (_N_)
+	records   []string              // data lines (datalines or infile file contents)
+	recPtr    int                   // next data record to read
+	infile    *ast.InfileStatement  // external flat-file record source (nil = datalines)
+	file      *ast.FileStatement    // external flat-file PUT destination (nil = log)
+	putLines  []string              // lines accumulated by PUT for the FILE destination
+	setRows   []sourceRow           // rows from SET input datasets (concatenated)
+	setPtr    int                   // next SET row to read
+	keep      map[string]bool       // if non-nil, only these vars are output (lowercased)
+	drop      map[string]bool       // these vars are excluded from output (lowercased)
+	wheres    []ast.Expression      // WHERE conditions applied at read time
+	byVars    []string              // BY variables (DATA step BY-group processing)
+	byFlags   []ByFlags             // per-set-row first./last. flags (aligned to setRows)
+	mergeRows []table.Row           // precomputed combined rows for MERGE
+	mergePtr  int                   // next merge row to emit
+	inVars    map[string]bool       // in= flag variable names (lowercased), excluded from output
+	formats   map[string]string     // variable (lowercased) -> display format
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -68,19 +72,26 @@ type sourceRow struct {
 //
 // A non-nil logger receives the standard post-step NOTE for each output dataset.
 func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error {
-	d := &dataStep{lib: lib, pdv: NewPDV()}
+	d := &dataStep{lib: lib, pdv: NewPDV(), logger: logger}
 
 	// Resolve output datasets. An unnamed DATA step writes to WORK.DATA1 in SAS;
-	// we mirror that default.
-	names := ds.Datasets
-	if len(names) == 0 {
-		names = []string{"DATA1"}
-	}
-	for _, name := range names {
-		d.outputs = append(d.outputs, table.NewDataset("", datasetName(name)))
+	// we mirror that default. `data _null_;` declares no output (it runs for its
+	// side effects, e.g. PUT to a file) — it is skipped here.
+	if len(ds.Outputs) == 0 {
+		d.outputs = append(d.outputs, table.NewDataset("", "DATA1"))
+		d.outOpts = append(d.outOpts, nil)
+	} else {
+		for _, ref := range ds.Outputs {
+			if strings.EqualFold(datasetName(ref.Name), "_null_") {
+				continue
+			}
+			d.outputs = append(d.outputs, table.NewDataset("", datasetName(ref.Name)))
+			d.outOpts = append(d.outOpts, ref.Options)
+		}
 	}
 
 	d.explicit = containsOutput(ds.Body)
+	d.file = findFile(ds.Body)
 	d.infile = findInfile(ds.Body)
 	if d.infile != nil {
 		recs, err := readInfile(d.infile)
@@ -152,8 +163,8 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 
 	for i, out := range d.outputs {
 		final := out
-		if i < len(ds.Outputs) && !ds.Outputs[i].Options.IsEmpty() {
-			view, err := applyDatasetOptions(out, ds.Outputs[i].Options)
+		if !d.outOpts[i].IsEmpty() {
+			view, err := applyDatasetOptions(out, d.outOpts[i])
 			if err != nil {
 				return err
 			}
@@ -162,6 +173,12 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 		}
 		d.lib.Put(final)
 		logger.DatasetNote(final.Lib, final.Name, final.NObs(), len(final.Columns))
+	}
+
+	if d.file != nil {
+		if err := writeFileOutput(d.file, d.putLines); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -226,6 +243,17 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		return flowNormal, nil
 	case *ast.InfileStatement:
 		// The file is read up front; the statement itself does nothing.
+		return flowNormal, nil
+	case *ast.FileStatement:
+		// The destination is resolved up front; the statement itself does nothing.
+		return flowNormal, nil
+	case *ast.PutStatement:
+		line := d.buildPutLine(st)
+		if d.file != nil {
+			d.putLines = append(d.putLines, line)
+		} else {
+			d.logger.Put(line)
+		}
 		return flowNormal, nil
 	case *ast.SetStatement:
 		if d.setPtr >= len(d.setRows) {
@@ -688,6 +716,76 @@ func findInfile(stmts []ast.Statement) *ast.InfileStatement {
 		}
 	}
 	return nil
+}
+
+// findFile returns the FILE statement in the body, or nil if none.
+func findFile(stmts []ast.Statement) *ast.FileStatement {
+	for _, s := range stmts {
+		if f, ok := s.(*ast.FileStatement); ok {
+			return f
+		}
+	}
+	return nil
+}
+
+// writeFileOutput writes the accumulated PUT lines to the FILE destination, one
+// per line with a trailing newline. A FILE with no PUT output still produces an
+// (empty) file, matching SAS.
+func writeFileOutput(f *ast.FileStatement, lines []string) error {
+	var b strings.Builder
+	for _, ln := range lines {
+		b.WriteString(ln)
+		b.WriteByte('\n')
+	}
+	if err := os.WriteFile(f.Path, []byte(b.String()), 0o644); err != nil {
+		return fmt.Errorf("file %q: %w", f.Path, err)
+	}
+	return nil
+}
+
+// buildPutLine renders one PUT statement to a line. Items are joined by the
+// FILE's delimiter — a single blank for default list output, the DLM= value, or
+// a comma under DSD. Variable values are rendered with their inline or
+// associated format; under DSD, values containing the delimiter or a quote are
+// wrapped in double quotes (embedded quotes doubled).
+func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
+	sep := " "
+	dsd := false
+	if d.file != nil {
+		dsd = d.file.DSD
+		switch {
+		case d.file.Delimiter != "":
+			sep = d.file.Delimiter
+		case dsd:
+			sep = ","
+		}
+	}
+	parts := make([]string, 0, len(st.Items))
+	for _, it := range st.Items {
+		if it.IsLiteral {
+			parts = append(parts, it.Literal)
+			continue
+		}
+		format := it.Format
+		if format == "" {
+			format = d.formats[strings.ToLower(it.Var)]
+		}
+		s := strings.TrimSpace(formats.Apply(d.pdv.Get(it.Var), format))
+		if dsd {
+			s = dsdQuote(s, sep)
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, sep)
+}
+
+// dsdQuote wraps s in double quotes (doubling embedded quotes) when it contains
+// the delimiter, a quote, or a newline — the DSD output convention.
+func dsdQuote(s, sep string) string {
+	if strings.Contains(s, sep) || strings.Contains(s, "\"") || strings.Contains(s, "\n") {
+		return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
+	}
+	return s
 }
 
 // readInfile reads the external flat file named by an INFILE statement into one

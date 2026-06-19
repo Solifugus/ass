@@ -279,3 +279,33 @@ func TestParseInfileOptions(t *testing.T) {
 		t.Error("Missover = false, want true")
 	}
 }
+
+func TestParseFileAndPut(t *testing.T) {
+	body := dataBody(t, `data _null_; set s; file "out.csv" dsd dlm=","; put "row" name age dollar8.2; run;`)
+
+	fs, ok := body[1].(*ast.FileStatement)
+	if !ok {
+		t.Fatalf("stmt 1 is %T, want *ast.FileStatement", body[1])
+	}
+	if fs.Path != "out.csv" || !fs.DSD || fs.Delimiter != "," {
+		t.Errorf("FileStatement = %+v, want path=out.csv dsd dlm=,", fs)
+	}
+
+	put, ok := body[2].(*ast.PutStatement)
+	if !ok {
+		t.Fatalf("stmt 2 is %T, want *ast.PutStatement", body[2])
+	}
+	if len(put.Items) != 3 {
+		t.Fatalf("got %d items, want 3: %+v", len(put.Items), put.Items)
+	}
+	if !put.Items[0].IsLiteral || put.Items[0].Literal != "row" {
+		t.Errorf("item 0 = %+v, want literal \"row\"", put.Items[0])
+	}
+	if put.Items[1].IsLiteral || put.Items[1].Var != "name" {
+		t.Errorf("item 1 = %+v, want var name", put.Items[1])
+	}
+	// The trailing format binds to the most recent variable (age), not name.
+	if put.Items[2].Var != "age" || put.Items[2].Format != "dollar8.2" {
+		t.Errorf("item 2 = %+v, want var age format dollar8.2", put.Items[2])
+	}
+}

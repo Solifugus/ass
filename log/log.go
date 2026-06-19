@@ -33,6 +33,15 @@ func (l *Logger) line(prefix, format string, args ...any) {
 	fmt.Fprintf(l.w, prefix+format+"\n", args...)
 }
 
+// Put writes a raw line (no prefix) to the log, as the DATA step PUT statement
+// does when no FILE destination is active. SAS PUT output is unprefixed.
+func (l *Logger) Put(line string) {
+	if l == nil || l.w == nil {
+		return
+	}
+	fmt.Fprintln(l.w, line)
+}
+
 // DatasetNote emits the standard post-step note describing an output dataset,
 // e.g. "NOTE: The data set WORK.PEOPLE has 3 observations and 2 variables.".
 // lib and name are upper-cased and joined as SAS displays them.

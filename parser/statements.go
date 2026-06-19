@@ -33,6 +33,10 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseMerge()
 	case p.identIs("infile"):
 		return p.parseInfile()
+	case p.identIs("file"):
+		return p.parseFile()
+	case p.identIs("put"):
+		return p.parsePut()
 	case p.identIs("input"):
 		return p.parseInput()
 	case p.identIs("if"):
@@ -461,6 +465,114 @@ func (p *Parser) parseInfile() ast.Statement {
 	}
 	p.expectSemicolon()
 	return stmt
+}
+
+// parseFile parses `file "<path>" <options>;`. Recognized options:
+// dlm=/delimiter="<c>" and dsd. The path may be a quoted string (usual) or a
+// bare token. Unknown tokens are skipped for forward compatibility.
+func (p *Parser) parseFile() ast.Statement {
+	p.next() // 'file'
+	stmt := &ast.FileStatement{}
+	if p.curIs(lexer.STRING) || p.curIs(lexer.IDENT) {
+		stmt.Path = p.cur.Literal
+		p.next()
+	}
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		if !p.curIs(lexer.IDENT) {
+			p.next()
+			continue
+		}
+		switch strings.ToLower(p.cur.Literal) {
+		case "dlm", "delimiter":
+			p.next()
+			if p.curIs(lexer.EQ) {
+				p.next()
+			}
+			if p.curIs(lexer.STRING) || p.curIs(lexer.IDENT) {
+				stmt.Delimiter = p.cur.Literal
+				p.next()
+			}
+		case "dsd":
+			stmt.DSD = true
+			p.next()
+		default:
+			p.next()
+		}
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parsePut parses `put <item>...;`. The item list is recovered from raw source
+// (between the keyword and ';') so quoted literals and format specs survive
+// intact, then split by parsePutItems. A token containing '.' is a format for
+// the preceding variable; a quoted run is a string literal; anything else is a
+// variable name. Constructs beyond this (column pointers `@`, `_all_`) are
+// deferred.
+func (p *Parser) parsePut() ast.Statement {
+	p.next() // 'put'
+	start := p.cur.Pos
+	end := start
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		end = p.cur.End
+		p.next()
+	}
+	raw := p.l.Slice(start, end)
+	p.expectSemicolon()
+	return &ast.PutStatement{Items: parsePutItems(raw)}
+}
+
+// parsePutItems splits a PUT item list, respecting quoted string literals
+// (single or double quotes, with doubled-quote escapes). A bareword containing
+// '.' is treated as a format spec attached to the most recent variable item;
+// otherwise it is a variable name.
+func parsePutItems(raw string) []ast.PutItem {
+	var items []ast.PutItem
+	runes := []rune(raw)
+	for i := 0; i < len(runes); {
+		r := runes[i]
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			i++
+			continue
+		}
+		if r == '"' || r == '\'' {
+			quote := r
+			i++
+			var b strings.Builder
+			for i < len(runes) {
+				if runes[i] == quote {
+					if i+1 < len(runes) && runes[i+1] == quote { // doubled quote escape
+						b.WriteRune(quote)
+						i += 2
+						continue
+					}
+					i++
+					break
+				}
+				b.WriteRune(runes[i])
+				i++
+			}
+			items = append(items, ast.PutItem{IsLiteral: true, Literal: b.String()})
+			continue
+		}
+		var b strings.Builder
+		for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' && runes[i] != '\n' && runes[i] != '\r' {
+			b.WriteRune(runes[i])
+			i++
+		}
+		tok := b.String()
+		if strings.Contains(tok, ".") { // a format spec for the most recent variable
+			for j := len(items) - 1; j >= 0; j-- {
+				if !items[j].IsLiteral {
+					items[j].Format = strings.TrimSuffix(tok, ".")
+					break
+				}
+			}
+			continue
+		}
+		items = append(items, ast.PutItem{Var: tok})
+	}
+	return items
 }
 
 // atoiSafe parses a non-negative integer from a numeric literal, ignoring any

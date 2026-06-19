@@ -1,0 +1,29 @@
+id: data_step_file_put_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - file-put
+  - set
+  - infile
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    roundtrip:
+      columns: [name, salary]
+      rows:
+        # Written by FILE/PUT with DSD, then read back by INFILE/INPUT with DSD.
+        # "Smith, John" was quoted on write (embedded comma) and unquoted on read,
+        # so the comma survives the round trip.
+        - ["Smith, John", 52000]
+        - ["Mary", 48500]
+priority: 2
+notes: |
+  Round-trips a dataset through a delimited file: `data _null_; set staff;
+  file "@TMP@/staff.csv" dsd; put name salary;` writes the CSV, then a second
+  step reads it back with `infile ... dsd; input name $ salary;`. Exercises the
+  FILE/PUT writer (DSD quoting of the embedded comma) end-to-end against the
+  INFILE reader. @TMP@ is a per-run temp directory supplied by the harness.

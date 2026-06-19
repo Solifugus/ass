@@ -120,6 +120,49 @@ func (in *InfileStatement) String() string {
 	return "infile \"" + in.Path + "\";"
 }
 
+// FileStatement is `file "<path>" <options>;` — it names an external flat file
+// as the destination for subsequent PUT statements. Delimiter is the field
+// separator for list output (empty = single blank, or comma under DSD); DSD
+// enables CSV-style writing (quote values containing the delimiter or a quote).
+type FileStatement struct {
+	Path      string
+	Delimiter string
+	DSD       bool
+}
+
+func (f *FileStatement) statementNode() {}
+func (f *FileStatement) String() string { return "file \"" + f.Path + "\";" }
+
+// PutItem is one element of a PUT statement: either a quoted string literal
+// (IsLiteral) or a variable reference. Format, when non-empty, is the inline
+// format spec written after the variable (e.g. "dollar8.2", "$10").
+type PutItem struct {
+	IsLiteral bool
+	Literal   string
+	Var       string
+	Format    string
+}
+
+// PutStatement is `put <item>...;`, writing the items as one line to the current
+// FILE destination (or the log if none). Items are joined by the file's
+// delimiter (a single blank for default list output).
+type PutStatement struct {
+	Items []PutItem
+}
+
+func (p *PutStatement) statementNode() {}
+func (p *PutStatement) String() string {
+	parts := make([]string, len(p.Items))
+	for i, it := range p.Items {
+		if it.IsLiteral {
+			parts[i] = "\"" + it.Literal + "\""
+		} else {
+			parts[i] = it.Var
+		}
+	}
+	return "put " + strings.Join(parts, " ") + ";"
+}
+
 // DatalinesStatement carries the raw inline data block, one element per line.
 type DatalinesStatement struct {
 	Lines []string
@@ -182,13 +225,13 @@ const (
 
 // DoStatement is a DO ... END block. Fields used depend on Kind.
 type DoStatement struct {
-	Kind  DoKind
-	Var   string     // iterative: loop variable
-	From  Expression // iterative: start
-	To    Expression // iterative: end
-	By    Expression // iterative: step (nil => 1)
-	Cond  Expression // while/until condition
-	Body  []Statement
+	Kind DoKind
+	Var  string     // iterative: loop variable
+	From Expression // iterative: start
+	To   Expression // iterative: end
+	By   Expression // iterative: step (nil => 1)
+	Cond Expression // while/until condition
+	Body []Statement
 }
 
 func (d *DoStatement) statementNode() {}

@@ -73,10 +73,19 @@ func runItem(it Item, opts Options) Result {
 	res := Result{Item: it}
 
 	// @DIR@ resolves to the item's directory so a program can reference a
-	// companion data file (e.g. `infile "@DIR@/data.csv";`) portably.
+	// companion data file (e.g. `infile "@DIR@/data.csv";`) portably. @TMP@
+	// resolves to a fresh per-item temp directory (removed after the run) for
+	// programs that write files (e.g. `file "@TMP@/out.csv";`) and read them back.
 	input := it.Input
 	if it.Dir != "" {
 		input = strings.ReplaceAll(input, "@DIR@", it.Dir)
+	}
+	if strings.Contains(input, "@TMP@") {
+		tmp, err := os.MkdirTemp("", "ass-corpus-")
+		if err == nil {
+			defer os.RemoveAll(tmp)
+			input = strings.ReplaceAll(input, "@TMP@", tmp)
+		}
 	}
 	expanded := macro.Process(input)
 	p := parser.New(expanded)
