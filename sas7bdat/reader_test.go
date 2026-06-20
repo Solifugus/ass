@@ -27,19 +27,51 @@ func TestReadProductsales(t *testing.T) {
 	checkAgainstCSV(t, ds, "testdata/productsales.csv")
 }
 
-// test1 has no CSV companion upstream (pandas generates it in-test), so this is
-// a structural smoke test over a wide, mixed-type table: 100 columns × 10 rows.
-func TestReadTest1(t *testing.T) {
+// The test1/test2/test3 trio is the same wide, mixed-type table (100 columns ×
+// 10 rows) stored three ways: uncompressed, RLE (SASYZCRL), and RDC (SASYZCR2).
+// All three must decode to the same values, verified against the shared CSV. This
+// is the core value check for row decompression.
+func TestReadUncompressed(t *testing.T) {
 	ds, err := Read("testdata/test1.sas7bdat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ds.Columns) != 100 || ds.NObs() != 10 {
-		t.Fatalf("got %d cols × %d obs, want 100 × 10", len(ds.Columns), ds.NObs())
-	}
 	if ds.Columns[1].Kind != table.Character || ds.Columns[3].Format != "mmddyy10." {
 		t.Errorf("unexpected metadata: col2=%v col4 fmt=%q", ds.Columns[1].Kind, ds.Columns[3].Format)
 	}
+	checkAgainstCSV(t, ds, "testdata/test123.csv")
+}
+
+func TestReadRLE(t *testing.T) {
+	ds, err := Read("testdata/test2_rle.sas7bdat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ds.NObs() != 10 {
+		t.Fatalf("obs = %d, want 10", ds.NObs())
+	}
+	checkAgainstCSV(t, ds, "testdata/test123.csv")
+}
+
+func TestReadRDC(t *testing.T) {
+	ds, err := Read("testdata/test3_rdc.sas7bdat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ds.NObs() != 10 {
+		t.Fatalf("obs = %d, want 10", ds.NObs())
+	}
+	checkAgainstCSV(t, ds, "testdata/test123.csv")
+}
+
+// 0x40controlbyte is a tiny RLE file built to exercise the 0x40 control byte
+// (repeat-the-following-byte): one row of three 50-character string fields.
+func TestReadRLEControlByte(t *testing.T) {
+	ds, err := Read("testdata/0x40controlbyte.sas7bdat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkAgainstCSV(t, ds, "testdata/0x40controlbyte.csv")
 }
 
 // datetime exercises SAS date/datetime values (stored as numeric days/seconds
@@ -66,18 +98,6 @@ func TestReadDatetime(t *testing.T) {
 	}
 	if ds.Columns[0].Format != "yymmdd10." || ds.Columns[2].Format != "datetime19." {
 		t.Errorf("date formats: %q %q", ds.Columns[0].Format, ds.Columns[2].Format)
-	}
-}
-
-// Compressed files (RLE/RDC) are detected and rejected with a clear error rather
-// than silently returning an empty or partial dataset.
-func TestReadCompressedErrors(t *testing.T) {
-	_, err := Read("testdata/0x40controlbyte.sas7bdat")
-	if err == nil {
-		t.Fatal("expected an error for a compressed file")
-	}
-	if !strings.Contains(err.Error(), "compressed") {
-		t.Errorf("error %q does not mention compression", err)
 	}
 }
 

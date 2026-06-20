@@ -41,8 +41,9 @@ type header struct {
 
 // reader carries the file bytes plus the parsed header while decoding.
 type reader struct {
-	data []byte
-	hdr  header
+	data        []byte
+	hdr         header
+	compression string // "" (none), "SASYZCRL" (RLE), or "SASYZCR2" (RDC)
 }
 
 // parseHeader reads and validates the file header.
@@ -100,15 +101,16 @@ func (r *reader) u16(off int) uint16  { return r.hdr.bo.Uint16(r.data[off : off+
 func (r *reader) u32(off int) uint32  { return r.hdr.bo.Uint32(r.data[off : off+4]) }
 func (r *reader) u64v(off int) uint64 { return r.hdr.bo.Uint64(r.data[off : off+8]) }
 
-// f64 reads a SAS double. SAS may store numerics truncated to fewer than 8
-// bytes (trailing zero bytes dropped); we left-pad/right-pad to 8 by byte order.
-func (r *reader) f64(off, length int) float64 {
+// f64 reads a SAS double from a row's bytes. SAS may store numerics truncated to
+// fewer than 8 bytes (trailing zero bytes dropped); we left-pad/right-pad to 8 by
+// byte order.
+func (r *reader) f64(row []byte, off, length int) float64 {
 	var b [8]byte
 	if r.hdr.littleEndian {
 		// Value occupies the high-order bytes; missing low bytes are zero.
-		copy(b[8-length:], r.data[off:off+length])
+		copy(b[8-length:], row[off:off+length])
 	} else {
-		copy(b[:length], r.data[off:off+length])
+		copy(b[:length], row[off:off+length])
 	}
 	return math.Float64frombits(r.hdr.bo.Uint64(b[:]))
 }
@@ -300,7 +302,7 @@ func (r *reader) parse() (*table.Dataset, error) {
 			case subColText:
 				block := r.data[off+is : off+sp.length]
 				if c := compressionMethod(block); c != "" {
-					return nil, fmt.Errorf("compressed sas7bdat (%s) is not yet supported", c)
+					r.compression = c
 				}
 				textBlocks = append(textBlocks, block)
 			case subColName:
@@ -344,8 +346,16 @@ func (r *reader) parse() (*table.Dataset, error) {
 		ds.AddColumn(col)
 	}
 
-	// Pass 2: extract rows from DATA and MIX pages.
+	// Pass 2: extract rows. Compressed files store each observation as its own
+	// row subheader; uncompressed files store rows contiguously after the
+	// subheader-pointer array on DATA and MIX pages.
 	read := 0
+	if r.compression != "" {
+		if err := r.readCompressedRows(ds, cols, rowLength, rowCount, &read); err != nil {
+			return nil, err
+		}
+		return ds, nil
+	}
 	for p := 0; p < r.hdr.pageCount && read < rowCount; p++ {
 		ps := r.pageStart(p)
 		pageType := r.u16(ps + bo)
@@ -371,11 +381,37 @@ func (r *reader) parse() (*table.Dataset, error) {
 		}
 		for k := 0; k < rowsHere; k++ {
 			rowOff := ps + dataStart + k*rowLength
-			ds.AppendRow(r.decodeRow(cols, rowOff))
+			ds.AppendRow(r.decodeRow(cols, r.data[rowOff:rowOff+rowLength]))
 			read++
 		}
 	}
 	return ds, nil
+}
+
+// readCompressedRows extracts rows from a compressed file. Every page is scanned
+// for data subheaders (compression flag 0x04, type 1); each stored row is
+// expanded to rowLength bytes (or used verbatim if already full width) and
+// decoded.
+func (r *reader) readCompressedRows(ds *table.Dataset, cols []column, rowLength, rowCount int, read *int) error {
+	bo := r.pageBitOffset()
+	for p := 0; p < r.hdr.pageCount && *read < rowCount; p++ {
+		ps := r.pageStart(p)
+		subCount := int(r.u16(ps + bo + 4))
+		for i := 0; i < subCount && *read < rowCount; i++ {
+			sp := r.subheaderPtr(ps, i)
+			if sp.length == 0 || sp.compression != 0x04 || sp.typ != 1 {
+				continue
+			}
+			stored := r.data[ps+sp.offset : ps+sp.offset+sp.length]
+			rowBytes, err := decompressRow(r.compression, stored, rowLength)
+			if err != nil {
+				return err
+			}
+			ds.AppendRow(r.decodeRow(cols, rowBytes))
+			*read++
+		}
+	}
+	return nil
 }
 
 type nameRef struct{ textIdx, offset, length int }
@@ -457,20 +493,20 @@ func refText(blocks [][]byte, idx, off, length int) string {
 	return strings.TrimRight(string(b[off:off+length]), " \x00")
 }
 
-// decodeRow reads one observation at the given absolute offset.
-func (r *reader) decodeRow(cols []column, rowOff int) table.Row {
+// decodeRow decodes one observation from its row bytes (rowLength wide).
+func (r *reader) decodeRow(cols []column, rowBytes []byte) table.Row {
 	row := make(table.Row, len(cols))
 	for _, c := range cols {
 		key := strings.ToLower(c.name)
 		if c.numeric {
-			f := r.f64(rowOff+c.offset, c.length)
+			f := r.f64(rowBytes, c.offset, c.length)
 			if math.IsNaN(f) {
 				row[key] = table.MissingNum()
 			} else {
 				row[key] = table.Num(f)
 			}
 		} else {
-			s := strings.TrimRight(string(r.data[rowOff+c.offset:rowOff+c.offset+c.length]), " \x00")
+			s := strings.TrimRight(string(rowBytes[c.offset:c.offset+c.length]), " \x00")
 			row[key] = table.Char(s)
 		}
 	}

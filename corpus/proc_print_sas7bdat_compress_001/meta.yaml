@@ -1,0 +1,38 @@
+id: proc_print_sas7bdat_compress_001
+source: hand-written
+license: MIT
+features:
+  - sas7bdat
+  - libname
+  - set
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    rle: &rows
+      columns: [column1, column2, column3]
+      rows:
+        - [0.636, "pear", 84]
+        - [0.283, "dog", 49]
+        - [0.452, "pear", 35]
+        - [0.557, "dog", 29]
+        - [0.138, ".", 55]
+        - [0.948, "dog", 33]
+        - [0.162, "crocodile", 17]
+        - [0.148, "crocodile", 37]
+        - [".", "pear", 15]
+        - [0.663, "pear", "."]
+    rdc: *rows
+priority: 2
+notes: |
+  Reads two row-compressed .sas7bdat files through the base/directory LIBNAME
+  engine: rle_data is RLE (SASYZCRL) and rdc_data is RDC (SASYZCR2), both the
+  same 100-column x 10-row table. The clean-room row decompressors are ports of
+  the public reverse-engineering literature (ReadStat's RLE command table, the
+  sas7bdat vignette, and Ed Ross's published RDC algorithm) -- never from
+  proprietary SAS material. Both datasets must decode to identical values,
+  including a missing numeric (rows 9 and 10) and an empty/missing character
+  (row 5). Fixtures are public-domain samples from the pandas test corpus.
