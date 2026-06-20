@@ -65,6 +65,7 @@ func (d *dataStep) buildMerge(m *ast.MergeStatement, byVars []string) error {
 		if err != nil {
 			return err
 		}
+		d.recordSourceCols(ds)
 		src := mergeSource{ref: ref, ds: ds, groups: map[string][]table.Row{}}
 		for _, r := range ds.Rows {
 			k := byKey(ds, r, byVars)

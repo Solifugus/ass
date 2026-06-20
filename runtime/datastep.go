@@ -34,28 +34,29 @@ const (
 type dataStep struct {
 	lib       *table.Library
 	pdv       *PDV
-	logger    *log.Logger           // step logger (PUT without FILE writes here)
-	outputs   []*table.Dataset      // datasets this step writes
-	outOpts   []*ast.DatasetOptions // dataset options per output (aligned to outputs)
-	outNames  []string              // full (possibly libref-qualified) output names, aligned to outputs
-	explicit  bool                  // step contains at least one OUTPUT statement
-	n         int                   // current iteration (_N_)
-	records   []string              // data lines (datalines or infile file contents)
-	recPtr    int                   // next data record to read
-	infile    *ast.InfileStatement  // external flat-file record source (nil = datalines)
-	file      *ast.FileStatement    // external flat-file PUT destination (nil = log)
-	putLines  []string              // lines accumulated by PUT for the FILE destination
-	setRows   []sourceRow           // rows from SET input datasets (concatenated)
-	setPtr    int                   // next SET row to read
-	keep      map[string]bool       // if non-nil, only these vars are output (lowercased)
-	drop      map[string]bool       // these vars are excluded from output (lowercased)
-	wheres    []ast.Expression      // WHERE conditions applied at read time
-	byVars    []string              // BY variables (DATA step BY-group processing)
-	byFlags   []ByFlags             // per-set-row first./last. flags (aligned to setRows)
-	mergeRows []table.Row           // precomputed combined rows for MERGE
-	mergePtr  int                   // next merge row to emit
-	inVars    map[string]bool       // in= flag variable names (lowercased), excluded from output
-	formats   map[string]string     // variable (lowercased) -> display format
+	logger    *log.Logger             // step logger (PUT without FILE writes here)
+	outputs   []*table.Dataset        // datasets this step writes
+	outOpts   []*ast.DatasetOptions   // dataset options per output (aligned to outputs)
+	outNames  []string                // full (possibly libref-qualified) output names, aligned to outputs
+	explicit  bool                    // step contains at least one OUTPUT statement
+	n         int                     // current iteration (_N_)
+	records   []string                // data lines (datalines or infile file contents)
+	recPtr    int                     // next data record to read
+	infile    *ast.InfileStatement    // external flat-file record source (nil = datalines)
+	file      *ast.FileStatement      // external flat-file PUT destination (nil = log)
+	putLines  []string                // lines accumulated by PUT for the FILE destination
+	setRows   []sourceRow             // rows from SET input datasets (concatenated)
+	setPtr    int                     // next SET row to read
+	keep      map[string]bool         // if non-nil, only these vars are output (lowercased)
+	drop      map[string]bool         // these vars are excluded from output (lowercased)
+	wheres    []ast.Expression        // WHERE conditions applied at read time
+	byVars    []string                // BY variables (DATA step BY-group processing)
+	byFlags   []ByFlags               // per-set-row first./last. flags (aligned to setRows)
+	mergeRows []table.Row             // precomputed combined rows for MERGE
+	mergePtr  int                     // next merge row to emit
+	inVars    map[string]bool         // in= flag variable names (lowercased), excluded from output
+	formats   map[string]string       // variable (lowercased) -> display format
+	srcCols   map[string]table.Column // variable (lowercased) -> source column metadata (SET/MERGE), first source wins
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -463,10 +464,39 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 			continue
 		}
 		v := d.pdv.Get(name)
-		ds.AddColumn(table.Column{Name: name, Kind: v.Kind, Format: d.formats[ln]})
+		col := table.Column{Name: name, Kind: v.Kind, Format: d.formats[ln]}
+		// Carry attributes from the SET/MERGE source variable. An explicit FORMAT
+		// statement in this step wins; otherwise the variable keeps the source's
+		// format. Informat/label/length always carry through (no per-step override
+		// for them yet).
+		if src, ok := d.srcCols[ln]; ok {
+			if col.Format == "" {
+				col.Format = src.Format
+			}
+			col.Informat = src.Informat
+			col.Label = src.Label
+			col.Length = src.Length
+		}
+		ds.AddColumn(col)
 		row[ln] = v
 	}
 	ds.AppendRow(row)
+}
+
+// recordSourceCols captures a SET/MERGE source dataset's column metadata so the
+// output dataset can inherit each variable's format, informat, label, and length
+// (SAS attribute inheritance). The first source to define a variable wins, which
+// matches SET (statement order) and MERGE (left-to-right) attribute resolution.
+func (d *dataStep) recordSourceCols(ds *table.Dataset) {
+	if d.srcCols == nil {
+		d.srcCols = make(map[string]table.Column)
+	}
+	for _, c := range ds.Columns {
+		ln := strings.ToLower(c.Name)
+		if _, seen := d.srcCols[ln]; !seen {
+			d.srcCols[ln] = c
+		}
+	}
 }
 
 // applyInput parses a data record using list input (whitespace-delimited fields,
@@ -698,6 +728,7 @@ func (d *dataStep) collectSetRows(stmts []ast.Statement) ([]sourceRow, error) {
 			if err != nil {
 				return nil, err
 			}
+			d.recordSourceCols(view)
 			for _, r := range view.Rows {
 				rows = append(rows, sourceRow{row: r, ds: view})
 			}
