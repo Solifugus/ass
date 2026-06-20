@@ -70,7 +70,7 @@ Obs  name  age
 
 | Area | Highlights |
 |------|------------|
-| DATA step | `input`/`datalines`, `infile` (external flat files), `file`/`put` (write flat files), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `output`, `data _null_` |
+| DATA step | `input`/`datalines`, `infile` (external flat files), `file`/`put` (write flat files), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `label`, `output`, `data _null_` |
 | Flat-file input | `infile "path"` with `dlm=`/`delimiter=`, `dsd` (CSV: quoted fields, embedded delimiters, missing), `firstobs=`, `obs=`; list, column (`1-10`), formatted, and `@n`/`+n` pointer input |
 | Flat-file output | `file "path"` with `dlm=`/`dsd` (CSV: quotes values containing the delimiter); `put` of variables, string literals, formatted values, and column/pointer placement (`name $ 1-10`, `@n`/`+n`) |
 | PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files: `dbms=csv/tab/dlm`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row |
@@ -78,7 +78,7 @@ Obs  name  age
 | Native SAS datasets | `libname lib "/dir";` then read `lib.member` from `member.sas7bdat` — clean-room `.sas7bdat` reader (32/64-bit little-endian; RLE/RDC row compression and uncompressed; numeric, character, dates, formats, labels) |
 | Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset and write it back with `data pg.out; set …;` — Postgres, SQL Server, Oracle, SQLite; see [`docs/databases.md`](docs/databases.md) |
 | Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
-| PROC PRINT | `var`, `noobs`, `label`, applied formats |
+| PROC PRINT | `var`, `noobs`, `label` (renders variable labels, incl. a step `label` statement), applied formats |
 | PROC SORT | `by` (+ `descending`), `out=`, `nodupkey` |
 | PROC SQL | `select`/`where`/`order by`/joins/`group by`, `create table as` (via embedded SQLite) |
 | PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max with `class`/`by` |

@@ -56,6 +56,7 @@ type dataStep struct {
 	mergePtr  int                     // next merge row to emit
 	inVars    map[string]bool         // in= flag variable names (lowercased), excluded from output
 	formats   map[string]string       // variable (lowercased) -> display format
+	labels    map[string]string       // variable (lowercased) -> descriptive label
 	srcCols   map[string]table.Column // variable (lowercased) -> source column metadata (SET/MERGE), first source wins
 }
 
@@ -108,6 +109,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	}
 	d.keep, d.drop = collectKeepDrop(ds.Body)
 	d.formats = collectFormats(ds.Body)
+	d.labels = collectLabels(ds.Body)
 	d.wheres = collectWheres(ds.Body)
 	d.defineArrays(ds.Body)
 	if err := d.initRetained(ds.Body); err != nil {
@@ -464,17 +466,18 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 			continue
 		}
 		v := d.pdv.Get(name)
-		col := table.Column{Name: name, Kind: v.Kind, Format: d.formats[ln]}
-		// Carry attributes from the SET/MERGE source variable. An explicit FORMAT
-		// statement in this step wins; otherwise the variable keeps the source's
-		// format. Informat/label/length always carry through (no per-step override
-		// for them yet).
+		col := table.Column{Name: name, Kind: v.Kind, Format: d.formats[ln], Label: d.labels[ln]}
+		// Carry attributes from the SET/MERGE source variable. An explicit FORMAT or
+		// LABEL statement in this step wins; otherwise the variable keeps the
+		// source's. Informat/length always carry through (no per-step override yet).
 		if src, ok := d.srcCols[ln]; ok {
 			if col.Format == "" {
 				col.Format = src.Format
 			}
+			if col.Label == "" {
+				col.Label = src.Label
+			}
 			col.Informat = src.Informat
-			col.Label = src.Label
 			col.Length = src.Length
 		}
 		ds.AddColumn(col)
@@ -803,6 +806,19 @@ func collectFormats(stmts []ast.Statement) map[string]string {
 	for _, s := range stmts {
 		if f, ok := s.(*ast.FormatStatement); ok {
 			for k, v := range f.Formats {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+// collectLabels merges all LABEL statements into a var→label map.
+func collectLabels(stmts []ast.Statement) map[string]string {
+	out := map[string]string{}
+	for _, s := range stmts {
+		if l, ok := s.(*ast.LabelStatement); ok {
+			for k, v := range l.Labels {
 				out[k] = v
 			}
 		}

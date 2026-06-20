@@ -1,0 +1,32 @@
+id: data_step_label_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - labels
+  - set
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    copy:
+      columns: [id, name, age]
+      rows:
+        - [1, "Alice", 30]
+        - [2, "Bob", 45]
+priority: 2
+notes: |
+  Exercises the LABEL statement. A DATA step assigns descriptive labels to all
+  three variables; a downstream DATA step copies the dataset via SET (labels are
+  inherited through the copy as part of SAS attribute inheritance); and
+  `proc print ... label` renders the labels as column headers instead of the
+  variable names.
+
+  Labels are metadata, not values, so `expected.datasets` value-verifies the data
+  that carries through the SET copy (id/name/age). The label rendering itself is
+  covered by Go unit tests (proc.TestRenderListingLabel*,
+  runtime.TestLabelStatementSetsLabel / TestLabelInheritedThroughSet); the parser
+  disambiguation of `label = "..."` as an assignment is covered by
+  runtime.TestLabelAsVariableName.

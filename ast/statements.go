@@ -419,6 +419,21 @@ func (f *FormatStatement) String() string {
 	return "format " + strings.Join(parts, " ") + ";"
 }
 
+// LabelStatement is `label <var> = "text" ...;` associating descriptive labels
+// with variables. Labels maps a (lowercased) variable name to its label text.
+type LabelStatement struct {
+	Labels map[string]string
+}
+
+func (l *LabelStatement) statementNode() {}
+func (l *LabelStatement) String() string {
+	parts := make([]string, 0, len(l.Labels))
+	for v, txt := range l.Labels {
+		parts = append(parts, v+`="`+txt+`"`)
+	}
+	return "label " + strings.Join(parts, " ") + ";"
+}
+
 // ModelStatement is `model <response> = <predictor...>;` for PROC REG/GLM.
 type ModelStatement struct {
 	Response   string

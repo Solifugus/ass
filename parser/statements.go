@@ -53,6 +53,10 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseNameListStmt("drop")
 	case p.identIs("format"):
 		return p.parseFormatStmt()
+	case p.identIs("label") && p.peek.Type != lexer.EQ:
+		// `label x = "..."` is a LABEL statement; `label = "..."` assigns the
+		// variable named label (label is not reserved in SAS).
+		return p.parseLabelStmt()
 	case p.identIs("retain"):
 		return p.parseRetain()
 	case p.identIs("array"):
@@ -109,6 +113,31 @@ func (p *Parser) parseFormatStmt() ast.Statement {
 			pending = append(pending, tok)
 		}
 	}
+	return stmt
+}
+
+// parseLabelStmt parses `label <var> = "text" ...;`, associating descriptive
+// label text with one or more variables. Each pair is `name = string`; the `=`
+// and surrounding spacing are flexible, mirroring SAS.
+func (p *Parser) parseLabelStmt() ast.Statement {
+	p.next() // 'label'
+	stmt := &ast.LabelStatement{Labels: map[string]string{}}
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		if !p.curIs(lexer.IDENT) {
+			p.next() // skip stray tokens defensively
+			continue
+		}
+		name := p.cur.Literal
+		p.next() // name
+		if p.curIs(lexer.EQ) {
+			p.next() // '='
+		}
+		if p.curIs(lexer.STRING) {
+			stmt.Labels[strings.ToLower(name)] = p.cur.Literal
+			p.next()
+		}
+	}
+	p.expectSemicolon()
 	return stmt
 }
 
@@ -899,6 +928,8 @@ func (p *Parser) parseProcStatement() ast.Statement {
 		return p.parseBy()
 	case p.identIs("format"):
 		return p.parseFormatStmt()
+	case p.identIs("label") && p.peek.Type != lexer.EQ:
+		return p.parseLabelStmt()
 	case p.identIs("var"):
 		return &ast.VarStatement{Vars: p.parseProcNameList()}
 	case p.identIs("class"):

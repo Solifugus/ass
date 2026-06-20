@@ -76,6 +76,20 @@ func TestRenderListingLabel(t *testing.T) {
 	}
 }
 
+func TestRenderListingLabelStatementOverride(t *testing.T) {
+	ds := table.NewDataset("", "people")
+	ds.AddColumn(table.Column{Name: "age", Kind: table.Numeric, Label: "Stored Label"})
+	ds.AppendRow(table.Row{"age": table.Num(25)})
+	// A LABEL statement in the step overrides the variable's stored label.
+	got := renderListing(ds, printOptions{noobs: true, label: true,
+		labels: map[string]string{"age": "Step Label"}})
+	want := "Step Label\n\n" +
+		"        25\n"
+	if got != want {
+		t.Errorf("label-override listing mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
 func TestRenderListingMissingValue(t *testing.T) {
 	ds := table.NewDataset("", "t")
 	ds.AddColumn(table.Column{Name: "x", Kind: table.Numeric})

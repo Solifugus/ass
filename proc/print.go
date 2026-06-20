@@ -21,6 +21,7 @@ type printOptions struct {
 	label   bool                 // use column labels (when set) as headers
 	vars    []string             // explicit column selection/order (empty = all columns)
 	formats map[string]string    // var (lowercased) -> format override (from a FORMAT statement)
+	labels  map[string]string    // var (lowercased) -> label override (from a LABEL statement)
 	catalog *table.FormatCatalog // user-defined formats (from PROC FORMAT), may be nil
 }
 
@@ -60,6 +61,13 @@ func parsePrintOptions(step *ast.ProcStep) printOptions {
 			for k, v := range st.Formats {
 				opts.formats[k] = v
 			}
+		case *ast.LabelStatement:
+			if opts.labels == nil {
+				opts.labels = map[string]string{}
+			}
+			for k, v := range st.Labels {
+				opts.labels[k] = v
+			}
 		}
 	}
 	return opts
@@ -95,8 +103,13 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 	lc := make([]listingColumn, len(cols))
 	for i, c := range cols {
 		header := c.Name
-		if opts.label && c.Label != "" {
-			header = c.Label
+		if opts.label {
+			// A LABEL statement in this step overrides the variable's stored label.
+			if lbl, ok := opts.labels[strings.ToLower(c.Name)]; ok && lbl != "" {
+				header = lbl
+			} else if c.Label != "" {
+				header = c.Label
+			}
 		}
 		width := len(header)
 		right := c.Kind == table.Numeric

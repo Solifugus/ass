@@ -47,6 +47,7 @@ level it first becomes relevant at, matching the build order in [`../docs/PLAN.m
 | `by-group` | 5 | BY-group processing with `first.`/`last.` variables. |
 | `merge` | 5 | Match-merge `merge ... by ...;` with `in=` dataset flags. |
 | `formats` | 5 | Output formats (`w.d`, `dollar`, `date`/`datetime`, ...). |
+| `labels` | 5 | Descriptive variable labels via the `label <var>="text";` statement (DATA step and PROC); inherited through SET/MERGE; rendered by `proc print label`. |
 | `informats` | 5 | Input informats for reading formatted values. |
 | `dates` | 5 | Date/datetime literals (`'01JAN2020'd`) and date handling. |
 | `user-formats` | 5 | User-defined formats via `proc format`. |

@@ -30,11 +30,11 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 40 |
-| Parsed | 40 (100.0%) |
-| Executed | 40 (100.0%) |
-| Passed | 40 (100.0%) |
-| Value-verified | 14 items assert dataset values; all match |
+| Items | 41 |
+| Parsed | 41 (100.0%) |
+| Executed | 41 (100.0%) |
+| Passed | 41 (100.0%) |
+| Value-verified | 15 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -45,13 +45,14 @@ passing cosmetic check.
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
 | class | 1/1 | 100.0% |
-| data-step | 34/34 | 100.0% |
+| data-step | 35/35 | 100.0% |
 | dataset-options | 1/1 | 100.0% |
 | datalines | 5/5 | 100.0% |
 | do-loop | 2/2 | 100.0% |
 | expressions | 2/2 | 100.0% |
 | file-put | 2/2 | 100.0% |
 | formats | 4/4 | 100.0% |
+| labels | 1/1 | 100.0% |
 | if-then-else | 3/3 | 100.0% |
 | infile | 2/2 | 100.0% |
 | informats | 2/2 | 100.0% |
@@ -67,13 +68,13 @@ passing cosmetic check.
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 27/27 | 100.0% |
+| proc-print | 28/28 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
 | proc-sort | 3/3 | 100.0% |
 | proc-sql | 4/4 | 100.0% |
 | retain | 2/2 | 100.0% |
 | sas7bdat | 2/2 | 100.0% |
-| set | 7/7 | 100.0% |
+| set | 8/8 | 100.0% |
 | sql-create-table | 1/1 | 100.0% |
 | sql-groupby | 1/1 | 100.0% |
 | sql-join | 1/1 | 100.0% |
@@ -92,6 +93,7 @@ passing cosmetic check.
 
 - PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
+- The `label <var>="text";` statement is supported in the DATA step and in PROC steps (e.g. PROC PRINT). DATA-step labels become permanent column metadata and are inherited through SET/MERGE (an explicit `label` in a later step overrides); `proc print ... label` renders labels as column headers, and a `label` statement inside the step overrides the stored label for that listing. `label` is correctly disambiguated as a variable name when used as `label = expr` (it is not a reserved word). Not yet: SAS's multi-line header wrapping of long labels (ASS prints each label on one header line — a presentation detail, not a value difference).
 - Multi-line input/output (`#n` line pointers, trailing `@`/`@@` line-hold) and time/datetime informats (column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported); `'..'t`/`'..'dt` time/datetime literals
 - Dataset options `firstobs=`/`obs=`, numbered var-list ranges in `keep=`/`drop=` (e.g. `keep=x1-x5`), and options on PROC `out=` (`keep=`/`drop=`/`rename=`/`where=` on SET/MERGE/DATA/PROC `data=` are supported)
 - PROC GLM with SAS's generalized-inverse (sweep) parameterization, Type I/III SS, F tests, and LSMEANS/CONTRAST/ESTIMATE. CLASS effects **are** supported via **reference-cell coding** (k−1 indicators, last level = reference at estimate 0) — numerically correct for the fit, predictions, and level-vs-reference differences, but the intercept and per-level estimates **differ from SAS by convention** (SAS keeps all levels and flags the aliased one "Biased"). This is a deliberate, documented divergence; the design→solve seam allows a future sweep-based upgrade when a real-SAS reference is available.
