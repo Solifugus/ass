@@ -21,6 +21,15 @@ type WriteBackend interface {
 	Store(ds *Dataset) error
 }
 
+// AppendBackend is a WriteBackend that can also add rows to an existing member
+// without replacing it (an INSERT-only / `mod`-style write), the engine path for
+// PROC APPEND's incremental load. A WriteBackend that does not implement it is
+// appended via load-combine-replace through Store instead.
+type AppendBackend interface {
+	WriteBackend
+	Append(ds *Dataset) error
+}
+
 // Library models a SAS session's libraries. The unnamed in-memory store is WORK
 // (where steps pass datasets to one another); additional librefs may be bound to
 // external Backends via Assign (the LIBNAME statement). Names are
@@ -119,6 +128,67 @@ func (l *Library) Store(name string, ds *Dataset) error {
 		return nil
 	}
 	ds.Name = datasetKey(name)
+	l.Put(ds)
+	return nil
+}
+
+// AppendExternal routes an append to an external Backend when name is qualified
+// with a libref bound to one. Like StoreExternal, handled reports whether the
+// name belongs to an external library (whether or not the write succeeded). A
+// backend implementing AppendBackend appends rows in place; a plain WriteBackend
+// is loaded, has the rows combined, and is replaced; a read-only library yields a
+// clear error. On success ds.Lib/ds.Name reflect the resolved destination.
+func (l *Library) AppendExternal(name string, ds *Dataset) (handled bool, err error) {
+	ref := strings.ToUpper(librefOf(name))
+	if ref == "" {
+		return false, nil
+	}
+	b, ok := l.backends[ref]
+	if !ok {
+		return false, nil
+	}
+	member := datasetKey(name)
+	ds.Lib, ds.Name = ref, member
+	if ab, ok := b.(AppendBackend); ok {
+		return true, ab.Append(ds)
+	}
+	wb, ok := b.(WriteBackend)
+	if !ok {
+		return true, fmt.Errorf("library %s is read-only; cannot append member %s", ref, member)
+	}
+	existing, found, lerr := b.Load(member)
+	if lerr != nil {
+		return true, lerr
+	}
+	if found {
+		existing.Lib, existing.Name = ref, member
+		existing.Rows = append(existing.Rows, ds.Rows...)
+		return true, wb.Store(existing)
+	}
+	return true, wb.Store(ds)
+}
+
+// Append adds ds's rows to the member named by name, creating it if absent: an
+// external AppendBackend member is appended in place (INSERT-only), an external
+// plain WriteBackend is load-combine-replaced, and a WORK member has the rows
+// appended in memory. On success ds.Lib/ds.Name reflect the resolved
+// destination. It is the append counterpart of Store, the routing point PROC
+// APPEND shares.
+func (l *Library) Append(name string, ds *Dataset) error {
+	handled, err := l.AppendExternal(name, ds)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+	member := datasetKey(name)
+	if existing, ok := l.Get(member); ok {
+		existing.Rows = append(existing.Rows, ds.Rows...)
+		ds.Lib, ds.Name = existing.Lib, existing.Name
+		return nil
+	}
+	ds.Name = member
 	l.Put(ds)
 	return nil
 }

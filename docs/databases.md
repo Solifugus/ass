@@ -77,8 +77,9 @@ Semantics:
   back to a calendar value. Missing values become SQL `NULL`.
 - **Read-only libraries** (a base/directory `.sas7bdat` libref) reject a write
   with a clear error.
-- Not yet: appending to an existing table (`mod`-style) and per-column type
-  overrides.
+- **Append.** `PROC APPEND base=db.x data=…` adds rows to an existing table
+  in place — an INSERT-only write, not a drop-and-recreate (see below).
+- Not yet: per-column type overrides.
 
 ### PROC output to a database
 
@@ -106,6 +107,24 @@ through `table.Library.Store`, the single write-routing point (`StoreExternal` �
 DATA step. PROC SQL builds the result under a temporary in-engine name first
 (since a `libref.name` target can't be created directly in the embedded SQLite),
 then stores the materialized dataset to the bound engine.
+
+**PROC APPEND** adds the observations of `data=` to the end of `base=`, where
+either may be a database libref:
+
+```sas
+proc append base=db.fact data=work.daily;   /* INSERT daily rows into FACT */
+run;
+```
+
+If `base=` does not exist it is created from `data=` (the first load); otherwise
+its rows are appended. For a database `base=`, the append is an **in-place
+INSERT** — not a drop-and-recreate — so existing rows and the table definition are
+untouched; this is the `mod`-style incremental-load path. It routes through
+`table.Library.Append` → `Backend.Append` (a `WriteBackend` that also implements
+the optional `AppendBackend` interface; a plain `WriteBackend` falls back to
+load-combine-replace). `FORCE` permits appending when `data=` has variables
+`base=` lacks (dropped) or a type disagrees (set missing), matching SAS; without
+`FORCE` such a mismatch refuses the append.
 
 ## Type mapping (database → SAS)
 

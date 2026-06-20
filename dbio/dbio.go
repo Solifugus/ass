@@ -74,6 +74,9 @@ func (b *Backend) Load(member string) (*table.Dataset, bool, error) {
 	}
 	rows, err := b.db.Query("SELECT * FROM " + quoteIdent(b.engine, member))
 	if err != nil {
+		if isMissingTableErr(err) {
+			return nil, false, nil // member absent: report not-found, not an error
+		}
 		return nil, false, fmt.Errorf("read %s: %w", member, err)
 	}
 	defer rows.Close()
@@ -139,7 +142,38 @@ func (b *Backend) Store(ds *table.Dataset) error {
 	if _, err := tx.Exec(b.createTableSQL(qname, ds.Columns)); err != nil {
 		return fmt.Errorf("create %s: %w", ds.Name, err)
 	}
+	if err := b.insertRows(tx, qname, ds); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+// Append inserts the dataset's rows into an existing table without dropping or
+// recreating it — SAS PROC APPEND / `mod`-style incremental load. Like Store the
+// inserts run in a single transaction (a failure leaves the table unchanged) and
+// values map through storeArg identically. The table must already exist; PROC
+// APPEND creates a missing BASE= via Store before reaching this path.
+func (b *Backend) Append(ds *table.Dataset) error {
+	if !safeIdent(ds.Name) {
+		return fmt.Errorf("invalid table name %q", ds.Name)
+	}
+	qname := quoteIdent(b.engine, ds.Name)
+
+	tx, err := b.db.Begin()
+	if err != nil {
+		return fmt.Errorf("append %s: %w", ds.Name, err)
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	if err := b.insertRows(tx, qname, ds); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// insertRows prepares one INSERT and executes it for every row, mapping SAS
+// values to bound args via storeArg. Shared by Store and Append.
+func (b *Backend) insertRows(tx *gosql.Tx, qname string, ds *table.Dataset) error {
 	cols := make([]string, len(ds.Columns))
 	for i, c := range ds.Columns {
 		cols[i] = quoteIdent(b.engine, c.Name)
@@ -161,7 +195,7 @@ func (b *Backend) Store(ds *table.Dataset) error {
 			return fmt.Errorf("insert into %s: %w", ds.Name, err)
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // createTableSQL builds a CREATE TABLE statement mapping each SAS column to an
@@ -355,6 +389,24 @@ func isDateType(dbType string) bool {
 func isTimestampType(dbType string) bool {
 	t := upper(dbType)
 	return strings.Contains(t, "TIMESTAMP") || strings.Contains(t, "DATETIME")
+}
+
+// isMissingTableErr reports whether a query error means the table does not exist
+// (as opposed to a connection or syntax failure), so a Load of an absent member
+// can report not-found rather than an error. The messages are matched across the
+// built-in engines: SQLite ("no such table"), Postgres ("does not exist"), SQL
+// Server ("Invalid object name"), and Oracle ("ORA-00942").
+func isMissingTableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, s := range []string{"no such table", "does not exist", "invalid object name", "ora-00942"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // safeIdent guards the table name interpolated into SELECT (driver placeholders

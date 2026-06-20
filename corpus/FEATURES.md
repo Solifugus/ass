@@ -29,6 +29,7 @@ level it first becomes relevant at, matching the build order in [`../docs/PLAN.m
 | `where` | 2 | `where` filtering (DATA step option and statement), vs. subsetting `if`. |
 | `proc-print` | 2 | `proc print` listing output, including `var`, `noobs`, `label`. |
 | `proc-sort` | 2 | `proc sort` with `by`, `descending`, `out=`, `nodupkey`. |
+| `proc-append` | 2 | `proc append base= data= [force]`: append observations to a base data set (created if absent; WORK or a database libref). |
 | `proc-contents` | 2 | `proc contents` dataset metadata listing. |
 | `proc-import` | 2 | `proc import` reading external files (CSV first). |
 | `proc-export` | 2 | `proc export` writing external files (CSV first). |

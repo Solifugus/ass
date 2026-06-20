@@ -1,0 +1,32 @@
+id: proc_append_001
+source: hand-written
+license: MIT
+features:
+  - proc-append
+  - data-step
+  - datalines
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    all:
+      columns: [region, amt]
+      rows:
+        - ["east", 100]
+        - ["west", 200]
+        - ["east", 50]
+        - ["north", 75]
+priority: 2
+notes: |
+  Exercises PROC APPEND. The first `proc append base=all data=sales;` creates the
+  BASE= data set (ALL did not exist) as a copy of SALES; the second
+  `proc append base=all data=q2;` appends Q2's observations in place. The result
+  preserves insertion order: SALES rows (east/100, west/200) followed by Q2 rows
+  (east/50, north/75), value-verified via `expected.datasets`.
+
+  The DB-libref append path (in-place INSERT, not drop-and-recreate, via
+  table.Library.Append -> dbio.Backend.Append) and FORCE handling for mismatched
+  variables are covered by Go unit tests (runtime.TestProcAppendToDB,
+  proc.TestAppend*).

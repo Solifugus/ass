@@ -188,6 +188,75 @@ run;
 	}
 }
 
+// TestProcAppendToDB verifies PROC APPEND can append to a table in an external
+// LIBNAME engine in place (INSERT-only, not drop-and-recreate): a base table is
+// written, then a second PROC APPEND adds rows, and reading back shows all rows.
+func TestProcAppendToDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "append.db")
+	src := `
+libname db sqlite "` + dbPath + `";
+
+data first;
+  input id name $;
+  datalines;
+1 Alice
+2 Bob
+;
+run;
+
+data more;
+  input id name $;
+  datalines;
+3 Carol
+4 Dave
+;
+run;
+
+/* Create the base table in the DB from FIRST. */
+proc append base=db.people data=first;
+run;
+
+/* Append MORE in place. */
+proc append base=db.people data=more;
+run;
+
+data back;
+  set db.people;
+run;
+`
+	prog := parser.New(src).ParseProgram()
+	lib := table.NewLibrary()
+	var b strings.Builder
+	if err := RunProgram(prog, lib, log.New(&b)); err != nil {
+		t.Fatalf("RunProgram error: %v", err)
+	}
+
+	if _, ok := lib.Get("people"); ok {
+		t.Errorf("PEOPLE should live in the external library, not WORK")
+	}
+	back, ok := lib.Get("back")
+	if !ok {
+		t.Fatalf("BACK not built")
+	}
+	if back.NObs() != 4 {
+		t.Fatalf("back nobs = %d, want 4 (2 created + 2 appended)", back.NObs())
+	}
+	got := make([]string, back.NObs())
+	for i, r := range back.Rows {
+		got[i] = back.Get(r, "name").Str
+	}
+	want := []string{"Alice", "Bob", "Carol", "Dave"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d name = %q, want %q (full: %v)", i, got[i], want[i], got)
+			break
+		}
+	}
+	if out := b.String(); !strings.Contains(out, "DB.PEOPLE") {
+		t.Errorf("expected a NOTE for DB.PEOPLE; log:\n%s", out)
+	}
+}
+
 // TestDataStepWriteBackReadOnly verifies a clear error when a DATA step targets a
 // read-only library (a base/directory .sas7bdat libref does not implement write).
 func TestDataStepWriteBackReadOnly(t *testing.T) {
