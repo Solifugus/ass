@@ -76,7 +76,7 @@ Obs  name  age
 | PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files: `dbms=csv/tab/dlm`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row |
 | Dataset options | `(keep= drop= rename=(o=n) where=(...))` on `set`/`merge`/`data`/proc `data=` |
 | Native SAS datasets | `libname lib "/dir";` then read `lib.member` from `member.sas7bdat` — clean-room `.sas7bdat` reader (32/64-bit little-endian; RLE/RDC row compression and uncompressed; numeric, character, dates, formats, labels) |
-| Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset — Postgres, SQL Server, Oracle (read-only); see [`docs/databases.md`](docs/databases.md) |
+| Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset and write it back with `data pg.out; set …;` — Postgres, SQL Server, Oracle, SQLite; see [`docs/databases.md`](docs/databases.md) |
 | Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
 | PROC PRINT | `var`, `noobs`, `label`, applied formats |
 | PROC SORT | `by` (+ `descending`), `out=`, `nodupkey` |

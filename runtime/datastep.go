@@ -37,6 +37,7 @@ type dataStep struct {
 	logger    *log.Logger           // step logger (PUT without FILE writes here)
 	outputs   []*table.Dataset      // datasets this step writes
 	outOpts   []*ast.DatasetOptions // dataset options per output (aligned to outputs)
+	outNames  []string              // full (possibly libref-qualified) output names, aligned to outputs
 	explicit  bool                  // step contains at least one OUTPUT statement
 	n         int                   // current iteration (_N_)
 	records   []string              // data lines (datalines or infile file contents)
@@ -80,6 +81,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	if len(ds.Outputs) == 0 {
 		d.outputs = append(d.outputs, table.NewDataset("", "DATA1"))
 		d.outOpts = append(d.outOpts, nil)
+		d.outNames = append(d.outNames, "")
 	} else {
 		for _, ref := range ds.Outputs {
 			if strings.EqualFold(datasetName(ref.Name), "_null_") {
@@ -87,6 +89,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 			}
 			d.outputs = append(d.outputs, table.NewDataset("", datasetName(ref.Name)))
 			d.outOpts = append(d.outOpts, ref.Options)
+			d.outNames = append(d.outNames, ref.Name)
 		}
 	}
 
@@ -171,7 +174,13 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 			view.Lib, view.Name = out.Lib, out.Name
 			final = view
 		}
-		d.lib.Put(final)
+		handled, err := d.lib.StoreExternal(d.outNames[i], final)
+		if err != nil {
+			return err
+		}
+		if !handled {
+			d.lib.Put(final)
+		}
 		logger.DatasetNote(final.Lib, final.Name, final.NObs(), len(final.Columns))
 	}
 

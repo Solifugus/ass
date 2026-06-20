@@ -1,0 +1,37 @@
+id: data_step_db_writeback_001
+source: hand-written
+license: MIT
+features:
+  - libname
+  - set
+  - data-step
+  - proc-print
+  - where
+  - formats
+  - informats
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    result:
+      columns: [id, name, amt, opened]
+      rows:
+        # opened is the SAS day number recovered from the SQL DATE column:
+        # 15JAN2020 = 21929, 03FEB2021 = 22314.
+        - [1, "Acme", 100, 21929]
+        - [2, "Globex", 250, 22314]
+priority: 2
+notes: |
+  Exercises database write-back through a LIBNAME engine end to end. A SQLite
+  library file is created with `libname db sqlite "@TMP@/writeback.db"`, a DATA
+  step writes a filtered dataset INTO it (`data db.orders; set source; where
+  amt >= 100;`), and a later step reads it back (`set db.orders;`). The
+  round-tripped WORK dataset `result` is value-verified, including a date column
+  that is written to a SQL DATE and recovered as a SAS date (day number).
+
+  SQLite is the engine that is locally verifiable without an external server; the
+  same write path (table.WriteBackend -> dbio.Backend.Store) serves the
+  Postgres/SQL Server/Oracle LIBNAME engines. Requires a CGo build (as does the
+  whole project, for PROC SQL). @TMP@ is a fresh temp dir removed after the run,
+  so the test leaves no files behind.

@@ -3,8 +3,10 @@
 // binds a libref to one of these; the DATA step and PROCs then read its tables
 // as datasets, mirroring SAS/ACCESS LIBNAME-engine behavior.
 //
-// Read-only for now: tables are materialized into in-memory table.Dataset values
-// (eager load). Streaming for large tables and write-back are future work.
+// Reads materialize a table into an in-memory table.Dataset (eager load).
+// Writes (Store) are also supported, so a libref bound to a database engine can
+// be a DATA-step output target (`data pg.orders; ...`), replacing the table.
+// Streaming for large tables remains future work.
 package dbio
 
 import (
@@ -47,7 +49,7 @@ type Backend struct {
 func Open(engine, connection string) (*Backend, error) {
 	driver, ok := engineDriver[strings.ToLower(engine)]
 	if !ok {
-		return nil, fmt.Errorf("LIBNAME engine %q is not supported (built-in: postgres, sqlserver, oracle)", engine)
+		return nil, fmt.Errorf("LIBNAME engine %q is not supported (built-in: postgres, sqlserver, oracle; sqlite when built with cgo)", engine)
 	}
 	db, err := gosql.Open(driver, connection)
 	if err != nil {
@@ -109,6 +111,163 @@ func (b *Backend) Load(member string) (*table.Dataset, bool, error) {
 		ds.AppendRow(row)
 	}
 	return ds, true, rows.Err()
+}
+
+// Store writes a dataset to the database as a table (LIBNAME engine as a
+// DATA-step / PROC output target). It replaces any existing table of the same
+// name: the whole operation — DROP, CREATE, and all INSERTs — runs in a single
+// transaction so a failure leaves the prior table intact. SAS numeric columns
+// map to the engine's double type (date/datetime-formatted numerics map to the
+// engine's DATE/TIMESTAMP type and are converted from SAS day/second numbers);
+// character columns map to a text type sized by the column length. Missing
+// values become SQL NULL.
+func (b *Backend) Store(ds *table.Dataset) error {
+	if !safeIdent(ds.Name) {
+		return fmt.Errorf("invalid table name %q", ds.Name)
+	}
+	qname := quoteIdent(b.engine, ds.Name)
+
+	tx, err := b.db.Begin()
+	if err != nil {
+		return fmt.Errorf("write %s: %w", ds.Name, err)
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	if _, err := tx.Exec("DROP TABLE IF EXISTS " + qname); err != nil {
+		return fmt.Errorf("replace %s: %w", ds.Name, err)
+	}
+	if _, err := tx.Exec(b.createTableSQL(qname, ds.Columns)); err != nil {
+		return fmt.Errorf("create %s: %w", ds.Name, err)
+	}
+
+	cols := make([]string, len(ds.Columns))
+	for i, c := range ds.Columns {
+		cols[i] = quoteIdent(b.engine, c.Name)
+	}
+	insert := "INSERT INTO " + qname + " (" + strings.Join(cols, ", ") + ") VALUES (" +
+		b.placeholders(len(ds.Columns)) + ")"
+	stmt, err := tx.Prepare(insert)
+	if err != nil {
+		return fmt.Errorf("prepare insert into %s: %w", ds.Name, err)
+	}
+	defer stmt.Close()
+
+	args := make([]interface{}, len(ds.Columns))
+	for _, row := range ds.Rows {
+		for i, c := range ds.Columns {
+			args[i] = storeArg(ds.Get(row, c.Name), c)
+		}
+		if _, err := stmt.Exec(args...); err != nil {
+			return fmt.Errorf("insert into %s: %w", ds.Name, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// createTableSQL builds a CREATE TABLE statement mapping each SAS column to an
+// engine-appropriate column type.
+func (b *Backend) createTableSQL(qname string, cols []table.Column) string {
+	defs := make([]string, len(cols))
+	for i, c := range cols {
+		defs[i] = quoteIdent(b.engine, c.Name) + " " + b.columnType(c)
+	}
+	return "CREATE TABLE " + qname + " (" + strings.Join(defs, ", ") + ")"
+}
+
+// columnType maps a SAS column to the engine's SQL type. Character columns use a
+// variable-width text type sized by the column's length (falling back to a wide
+// default); date/datetime-formatted numerics use the engine's date/timestamp
+// type; all other numerics use the engine's double-precision float type.
+func (b *Backend) columnType(c table.Column) string {
+	if c.Kind == table.Character {
+		n := c.Length
+		if n <= 0 {
+			n = 255
+		}
+		switch b.engine {
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("NVARCHAR(%d)", n)
+		case "oracle":
+			return fmt.Sprintf("VARCHAR2(%d)", n)
+		default: // postgres, sqlite
+			return fmt.Sprintf("VARCHAR(%d)", n)
+		}
+	}
+	isDate, isDatetime := temporalFormat(c.Format)
+	if isDate {
+		return "DATE"
+	}
+	if isDatetime {
+		switch b.engine {
+		case "sqlserver", "mssql":
+			return "DATETIME2"
+		default: // postgres, oracle, sqlite
+			return "TIMESTAMP"
+		}
+	}
+	switch b.engine {
+	case "sqlserver", "mssql":
+		return "FLOAT"
+	case "oracle":
+		return "BINARY_DOUBLE"
+	case "sqlite", "sqlite3":
+		return "REAL"
+	default: // postgres
+		return "DOUBLE PRECISION"
+	}
+}
+
+// placeholders returns a comma-separated list of n bind placeholders in the
+// engine's dialect (Postgres/Oracle are positional; SQL Server names them; others
+// use ?).
+func (b *Backend) placeholders(n int) string {
+	parts := make([]string, n)
+	for i := 0; i < n; i++ {
+		switch b.engine {
+		case "postgres", "postgresql":
+			parts[i] = fmt.Sprintf("$%d", i+1)
+		case "oracle":
+			parts[i] = fmt.Sprintf(":%d", i+1)
+		case "sqlserver", "mssql":
+			parts[i] = fmt.Sprintf("@p%d", i+1)
+		default: // sqlite and any ?-style driver
+			parts[i] = "?"
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// storeArg converts a SAS value to the Go value bound into an INSERT, honoring
+// the column's type and (for numerics) any date/datetime format. Missing values
+// become nil (SQL NULL).
+func storeArg(v table.Value, c table.Column) interface{} {
+	if v.IsMissing() {
+		return nil
+	}
+	if c.Kind == table.Character {
+		return v.Str
+	}
+	if isDate, isDatetime := temporalFormat(c.Format); isDate {
+		return sasEpoch.AddDate(0, 0, int(v.Num))
+	} else if isDatetime {
+		return sasEpoch.Add(time.Duration(v.Num * float64(time.Second)))
+	}
+	return v.Num
+}
+
+// temporalFormat classifies a SAS format name as a date or datetime format (so a
+// numeric column storing SAS day/second counts can be written to a real SQL
+// DATE/TIMESTAMP column). Width/decimal suffixes are ignored.
+func temporalFormat(format string) (isDate, isDatetime bool) {
+	f := strings.ToLower(strings.TrimSpace(format))
+	f = strings.TrimRight(f, "0123456789.")
+	switch f {
+	case "datetime":
+		return false, true
+	case "date", "mmddyy", "ddmmyy", "yymmdd", "worddate", "weekdate", "monyy", "yymmddd":
+		return true, false
+	}
+	return false, false
 }
 
 // toValue converts a scanned database value to a SAS table.Value, honoring the

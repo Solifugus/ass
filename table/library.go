@@ -1,13 +1,24 @@
 package table
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Backend is an external library engine (e.g. a relational database) assigned to
 // a libref via a LIBNAME statement. Load materializes one member (table) as a
-// dataset; ok is false when the member does not exist. Read-only for now; write
-// support (LIBNAME engines as DATA-step targets) will extend this interface.
+// dataset; ok is false when the member does not exist.
 type Backend interface {
 	Load(member string) (ds *Dataset, ok bool, err error)
+}
+
+// WriteBackend is a Backend that can also receive datasets — a LIBNAME engine
+// usable as a DATA-step (or PROC) output target, e.g. `data pg.orders; ...`.
+// Store replaces any existing member of the same name. A Backend is writable
+// only if it implements this; read-only engines simply do not.
+type WriteBackend interface {
+	Backend
+	Store(ds *Dataset) error
 }
 
 // Library models a SAS session's libraries. The unnamed in-memory store is WORK
@@ -67,6 +78,29 @@ func (l *Library) Resolve(name string) (*Dataset, bool, error) {
 // Put stores (or replaces) a dataset under its name.
 func (l *Library) Put(ds *Dataset) {
 	l.datasets[strings.ToUpper(ds.Name)] = ds
+}
+
+// StoreExternal routes a dataset to an external Backend when its name is
+// qualified with a libref bound to one. handled is true when the name belongs to
+// an external library (whether or not the write succeeded); when false, the
+// caller should fall back to the WORK store. An external library that is not
+// writable yields a clear error. On success ds.Lib/ds.Name are set to the
+// resolved libref and member so callers can log an accurate NOTE.
+func (l *Library) StoreExternal(name string, ds *Dataset) (handled bool, err error) {
+	ref := strings.ToUpper(librefOf(name))
+	if ref == "" {
+		return false, nil
+	}
+	b, ok := l.backends[ref]
+	if !ok {
+		return false, nil
+	}
+	wb, ok := b.(WriteBackend)
+	if !ok {
+		return true, fmt.Errorf("library %s is read-only; cannot write member %s", ref, datasetKey(name))
+	}
+	ds.Lib, ds.Name = ref, datasetKey(name)
+	return true, wb.Store(ds)
 }
 
 // Get retrieves a dataset by name (case-insensitive). A name may be qualified
