@@ -96,6 +96,31 @@ func TestParsePutLinePointer(t *testing.T) {
 	}
 }
 
+func TestParsePutTrailingAt(t *testing.T) {
+	cases := []struct {
+		src  string
+		want int
+		n    int // expected item count
+	}{
+		{`data _null_; put x @@; run;`, 2, 1},
+		{`data _null_; put x @; run;`, 1, 1},
+		{`data _null_; put x@@; run;`, 2, 1},
+		{`data _null_; put x@; run;`, 1, 1},
+		{`data _null_; put name age; run;`, 0, 2},
+		{`data _null_; put @5 x; run;`, 0, 1}, // leading @n is not a trailing hold
+	}
+	for _, c := range cases {
+		body := dataBody(t, c.src)
+		put := body[0].(*ast.PutStatement)
+		if put.TrailingAt != c.want {
+			t.Errorf("%q: TrailingAt = %d, want %d", c.src, put.TrailingAt, c.want)
+		}
+		if len(put.Items) != c.n {
+			t.Errorf("%q: items = %d, want %d (%+v)", c.src, len(put.Items), c.n, put.Items)
+		}
+	}
+}
+
 func TestParseColumnAndPointerInput(t *testing.T) {
 	body := dataBody(t, "data s; input name $ 1-10 age 11-13 @1 id $5. +2 x 3.; run;")
 	in, ok := body[0].(*ast.InputStatement)

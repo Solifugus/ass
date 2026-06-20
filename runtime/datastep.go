@@ -48,6 +48,9 @@ type dataStep struct {
 	infile    *ast.InfileStatement    // external flat-file record source (nil = datalines)
 	file      *ast.FileStatement      // external flat-file PUT destination (nil = log)
 	putLines  []string                // lines accumulated by PUT for the FILE destination
+	putBuf    string                  // held partial output line (trailing `@`/`@@` on PUT)
+	putHeld   bool                    // a trailing `@`/`@@` is holding the output line
+	putHoldX  bool                    // the output hold is `@@` (persists across iterations)
 	setRows   []sourceRow             // rows from SET input datasets (concatenated)
 	setPtr    int                     // next SET row to read
 	keep      map[string]bool         // if non-nil, only these vars are output (lowercased)
@@ -197,6 +200,9 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 		logger.DatasetNote(final.Lib, final.Name, final.NObs(), len(final.Columns))
 	}
 
+	// Release any output line still held by a trailing `@@` at end of step.
+	d.flushPutHold()
+
 	if d.file != nil {
 		if err := writeFileOutput(d.file, d.putLines); err != nil {
 			return err
@@ -219,6 +225,12 @@ func (d *dataStep) runIteration(body []ast.Statement) error {
 	}
 	if f != flowDelete && !d.explicit {
 		d.outputAll()
+	}
+	// A single trailing `@` holds the output line only within the iteration; SAS
+	// writes it automatically at the iteration boundary. `@@` persists across
+	// iterations, so it is left held.
+	if d.putHeld && !d.putHoldX {
+		d.flushPutHold()
 	}
 	return nil
 }
@@ -264,14 +276,7 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		// The destination is resolved up front; the statement itself does nothing.
 		return flowNormal, nil
 	case *ast.PutStatement:
-		lines := d.buildPutLines(st)
-		if d.file != nil {
-			d.putLines = append(d.putLines, lines...)
-		} else {
-			for _, line := range lines {
-				d.logger.Put(line)
-			}
-		}
+		d.execPut(st)
 		return flowNormal, nil
 	case *ast.SetStatement:
 		if d.setPtr >= len(d.setRows) {
@@ -1139,6 +1144,97 @@ func (d *dataStep) buildPutLines(st *ast.PutStatement) []string {
 		}
 	}
 	return lines
+}
+
+// execPut renders a PUT statement and routes it to the FILE destination (or the
+// log), honoring a trailing `@`/`@@` output line-hold. With a hold active, the
+// rendered segment continues the held physical line instead of starting a new
+// one: list segments are joined by the FILE's separator, column/pointer segments
+// overlay onto the held line at their absolute columns. A `@` holds the line
+// within the iteration (released at the iteration boundary); `@@` holds it across
+// iterations (released only by a PUT without a trailing hold, or at end of step).
+func (d *dataStep) execPut(st *ast.PutStatement) {
+	// `#n` multi-line PUT is not combined with an output hold: flush any held line
+	// first, then emit the multi-line output as its own physical lines.
+	if putHasLinePointer(st) {
+		d.flushPutHold()
+		d.writePut(d.buildPutLines(st))
+		return
+	}
+
+	seg := d.buildPutLine(st)
+	switch {
+	case !d.putHeld:
+		d.putBuf = seg
+	case putColumnMode(st):
+		d.putBuf = overlayLine(d.putBuf, seg)
+	default:
+		sep := d.listSep()
+		if d.putBuf == "" || seg == "" {
+			d.putBuf += seg
+		} else {
+			d.putBuf += sep + seg
+		}
+	}
+
+	if st.TrailingAt > 0 {
+		d.putHeld = true
+		d.putHoldX = st.TrailingAt == 2
+		return
+	}
+	d.writePut([]string{d.putBuf})
+	d.putBuf, d.putHeld, d.putHoldX = "", false, false
+}
+
+// flushPutHold writes any held PUT line and clears the hold. It is a no-op when
+// no line is held.
+func (d *dataStep) flushPutHold() {
+	if d.putHeld {
+		d.writePut([]string{d.putBuf})
+		d.putBuf, d.putHeld, d.putHoldX = "", false, false
+	}
+}
+
+// writePut routes rendered PUT lines to the FILE buffer or, with no FILE, the log.
+func (d *dataStep) writePut(lines []string) {
+	if d.file != nil {
+		d.putLines = append(d.putLines, lines...)
+		return
+	}
+	for _, line := range lines {
+		d.logger.Put(line)
+	}
+}
+
+// listSep is the separator that joins held list-mode PUT segments: the FILE's
+// DLM= value, a comma under DSD, or a single blank for default list output.
+func (d *dataStep) listSep() string {
+	if d.file != nil {
+		switch {
+		case d.file.Delimiter != "":
+			return d.file.Delimiter
+		case d.file.DSD:
+			return ","
+		}
+	}
+	return " "
+}
+
+// overlayLine merges a column/pointer PUT segment onto a held line: every
+// non-blank byte of seg is written at its absolute column over base, padding base
+// with blanks where seg is longer. Blanks in seg are padding and leave base
+// intact, so a held prefix survives an `@n`-positioned continuation.
+func overlayLine(base, seg string) string {
+	b, s := []byte(base), []byte(seg)
+	for len(b) < len(s) {
+		b = append(b, ' ')
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' {
+			b[i] = s[i]
+		}
+	}
+	return string(b)
 }
 
 func (d *dataStep) buildPutLine(st *ast.PutStatement) string {

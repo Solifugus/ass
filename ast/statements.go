@@ -181,9 +181,14 @@ type PutItem struct {
 
 // PutStatement is `put <item>...;`, writing the items as one line to the current
 // FILE destination (or the log if none). Items are joined by the file's
-// delimiter (a single blank for default list output).
+// delimiter (a single blank for default list output). TrailingAt records a
+// trailing line-hold modifier: 1 for `@` (hold the output line within the
+// iteration, released automatically at the iteration boundary) and 2 for `@@`
+// (hold the output line across iterations, released only by a PUT without a
+// trailing hold or at end of step); 0 means none.
 type PutStatement struct {
-	Items []PutItem
+	Items      []PutItem
+	TrailingAt int
 }
 
 func (p *PutStatement) statementNode() {}

@@ -548,7 +548,24 @@ func (p *Parser) parsePut() ast.Statement {
 	}
 	raw := p.l.Slice(start, end)
 	p.expectSemicolon()
-	return &ast.PutStatement{Items: parsePutItems(raw)}
+
+	// A trailing `@@` (hold the output line across iterations) or `@` (hold it
+	// within the iteration) at the very end is a line-hold modifier, not an `@n`
+	// column pointer (those carry digits and precede an item). It may be spaced
+	// (`x @`) or attached (`x@`). No `@n` pointer or format ever ends a PUT, and a
+	// trailing quote guards quoted literals, so a final `@` is always a hold.
+	stmt := &ast.PutStatement{}
+	trimmed := strings.TrimRight(raw, " \t\r\n")
+	switch {
+	case strings.HasSuffix(trimmed, "@@"):
+		stmt.TrailingAt = 2
+		raw = strings.TrimSuffix(trimmed, "@@")
+	case strings.HasSuffix(trimmed, "@"):
+		stmt.TrailingAt = 1
+		raw = strings.TrimSuffix(trimmed, "@")
+	}
+	stmt.Items = parsePutItems(raw)
+	return stmt
 }
 
 // parsePutItems splits a PUT item list, respecting quoted string literals

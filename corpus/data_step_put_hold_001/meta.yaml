@@ -1,0 +1,43 @@
+id: data_step_put_hold_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - infile
+  - file-put
+  - line-hold
+  - set
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    back:
+      columns: [n]
+      rows:
+        # `put n @@;` wrote "1 2 3" on one line; `input n @@;` read three obs.
+        - [1]
+        - [2]
+        - [3]
+    back2:
+      columns: [name, age]
+      rows:
+        # `put name @; put age;` built one line per obs ("Amy 30" / "Bob 40").
+        - ["Amy", 30]
+        - ["Bob", 40]
+priority: 2
+notes: |
+  Value-verifies trailing line-hold modifiers on PUT (output hold) by round-
+  tripping through a flat file.
+
+  `back` exercises `@@`: it holds the output line across iterations so three
+  observations are written to one physical line, then `input n @@;` reads them
+  back as three observations.
+
+  `back2` exercises a single `@`: two PUTs build one physical line per
+  observation, released at the iteration boundary; list INPUT reads both values.
+
+  @TMP@ is a per-run temp directory supplied by the harness.
