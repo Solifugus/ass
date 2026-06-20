@@ -1,0 +1,42 @@
+id: proc_sql_external_source_001
+source: hand-written
+license: MIT
+features:
+  - libname
+  - data-step
+  - proc-sql
+  - sql-join
+  - sql-external-source
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    joined:
+      columns: [name, dept]
+      rows:
+        - ["Amy", "Eng"]
+        - ["Bob", "Sales"]
+        - ["Cy", "Ops"]
+    wq:
+      columns: [id, name]
+      rows:
+        - [2, "Amy"]
+        - [3, "Cy"]
+priority: 2
+notes: |
+  Value-verifies PROC SQL reading an external LIBNAME member as a query source.
+
+  `joined` joins db.emp (external SQLite libref) with work.dept (WORK-qualified)
+  through table aliases. db.emp is loaded on demand into the in-process SQLite
+  engine under a private alias; work.dept reduces to its member name; the
+  alias.column qualifiers (e.name, d.dept, e.id, d.id) are left untouched — the
+  rewriter only resolves qualifiers that name a real library (WORK or an assigned
+  libref), never table aliases. Ordered by name: Amy/Eng, Bob/Sales, Cy/Ops.
+
+  `wq` reads db.emp alone with `where id >= 2` to cover the plain external-source
+  case: id 2 (Amy) and 3 (Cy).
+
+  SQLite is the engine locally verifiable without a server; the same source-
+  resolution path serves the Postgres/SQL Server/Oracle/DB2 LIBNAME engines.
+  Requires a CGo build. @TMP@ is a fresh temp dir removed after the run.

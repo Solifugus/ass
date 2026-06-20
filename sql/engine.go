@@ -47,9 +47,18 @@ func (e *Engine) Exec(query string) error {
 	return err
 }
 
-// load creates and populates a SQLite table from a dataset. Numeric columns map
-// to REAL and character columns to TEXT; a numeric missing becomes SQL NULL.
-func (e *Engine) load(ds *table.Dataset) error {
+// AddTable loads a dataset into the engine under an explicit table name,
+// independent of ds.Name. PROC SQL uses it to bring source tables (members of an
+// external LIBNAME engine) into the in-process database on demand.
+func (e *Engine) AddTable(name string, ds *table.Dataset) error { return e.loadAs(name, ds) }
+
+// load creates and populates a SQLite table named after the dataset.
+func (e *Engine) load(ds *table.Dataset) error { return e.loadAs(ds.Name, ds) }
+
+// loadAs creates and populates a SQLite table with the given name from a dataset.
+// Numeric columns map to REAL and character columns to TEXT; a numeric missing
+// becomes SQL NULL.
+func (e *Engine) loadAs(name string, ds *table.Dataset) error {
 	if len(ds.Columns) == 0 {
 		return nil
 	}
@@ -61,12 +70,12 @@ func (e *Engine) load(ds *table.Dataset) error {
 		}
 		defs[i] = c.Name + " " + sqlType
 	}
-	if _, err := e.db.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", ds.Name, strings.Join(defs, ", "))); err != nil {
+	if _, err := e.db.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", name, strings.Join(defs, ", "))); err != nil {
 		return err
 	}
 
 	placeholders := strings.TrimRight(strings.Repeat("?, ", len(ds.Columns)), ", ")
-	insert := fmt.Sprintf("INSERT INTO %s VALUES (%s)", ds.Name, placeholders)
+	insert := fmt.Sprintf("INSERT INTO %s VALUES (%s)", name, placeholders)
 	for _, r := range ds.Rows {
 		args := make([]any, len(ds.Columns))
 		for i, c := range ds.Columns {

@@ -250,11 +250,20 @@ maps columns on read:
   read. Either way the result is identical; pushdown only reduces transfer. ASS
   validates each pushed column is numeric (via a zero-row metadata probe) and
   falls back to a full read on anything it cannot prove safe.
+- **Ordinary `proc sql` can read an external libref as a source.** The in-process
+  SQLite engine backs ordinary `proc sql` (joins, group by, create-table-as-select),
+  and a libref-qualified source — `select … from db.orders`, including a join of an
+  external table with a WORK table — is loaded on demand from the bound engine into
+  the in-process database and queried there. WORK-qualified sources (`work.x`)
+  resolve too. (Source resolution rewrites only qualifiers that name a real library
+  — WORK or an assigned libref — so `alias.column` references like `t.amt` are left
+  untouched.) This is value-only loading, not pushdown: the external table is read
+  in full, then the join/aggregation runs locally. For server-side execution use
+  pass-through below.
 - **Explicit PROC SQL pass-through** (`connect to … ; select … from connection
   to …`) **is supported** — see [PROC SQL pass-through](#proc-sql-pass-through).
-  The in-process SQLite engine still backs ordinary `proc sql` (joins, group by,
-  create-table-as-select over WORK/loaded datasets); pass-through is the escape
-  hatch that sends native SQL to the database itself.
+  Pass-through is the escape hatch that sends native SQL to the database itself
+  (DBMS-specific dialect, server-side joins/aggregation).
 - The long tail of SAS/ACCESS LIBNAME options (`SCHEMA=`, `READBUFF=`,
   `PRESERVE_TAB_NAMES=`, bulk loaders, …) is not implemented. Schema-qualified
   member names (`pg.'schema.table'n`) are partially handled via a single dot.

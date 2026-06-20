@@ -39,6 +39,7 @@ level it first becomes relevant at, matching the build order in [`../docs/PLAN.m
 | `sql-groupby` | 3 | `group by` with aggregate functions and `order by`. |
 | `sql-create-table` | 3 | `create table <name> as select ...` materialization. |
 | `sql-passthrough` | 3 | Explicit pass-through to an external database (`connect to` / `execute ... by` / `select ... from connection to`). |
+| `sql-external-source` | 3 | Ordinary `proc sql` reading a libref-qualified (external or WORK) table as a query source, incl. joining an external table with a WORK table. |
 | `query-pushdown` | 3 | Value-safe implicit pushdown of `keep=` (projection) and `where=` (numeric `=`/`>`/`>=`) to a database source. |
 | `line-hold` | 5 | Line-pointer control: trailing line-hold on INPUT (`@@` across iterations, `@` within the iteration) and `#n` multi-line pointers reading/writing one observation across several physical lines (INPUT and PUT). |
 | `macro-let` | 4 | `%let` macro-variable assignment. |
