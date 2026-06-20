@@ -5,10 +5,12 @@ engine. You assign a libref to a database, then reference its tables as datasets
 anywhere a dataset is expected (`set`, `merge`, `data=`, …). This mirrors the
 SAS/ACCESS LIBNAME-engine model.
 
-> **Status: read and write.** Reading database tables as datasets is supported,
-> and a DATA step can write a dataset back to a database library
-> (`data pg.newtab; set …;`), replacing the table. Streaming for very large
-> tables and PROC SQL pass-through remain future work.
+> **Status: read, write, and PROC SQL pass-through.** Reading database tables as
+> datasets is supported, a DATA step can write a dataset back to a database
+> library (`data pg.newtab; set …;`), replacing the table, and PROC SQL can send
+> a database its own native SQL (`connect to` / `from connection to` / `execute`)
+> — see [PROC SQL pass-through](#proc-sql-pass-through) below. Streaming for very
+> large tables and implicit query pushdown remain future work.
 
 ## Assigning a library
 
@@ -126,6 +128,69 @@ load-combine-replace). `FORCE` permits appending when `data=` has variables
 `base=` lacks (dropped) or a type disagrees (set missing), matching SAS; without
 `FORCE` such a mismatch refuses the append.
 
+## PROC SQL pass-through
+
+Pass-through sends a database its **own native SQL**, run by the database engine
+rather than ASS's in-process SQLite. Use it for DBMS-specific SQL, server-side
+work on large tables, or DDL/DML that should execute remotely.
+
+```sas
+libname ora oracle "oracle://system:pw@localhost:1521/FREEPDB1";
+
+proc sql;
+  /* Reuse the assigned libref's connection — no `connect to` needed. */
+  create table work.by_region as
+    select * from connection to ora
+      (select region, count(*) AS n, sum(amount) AS total
+         from sales group by region);
+
+  /* Run native DDL/DML on the database (no result set). */
+  execute (delete from staging where loaded = 1) by ora;
+quit;
+```
+
+Or open a connection explicitly within the block:
+
+```sas
+proc sql;
+  connect to oracle as o (connection="oracle://system:pw@localhost:1521/FREEPDB1");
+  select * from connection to o (select * from dual);   /* prints the listing  */
+  disconnect from o;
+quit;
+```
+
+Semantics:
+
+- **`connect to <engine> [as <alias>] (connection="<conn-string>")`** opens a
+  connection for the block, named by `<alias>` (or the engine name if no `as`).
+  The connection string is the same LIBNAME-style string the engine accepts
+  (`dsn=` and `connect=` are accepted as synonyms for `connection=`). A
+  connection opened this way is closed at `disconnect from <alias>` or when the
+  PROC SQL block ends.
+- **Reusing a libref.** If a libref is already assigned with `libname`, you can
+  skip `connect to` entirely and name that libref directly in `from connection
+  to <libref>` / `execute (...) by <libref>` — its existing connection is reused
+  (and left open; the LIBNAME owns it).
+- **`select … from connection to <name> (<native query>)`** runs the native
+  query on the database and brings its result set back as a dataset. A bare
+  select prints the listing; wrapping it in `create table <tgt> as select * from
+  connection to …` materializes the result into `<tgt>` (any library, via the
+  shared `Library.Store` routing). The native SQL is sent verbatim — ASS does not
+  parse or rewrite it; the returned columns map to SAS types exactly as a read
+  does (text→character, DATE/TIMESTAMP→SAS date/datetime numeric, NULL→missing).
+- **`execute (<native sql>) by <name>`** runs a no-result statement (DDL/DML) on
+  the database verbatim.
+- **`drop table <libref>.<member>`** inside PROC SQL is routed to the external
+  database (it drops the real table), instead of hitting the in-process SQLite
+  engine. (A `drop` of a WORK/embedded table is unaffected.)
+
+The pass-through path goes through `table.SQLBackend`
+(`QuerySQL`/`ExecSQL`) and `table.DropBackend` (`Drop`), implemented by every
+database engine. Not yet: the outer `select` of a `from connection to` query is
+expected to be `select *` (ASS returns the native result set as-is rather than
+re-projecting it); `connect to` connection-option forms other than a connection
+string (e.g. SAS's `user=`/`password=`/`path=` triplets).
+
 ## Type mapping (database → SAS)
 
 SAS has two storage types (numeric double, fixed character) plus formats. ASS
@@ -148,9 +213,10 @@ maps columns on read:
   large tables transfer in full. Use a dataset-option `where=`/`keep=` to limit
   what is materialized.
 - **Explicit PROC SQL pass-through** (`connect to … ; select … from connection
-  to …`) is not yet wired to external librefs (the in-process SQLite engine still
-  backs `proc sql`); it is a natural follow-on given the shared `database/sql`
-  layer.
+  to …`) **is supported** — see [PROC SQL pass-through](#proc-sql-pass-through).
+  The in-process SQLite engine still backs ordinary `proc sql` (joins, group by,
+  create-table-as-select over WORK/loaded datasets); pass-through is the escape
+  hatch that sends native SQL to the database itself.
 - The long tail of SAS/ACCESS LIBNAME options (`SCHEMA=`, `READBUFF=`,
   `PRESERVE_TAB_NAMES=`, bulk loaders, …) is not implemented. Schema-qualified
   member names (`pg.'schema.table'n`) are partially handled via a single dot.
@@ -163,6 +229,11 @@ character, date, and missing values) through `Store` then `Load`, and
 `go test ./runtime/ -run TestDataStepWriteBack` drives `data db.x; set …;`
 end-to-end against a temp database file. The corpus item
 `data_step_db_writeback_001` value-verifies the same path through `ass test`.
+PROC SQL pass-through is likewise SQLite-testable with no server:
+`go test ./dbio/ -run TestPassthrough` covers `QuerySQL`/`ExecSQL`/`Drop`, and
+`go test ./proc/ -run TestPassthrough` drives `connect to` / `from connection
+to` / `execute` / `drop table <libref>.x` end-to-end; the corpus item
+`proc_sql_passthrough_001` value-verifies a `from connection to` result.
 
 A real-database test for **Postgres** type mapping is gated on an env var:
 

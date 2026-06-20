@@ -81,11 +81,46 @@ func (b *Backend) Load(member string) (*table.Dataset, bool, error) {
 	}
 	defer rows.Close()
 
-	colTypes, err := rows.ColumnTypes()
+	ds, err := scanResult(rows, member)
 	if err != nil {
 		return nil, false, err
 	}
-	ds := table.NewDataset("", member)
+	return ds, true, nil
+}
+
+// QuerySQL runs a native (dialect-specific) query against the database and
+// returns the result set as a dataset — the PROC SQL pass-through read path
+// (`select ... from connection to <engine> (<native query>)`). The SQL is passed
+// through verbatim; column kinds and date/datetime formats are inferred from the
+// driver's reported types exactly as Load does.
+func (b *Backend) QuerySQL(query string) (*table.Dataset, error) {
+	rows, err := b.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("pass-through query: %w", err)
+	}
+	defer rows.Close()
+	return scanResult(rows, "_passthru_")
+}
+
+// ExecSQL runs a native no-result statement (DDL/DML) against the database — the
+// PROC SQL pass-through write path (`execute (<native sql>) by <engine>`). The
+// SQL is passed through verbatim.
+func (b *Backend) ExecSQL(query string) error {
+	if _, err := b.db.Exec(query); err != nil {
+		return fmt.Errorf("pass-through execute: %w", err)
+	}
+	return nil
+}
+
+// scanResult builds a dataset from an open *sql.Rows, inferring SAS column kinds
+// and date/datetime formats from the driver's reported column types. Shared by
+// Load and QuerySQL.
+func scanResult(rows *gosql.Rows, name string) (*table.Dataset, error) {
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, err
+	}
+	ds := table.NewDataset("", name)
 	kinds := make([]table.Kind, len(colTypes))
 	for i, ct := range colTypes {
 		kinds[i] = sasKind(ct.DatabaseTypeName())
@@ -104,7 +139,7 @@ func (b *Backend) Load(member string) (*table.Dataset, bool, error) {
 			holders[i] = new(interface{})
 		}
 		if err := rows.Scan(holders...); err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		row := make(table.Row, len(colTypes))
 		for i, ct := range colTypes {
@@ -113,7 +148,7 @@ func (b *Backend) Load(member string) (*table.Dataset, bool, error) {
 		}
 		ds.AppendRow(row)
 	}
-	return ds, true, rows.Err()
+	return ds, rows.Err()
 }
 
 // Store writes a dataset to the database as a table (LIBNAME engine as a
@@ -169,6 +204,19 @@ func (b *Backend) Append(ds *table.Dataset) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Drop removes a table (member) from the database — the engine path for PROC SQL
+// `drop table <libref>.<member>`. A missing table is reported as an error by the
+// driver, matching SQL's DROP semantics.
+func (b *Backend) Drop(member string) error {
+	if !safeIdent(member) {
+		return fmt.Errorf("invalid table name %q", member)
+	}
+	if _, err := b.db.Exec("DROP TABLE " + quoteIdent(b.engine, member)); err != nil {
+		return fmt.Errorf("drop %s: %w", member, err)
+	}
+	return nil
 }
 
 // insertRows prepares one INSERT and executes it for every row, mapping SAS

@@ -30,6 +30,25 @@ type AppendBackend interface {
 	Append(ds *Dataset) error
 }
 
+// SQLBackend is a Backend that can run native SQL directly against the underlying
+// database — the engine path for PROC SQL pass-through (`connect to` /
+// `execute ... by` / `select ... from connection to`). QuerySQL runs a query and
+// returns its result set as a dataset; ExecSQL runs a no-result statement
+// (DDL/DML). The SQL text is the database's own dialect, passed through verbatim.
+type SQLBackend interface {
+	Backend
+	QuerySQL(query string) (*Dataset, error)
+	ExecSQL(query string) error
+}
+
+// DropBackend is a Backend that can drop one of its members — the engine path for
+// routing `proc sql; drop table <libref>.<member>;` to the bound database instead
+// of the embedded SQLite engine.
+type DropBackend interface {
+	Backend
+	Drop(member string) error
+}
+
 // Library models a SAS session's libraries. The unnamed in-memory store is WORK
 // (where steps pass datasets to one another); additional librefs may be bound to
 // external Backends via Assign (the LIBNAME statement). Names are
@@ -68,6 +87,14 @@ func (l *Library) Unassign(libref string) {
 func (l *Library) IsExternal(name string) bool {
 	_, ok := l.backends[strings.ToUpper(librefOf(name))]
 	return ok
+}
+
+// Backend returns the external Backend bound to a libref (case-insensitive), or
+// false if the libref is unassigned. Used by PROC SQL pass-through to reach an
+// already-assigned libref's database connection without re-specifying it.
+func (l *Library) Backend(libref string) (Backend, bool) {
+	b, ok := l.backends[strings.ToUpper(libref)]
+	return b, ok
 }
 
 // Resolve returns the dataset for a (possibly qualified) name. A name qualified
@@ -191,6 +218,28 @@ func (l *Library) Append(name string, ds *Dataset) error {
 	ds.Name = member
 	l.Put(ds)
 	return nil
+}
+
+// DropExternal routes a table drop to an external Backend when name is qualified
+// with a libref bound to one. handled reports whether the name belongs to an
+// external library (whether or not the drop succeeded); when false the caller
+// should fall back to the WORK store / embedded engine. A backend that cannot
+// drop yields a clear error. It is the drop counterpart of StoreExternal, used by
+// PROC SQL to route `drop table <libref>.<member>`.
+func (l *Library) DropExternal(name string) (handled bool, err error) {
+	ref := strings.ToUpper(librefOf(name))
+	if ref == "" {
+		return false, nil
+	}
+	b, ok := l.backends[ref]
+	if !ok {
+		return false, nil
+	}
+	db, ok := b.(DropBackend)
+	if !ok {
+		return true, fmt.Errorf("library %s does not support DROP", ref)
+	}
+	return true, db.Drop(datasetKey(name))
 }
 
 // Get retrieves a dataset by name (case-insensitive). A name may be qualified

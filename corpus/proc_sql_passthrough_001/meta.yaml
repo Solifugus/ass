@@ -1,0 +1,34 @@
+id: proc_sql_passthrough_001
+source: hand-written
+license: MIT
+features:
+  - libname
+  - proc-sql
+  - sql-passthrough
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    summary:
+      columns: [region, total]
+      rows:
+        - ["East", 150]
+        - ["West", 70]
+priority: 2
+notes: |
+  Exercises PROC SQL explicit pass-through through a LIBNAME engine end to end.
+  A SQLite library file is created with `libname db sqlite "@TMP@/passthru.db"`
+  and seeded, then `select * from connection to db (<native query>)` sends the
+  database its own SQL — a GROUP BY aggregate run on the database — and a wrapping
+  `create table summary as` materializes the returned result set into WORK, where
+  it is value-verified (East=150, West=70).
+
+  No explicit `connect to` is needed: the already-assigned libref's connection is
+  reused. SQLite is the engine locally verifiable without an external server; the
+  same pass-through path (table.SQLBackend -> dbio.Backend.QuerySQL/ExecSQL)
+  serves the Postgres/SQL Server/Oracle LIBNAME engines. Requires a CGo build (as
+  does the whole project, for PROC SQL). @TMP@ is a fresh temp dir removed after
+  the run, so the test leaves no files behind.

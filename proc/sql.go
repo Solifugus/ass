@@ -25,7 +25,19 @@ func (sqlProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 	}
 	defer eng.Close()
 
+	pt := newPassthru(lib)
+	defer pt.closeAll()
+
 	for _, stmt := range splitStatements(step.RawBody) {
+		// Pass-through statements (connect/disconnect/execute-by, a select drawing
+		// `from connection to`, or a drop targeting an external libref) are routed
+		// to the bound database rather than the in-process engine.
+		if handled, err := pt.handle(stmt, logger); handled {
+			if err != nil {
+				logger.Error("PROC SQL: %v", err)
+			}
+			continue
+		}
 		low := strings.ToLower(stmt)
 		switch {
 		case strings.HasPrefix(low, "select"):

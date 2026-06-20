@@ -38,6 +38,7 @@ level it first becomes relevant at, matching the build order in [`../docs/PLAN.m
 | `sql-join` | 3 | Inner/left/right joins in `proc sql`. |
 | `sql-groupby` | 3 | `group by` with aggregate functions and `order by`. |
 | `sql-create-table` | 3 | `create table <name> as select ...` materialization. |
+| `sql-passthrough` | 3 | Explicit pass-through to an external database (`connect to` / `execute ... by` / `select ... from connection to`). |
 | `macro-let` | 4 | `%let` macro-variable assignment. |
 | `macro-var` | 4 | `&var` (and `&&`, `.`-terminated) macro-variable resolution. |
 | `macro-def` | 4 | `%macro`/`%mend` definitions with positional/named parameters. |
