@@ -65,6 +65,37 @@ func TestParseInputTrailingAt(t *testing.T) {
 	}
 }
 
+func TestParseInputLinePointer(t *testing.T) {
+	in := dataBody(t, "data s; input #1 name $ age #2 city $ zip; run;")[0].(*ast.InputStatement)
+	if len(in.Vars) != 4 {
+		t.Fatalf("vars = %d, want 4 (%+v)", len(in.Vars), in.Vars)
+	}
+	// `#1` precedes name; the next #n (`#2`) precedes city. age and zip inherit.
+	want := []int{1, 0, 2, 0}
+	for i, w := range want {
+		if in.Vars[i].Line != w {
+			t.Errorf("var %d (%s): Line = %d, want %d", i, in.Vars[i].Name, in.Vars[i].Line, w)
+		}
+	}
+	if !in.Vars[0].Char || in.Vars[1].Char || !in.Vars[2].Char || in.Vars[3].Char {
+		t.Errorf("char flags wrong: %+v", in.Vars)
+	}
+}
+
+func TestParsePutLinePointer(t *testing.T) {
+	body := dataBody(t, `data _null_; put #1 a b #2 c; run;`)
+	put := body[0].(*ast.PutStatement)
+	if len(put.Items) != 3 {
+		t.Fatalf("items = %d, want 3 (%+v)", len(put.Items), put.Items)
+	}
+	want := []int{1, 0, 2}
+	for i, w := range want {
+		if put.Items[i].Line != w {
+			t.Errorf("item %d: Line = %d, want %d", i, put.Items[i].Line, w)
+		}
+	}
+}
+
 func TestParseColumnAndPointerInput(t *testing.T) {
 	body := dataBody(t, "data s; input name $ 1-10 age 11-13 @1 id $5. +2 x 3.; run;")
 	in, ok := body[0].(*ast.InputStatement)

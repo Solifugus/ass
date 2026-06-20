@@ -1,0 +1,40 @@
+id: data_step_line_pointer_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - file-put
+  - infile
+  - line-hold
+  - datalines
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    people:
+      columns: [name, age, city, zip]
+      rows:
+        - ["John", 25, "Boston", 2134]
+        - ["Mary", 30, "Austin", 78701]
+    roundtrip:
+      columns: [name, age, city, zip]
+      rows:
+        - ["John", 25, "Boston", 2134]
+        - ["Mary", 30, "Austin", 78701]
+priority: 2
+notes: |
+  Value-verifies `#n` multi-line line pointers on both INPUT and PUT.
+
+  `people` is read with `input #1 name $ age #2 city $ zip;`: each observation
+  spans two physical lines, so the four data lines yield two observations.
+
+  The `data _null_` step writes each observation back out as a two-line record
+  with `put #1 name age #2 city zip;`, and `roundtrip` reads that file back with
+  the same `#n` INPUT. The round-tripped dataset equals the original, confirming
+  the read and write line pointers are inverses.
+
+  (zip is numeric, so its written/reread form is 2134 / 78701 — leading zeros are
+  not preserved for numeric fields, exactly as in SAS.)

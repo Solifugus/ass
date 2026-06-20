@@ -264,11 +264,13 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		// The destination is resolved up front; the statement itself does nothing.
 		return flowNormal, nil
 	case *ast.PutStatement:
-		line := d.buildPutLine(st)
+		lines := d.buildPutLines(st)
 		if d.file != nil {
-			d.putLines = append(d.putLines, line)
+			d.putLines = append(d.putLines, lines...)
 		} else {
-			d.logger.Put(line)
+			for _, line := range lines {
+				d.logger.Put(line)
+			}
 		}
 		return flowNormal, nil
 	case *ast.SetStatement:
@@ -518,6 +520,20 @@ func (d *dataStep) recordSourceCols(ds *table.Dataset) {
 // physical record; the record advances only when the held line is exhausted
 // (`@@`), at the end of the iteration (`@`), or immediately (no hold).
 func (d *dataStep) execInput(st *ast.InputStatement) (flow, error) {
+	// A `#n` line pointer reads one observation across several physical records.
+	// This path advances by the number of lines consumed; combining it with a
+	// trailing line-hold modifier is not supported (the hold is ignored).
+	if hasLinePointer(st) {
+		if d.recPtr >= len(d.records) {
+			return flowDelete, nil // records exhausted
+		}
+		base := d.recPtr
+		consumed := d.applyMultiLineInput(st, base)
+		d.recPtr = base + consumed
+		d.holdCross, d.holdLine = false, false
+		d.recCursor = 1
+		return d.applyWhere()
+	}
 	holding := d.holdCross || d.holdLine
 	if !holding {
 		d.recCursor = 1
@@ -599,26 +615,33 @@ func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
 func (d *dataStep) applyListInputFrom(st *ast.InputStatement, line string, cursor int) int {
 	col := cursor
 	for _, v := range st.Vars {
-		var field string
-		field, col = scanToken(line, col)
 		var val table.Value
-		switch {
-		case field == "":
-			if v.Char {
-				val = table.MissingChar()
-			} else {
-				val = table.MissingNum()
-			}
-		case v.Informat != "":
-			val = formats.ParseInput(field, v.Informat)
-		case v.Char:
-			val = table.Char(field)
-		default:
-			val = parseNum(field)
-		}
+		val, col = readListField(line, col, v)
 		d.pdv.Set(v.Name, val)
 	}
 	return col
+}
+
+// readListField reads one whitespace-delimited list-input field for v starting at
+// the 1-based column, returning the typed value and the column just past it.
+func readListField(line string, col int, v ast.InputVar) (table.Value, int) {
+	field, next := scanToken(line, col)
+	var val table.Value
+	switch {
+	case field == "":
+		if v.Char {
+			val = table.MissingChar()
+		} else {
+			val = table.MissingNum()
+		}
+	case v.Informat != "":
+		val = formats.ParseInput(field, v.Informat)
+	case v.Char:
+		val = table.Char(field)
+	default:
+		val = parseNum(field)
+	}
+	return val, next
 }
 
 // columnMode reports whether an INPUT statement uses column/pointer input
@@ -654,40 +677,103 @@ func (d *dataStep) applyColumnInputFrom(st *ast.InputStatement, line string, sta
 		if v.Plus > 0 {
 			col += v.Plus
 		}
-
-		var field string
-		switch {
-		case v.ColStart > 0:
-			start := v.ColStart
-			end := v.ColEnd
-			if end == 0 {
-				end = start
-			}
-			field = colSlice(line, start, end)
-			col = end + 1
-		case v.Informat != "":
-			if w := informatWidth(v.Informat); w > 0 {
-				field = colSlice(line, col, col+w-1)
-				col += w
-			} else { // no explicit width — scan a token
-				field, col = scanToken(line, col)
-			}
-		default:
-			field, col = scanToken(line, col)
-		}
-
 		var val table.Value
-		switch {
-		case v.Informat != "":
-			val = formats.ParseInput(field, v.Informat)
-		case v.Char:
-			val = table.Char(strings.TrimRight(field, " "))
-		default:
-			val = parseNum(strings.TrimSpace(field))
-		}
+		val, col = readColumnField(line, col, v)
 		d.pdv.Set(v.Name, val)
 	}
 	return col
+}
+
+// readColumnField reads one column/pointer-input field for v from line at the
+// 1-based column, returning the typed value and the column just past it. (The
+// caller applies any `@n`/`+n` adjustment to col before calling.)
+func readColumnField(line string, col int, v ast.InputVar) (table.Value, int) {
+	var field string
+	switch {
+	case v.ColStart > 0:
+		start := v.ColStart
+		end := v.ColEnd
+		if end == 0 {
+			end = start
+		}
+		field = colSlice(line, start, end)
+		col = end + 1
+	case v.Informat != "":
+		if w := informatWidth(v.Informat); w > 0 {
+			field = colSlice(line, col, col+w-1)
+			col += w
+		} else { // no explicit width — scan a token
+			field, col = scanToken(line, col)
+		}
+	default:
+		field, col = scanToken(line, col)
+	}
+
+	var val table.Value
+	switch {
+	case v.Informat != "":
+		val = formats.ParseInput(field, v.Informat)
+	case v.Char:
+		val = table.Char(strings.TrimRight(field, " "))
+	default:
+		val = parseNum(strings.TrimSpace(field))
+	}
+	return val, col
+}
+
+// hasLinePointer reports whether an INPUT statement uses a `#n` line pointer, so
+// one observation is read across multiple physical records.
+func hasLinePointer(st *ast.InputStatement) bool {
+	for _, v := range st.Vars {
+		if v.Line > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// applyMultiLineInput reads an INPUT statement that uses `#n` line pointers. The
+// logical record begins at the 1-based-relative line `base` (a record index);
+// `#n` selects its n-th line (resetting the column pointer to 1), and a bare
+// variable continues on the current line. It returns the number of physical
+// lines the record consumed (the highest line referenced, at least 1) so the
+// caller can advance past them.
+func (d *dataStep) applyMultiLineInput(st *ast.InputStatement, base int) int {
+	colMode := columnMode(st)
+	lineOff := 0 // 0-based offset from base of the line currently being read
+	maxLine := 1
+	col := 1
+	lineAt := func(off int) string {
+		idx := base + off
+		if idx < 0 || idx >= len(d.records) {
+			return ""
+		}
+		return d.records[idx]
+	}
+	for _, v := range st.Vars {
+		if v.Line > 0 {
+			lineOff = v.Line - 1
+			if v.Line > maxLine {
+				maxLine = v.Line
+			}
+			col = 1
+		}
+		line := lineAt(lineOff)
+		var val table.Value
+		if colMode {
+			if v.At > 0 {
+				col = v.At
+			}
+			if v.Plus > 0 {
+				col += v.Plus
+			}
+			val, col = readColumnField(line, col, v)
+		} else {
+			val, col = readListField(line, col, v)
+		}
+		d.pdv.Set(v.Name, val)
+	}
+	return maxLine
 }
 
 // colSlice returns the 1-based inclusive [start,end] substring of line, clamped
@@ -1013,6 +1099,48 @@ func writeFileOutput(f *ast.FileStatement, lines []string) error {
 // a comma under DSD. Variable values are rendered with their inline or
 // associated format; under DSD, values containing the delimiter or a quote are
 // wrapped in double quotes (embedded quotes doubled).
+// putHasLinePointer reports whether a PUT statement uses a `#n` line pointer, so
+// it emits several physical output lines.
+func putHasLinePointer(st *ast.PutStatement) bool {
+	for _, it := range st.Items {
+		if it.Line > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// buildPutLines renders a PUT statement to one or more physical output lines.
+// Without a `#n` line pointer it is a single line. With `#n`, items are
+// partitioned into per-line buckets (a `#n` directs subsequent items to line n),
+// and lines 1..max are emitted in order — an unreferenced line is blank. Each
+// line is rendered by the existing single-line logic.
+func (d *dataStep) buildPutLines(st *ast.PutStatement) []string {
+	if !putHasLinePointer(st) {
+		return []string{d.buildPutLine(st)}
+	}
+	buckets := map[int][]ast.PutItem{}
+	maxLine := 1
+	cur := 1
+	for _, it := range st.Items {
+		if it.Line > 0 {
+			cur = it.Line
+			if cur > maxLine {
+				maxLine = cur
+			}
+		}
+		it.Line = 0 // render the item normally within its line
+		buckets[cur] = append(buckets[cur], it)
+	}
+	lines := make([]string, maxLine)
+	for n := 1; n <= maxLine; n++ {
+		if items, ok := buckets[n]; ok {
+			lines[n-1] = d.buildPutLine(&ast.PutStatement{Items: items})
+		}
+	}
+	return lines
+}
+
 func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
 	if putColumnMode(st) {
 		return d.buildPutColumnLine(st)

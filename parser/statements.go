@@ -557,7 +557,7 @@ func (p *Parser) parsePut() ast.Statement {
 // otherwise it is a variable name.
 func parsePutItems(raw string) []ast.PutItem {
 	var items []ast.PutItem
-	var pendAt, pendPlus int
+	var pendAt, pendPlus, pendLine int
 	runes := []rune(raw)
 	for i := 0; i < len(runes); {
 		r := runes[i]
@@ -582,8 +582,8 @@ func parsePutItems(raw string) []ast.PutItem {
 				b.WriteRune(runes[i])
 				i++
 			}
-			items = append(items, ast.PutItem{IsLiteral: true, Literal: b.String(), At: pendAt, Plus: pendPlus})
-			pendAt, pendPlus = 0, 0
+			items = append(items, ast.PutItem{IsLiteral: true, Literal: b.String(), At: pendAt, Plus: pendPlus, Line: pendLine})
+			pendAt, pendPlus, pendLine = 0, 0, 0
 			continue
 		}
 		var b strings.Builder
@@ -594,6 +594,9 @@ func parsePutItems(raw string) []ast.PutItem {
 		tok := b.String()
 		switch {
 		case tok == "$": // character marker in column output — kind is known at runtime
+			continue
+		case strings.HasPrefix(tok, "#") && isDigits(tok[1:]): // #n line pointer
+			pendLine, _ = strconv.Atoi(tok[1:])
 			continue
 		case strings.HasPrefix(tok, "@") && isDigits(tok[1:]): // @n absolute column pointer
 			pendAt, _ = strconv.Atoi(tok[1:])
@@ -626,8 +629,8 @@ func parsePutItems(raw string) []ast.PutItem {
 			}
 			continue
 		}
-		items = append(items, ast.PutItem{Var: tok, At: pendAt, Plus: pendPlus})
-		pendAt, pendPlus = 0, 0
+		items = append(items, ast.PutItem{Var: tok, At: pendAt, Plus: pendPlus, Line: pendLine})
+		pendAt, pendPlus, pendLine = 0, 0, 0
 	}
 	return items
 }
@@ -690,7 +693,7 @@ func (p *Parser) parseInput() ast.Statement {
 		}
 	}
 
-	var pendAt, pendPlus int
+	var pendAt, pendPlus, pendLine int
 	for i := 0; i < len(toks); i++ {
 		tok := toks[i]
 		switch {
@@ -699,6 +702,17 @@ func (p *Parser) parseInput() ast.Statement {
 		case tok == "$":
 			if n := len(stmt.Vars); n > 0 {
 				stmt.Vars[n-1].Char = true
+			}
+		case strings.HasPrefix(tok, "#") && isDigits(tok[1:]): // #n line pointer
+			if v, err := strconv.Atoi(tok[1:]); err == nil {
+				pendLine = v
+			}
+		case tok == "#": // spaced form `# 2`
+			if i+1 < len(toks) && isDigits(toks[i+1]) {
+				i++
+				if v, err := strconv.Atoi(toks[i]); err == nil {
+					pendLine = v
+				}
 			}
 		case strings.HasPrefix(tok, "@"): // @n absolute column pointer
 			num := strings.TrimPrefix(tok, "@")
@@ -754,8 +768,8 @@ func (p *Parser) parseInput() ast.Statement {
 				name = strings.TrimSuffix(name, "$")
 				char = true
 			}
-			stmt.Vars = append(stmt.Vars, ast.InputVar{Name: name, Char: char, At: pendAt, Plus: pendPlus})
-			pendAt, pendPlus = 0, 0
+			stmt.Vars = append(stmt.Vars, ast.InputVar{Name: name, Char: char, At: pendAt, Plus: pendPlus, Line: pendLine})
+			pendAt, pendPlus, pendLine = 0, 0, 0
 		}
 	}
 	return stmt

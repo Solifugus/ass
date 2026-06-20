@@ -83,6 +83,10 @@ func (m *MergeStatement) String() string {
 // pointer set before reading this variable; Plus>0 is a `+n` relative skip. Any
 // of these (or a formatted read that follows a pointer) puts the INPUT statement
 // in column/pointer mode rather than delimited list mode.
+// Line>0 is a `#n` line pointer set before reading this variable: the value is
+// read from the n-th physical line of the current logical record (and the column
+// pointer resets to 1). A line pointer makes the INPUT statement read across
+// multiple physical lines per observation.
 type InputVar struct {
 	Name     string
 	Char     bool
@@ -91,6 +95,7 @@ type InputVar struct {
 	ColEnd   int
 	At       int
 	Plus     int
+	Line     int
 }
 
 // InputStatement is `input <var [$]>...;`. TrailingAt records a line-hold
@@ -159,6 +164,9 @@ func (f *FileStatement) String() string { return "file \"" + f.Path + "\";" }
 // absolute column pointer set before writing this item; Plus>0 is a `+n` relative
 // skip. Any of these put the PUT statement in column/pointer mode rather than
 // delimiter-joined list mode.
+// Line>0 is a `#n` line pointer set before this item: the item (and subsequent
+// items until the next `#n`) is written to the n-th physical line of the output
+// record, so one PUT statement can emit several lines.
 type PutItem struct {
 	IsLiteral bool
 	Literal   string
@@ -168,6 +176,7 @@ type PutItem struct {
 	ColEnd    int
 	At        int
 	Plus      int
+	Line      int
 }
 
 // PutStatement is `put <item>...;`, writing the items as one line to the current
