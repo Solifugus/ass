@@ -43,6 +43,41 @@ func TestSetOptionsWhereKeepRename(t *testing.T) {
 	}
 }
 
+func TestSetOptionsFirstObsObs(t *testing.T) {
+	// firstobs=2 obs=4 selects observations 2..4 (ids 2,3,4) by position.
+	lib := runSrc(t, dsoSeed+"data mid;\n  set people(firstobs=2 obs=4);\nrun;")
+	ds, ok := lib.Get("mid")
+	if !ok {
+		t.Fatal("MID not created")
+	}
+	if ds.NObs() != 3 {
+		t.Fatalf("NObs = %d, want 3 (ids 2,3,4)", ds.NObs())
+	}
+	wantIDs := []float64{2, 3, 4}
+	for i, w := range wantIDs {
+		if got := ds.Get(ds.Rows[i], "id"); got.Num != w {
+			t.Errorf("row%d id = %v, want %v", i, got.Display(), w)
+		}
+	}
+}
+
+func TestSetOptionsFirstObsObsWithWhere(t *testing.T) {
+	// Position selection (firstobs/obs -> ids 2,3,4) happens before WHERE.
+	lib := runSrc(t, dsoSeed+"data sel;\n  set people(firstobs=2 obs=4 where=(age >= 30));\nrun;")
+	ds, _ := lib.Get("sel")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (ids 2 age40, 3 age33; id4 age19 filtered)", ds.NObs())
+	}
+}
+
+func TestSetOptionsObsOnly(t *testing.T) {
+	lib := runSrc(t, dsoSeed+"data top;\n  set people(obs=2);\nrun;")
+	ds, _ := lib.Get("top")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2", ds.NObs())
+	}
+}
+
 func TestDataOutputDrop(t *testing.T) {
 	lib := runSrc(t, dsoSeed+"data slim(drop=dept);\n  set people;\nrun;")
 	ds, _ := lib.Get("slim")

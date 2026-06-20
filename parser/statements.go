@@ -353,6 +353,16 @@ func (p *Parser) parseDatasetOptionParen() (in string, opts *ast.DatasetOptions)
 			p.parseRenameList(opts.Rename)
 		case "where":
 			opts.Where = p.parseParenCond()
+		case "firstobs":
+			if p.curIs(lexer.NUMBER) {
+				opts.FirstObs = atoiSafe(p.cur.Literal)
+				p.next()
+			}
+		case "obs":
+			if p.curIs(lexer.NUMBER) {
+				opts.Obs = atoiSafe(p.cur.Literal)
+				p.next()
+			}
 		case "in":
 			if p.curIs(lexer.IDENT) {
 				in = p.cur.Literal

@@ -25,11 +25,18 @@ type DatasetOptions struct {
 	Drop   []string
 	Rename map[string]string
 	Where  Expression
+	// FirstObs/Obs bound the observation range read from the data set, by
+	// position (1-based, 0 = unset). FirstObs selects the first observation; Obs
+	// is the number of the last observation processed (SAS semantics — a count of
+	// the highest observation, not a row count).
+	FirstObs int
+	Obs      int
 }
 
 // IsEmpty reports whether the options impose no transformation.
 func (o *DatasetOptions) IsEmpty() bool {
-	return o == nil || (len(o.Keep) == 0 && len(o.Drop) == 0 && len(o.Rename) == 0 && o.Where == nil)
+	return o == nil || (len(o.Keep) == 0 && len(o.Drop) == 0 && len(o.Rename) == 0 &&
+		o.Where == nil && o.FirstObs == 0 && o.Obs == 0)
 }
 
 // SetStatement is `set <dataset[(options)] ...>;`.

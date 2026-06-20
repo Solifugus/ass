@@ -17,8 +17,29 @@ func applyDatasetOptions(src *table.Dataset, opts *ast.DatasetOptions) (*table.D
 		return src, nil
 	}
 
-	// 1. Filter rows by WHERE (evaluated against original names).
+	// 0. Select the observation range by position (FIRSTOBS=/OBS=) before any
+	// WHERE filtering, mirroring SAS: OBS= is the number of the last observation
+	// processed (not a row count), FIRSTOBS= the first.
 	rows := src.Rows
+	if opts.FirstObs > 0 || opts.Obs > 0 {
+		lo := 0
+		if opts.FirstObs > 0 {
+			lo = opts.FirstObs - 1
+		}
+		hi := len(rows)
+		if opts.Obs > 0 && opts.Obs < hi {
+			hi = opts.Obs
+		}
+		if lo > len(rows) {
+			lo = len(rows)
+		}
+		if hi < lo {
+			hi = lo
+		}
+		rows = rows[lo:hi]
+	}
+
+	// 1. Filter rows by WHERE (evaluated against original names).
 	if opts.Where != nil {
 		kept := make([]table.Row, 0, len(rows))
 		for _, r := range rows {
