@@ -436,3 +436,20 @@ func TestParsePutNamedSpaced(t *testing.T) {
 		t.Fatalf("items = %+v, want one Named x", put.Items)
 	}
 }
+
+func TestParseTimeDatetimeLiterals(t *testing.T) {
+	body := dataBody(t, "data d; t = '14:30:00't; dt = '01JAN1960:00:00:01'dt; run;")
+	tm, ok := body[0].(*ast.AssignmentStatement)
+	if !ok {
+		t.Fatalf("stmt0 is %T", body[0])
+	}
+	tn, ok := tm.Value.(*ast.NumberLiteral)
+	if !ok || tn.Value != 52200 {
+		t.Errorf("time literal = %+v, want 52200", tm.Value)
+	}
+	dm := body[1].(*ast.AssignmentStatement)
+	dn, ok := dm.Value.(*ast.NumberLiteral)
+	if !ok || dn.Value != 1 { // 1 second past the SAS datetime epoch
+		t.Errorf("datetime literal = %+v, want 1", dm.Value)
+	}
+}

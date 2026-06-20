@@ -63,6 +63,57 @@ func ParseDateLiteral(s string) (float64, bool) {
 	return float64(int(t.Sub(sasEpoch).Hours()) / 24), true
 }
 
+// ParseTimeLiteral parses a SAS time constant body like "14:30:00" or "9:15"
+// (the text inside the quotes of a `'...'t` literal) into a SAS time value: the
+// number of seconds since midnight. Fractional seconds are accepted.
+func ParseTimeLiteral(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	m, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || m < 0 || m > 59 {
+		return 0, false
+	}
+	sec := 0.0
+	if len(parts) == 3 {
+		var err3 error
+		sec, err3 = strconv.ParseFloat(strings.TrimSpace(parts[2]), 64)
+		if err3 != nil || sec < 0 || sec >= 60 {
+			return 0, false
+		}
+	}
+	return float64(h)*3600 + float64(m)*60 + sec, true
+}
+
+// ParseDatetimeLiteral parses a SAS datetime constant body like
+// "01JAN2020:14:30:00" (the text inside the quotes of a `'...'dt` literal) into a
+// SAS datetime value: the number of seconds since 1960-01-01 00:00:00. The date
+// and time are separated by the first colon; the time part is optional.
+func ParseDatetimeLiteral(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	i := strings.IndexByte(s, ':')
+	datePart, timePart := s, ""
+	if i >= 0 {
+		datePart, timePart = s[:i], s[i+1:]
+	}
+	day, ok := ParseDateLiteral(datePart)
+	if !ok {
+		return 0, false
+	}
+	secs := 0.0
+	if strings.TrimSpace(timePart) != "" {
+		t, ok := ParseTimeLiteral(timePart)
+		if !ok {
+			return 0, false
+		}
+		secs = t
+	}
+	return day*86400 + secs, true
+}
+
 // ParseInput converts an input field to a Value using an informat specification
 // (e.g. "comma8.", "dollar10.2", "date9.", "mmddyy10.", "$20."). The informat's
 // name determines the conversion: `$` reads characters (truncated to the width);
@@ -104,6 +155,16 @@ func ParseInput(field, informat string) table.Value {
 	case "mmddyy", "ddmmyy", "yymmdd":
 		if d, ok := parseNumericDate(field, name); ok {
 			return table.Num(d)
+		}
+		return table.MissingNum()
+	case "time", "hhmmss":
+		if t, ok := ParseTimeLiteral(field); ok {
+			return table.Num(t)
+		}
+		return table.MissingNum()
+	case "datetime":
+		if dt, ok := ParseDatetimeLiteral(field); ok {
+			return table.Num(dt)
 		}
 		return table.MissingNum()
 	default: // plain numeric w.d
@@ -221,12 +282,35 @@ func Apply(v table.Value, format string) string {
 	case "worddate":
 		t := SASDateToTime(v.Num)
 		return fmt.Sprintf("%s %d, %d", monthName[t.Month()-1], t.Day(), t.Year())
+	case "time", "hhmmss":
+		h, m, s := splitTime(v.Num)
+		if width >= 5 && width < 8 { // e.g. time5. -> HH:MM
+			return fmt.Sprintf("%02d:%02d", h, m)
+		}
+		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	case "datetime":
+		days := int(v.Num / 86400)
+		rem := v.Num - float64(days)*86400
+		if rem < 0 { // negative datetimes: borrow a day
+			days--
+			rem += 86400
+		}
+		t := SASDateToTime(float64(days))
+		h, m, s := splitTime(rem)
+		return fmt.Sprintf("%02d%s%04d:%02d:%02d:%02d", t.Day(), monthAbbr[t.Month()-1], t.Year(), h, m, s)
 	default: // "", "best", "f" → fixed-point if decimals given, else default
 		if hasDec {
 			return fixed(v.Num, dec)
 		}
 		return v.Display()
 	}
+}
+
+// splitTime converts a SAS time value (seconds since midnight) into whole
+// hours, minutes, and seconds.
+func splitTime(secs float64) (h, m, s int) {
+	total := int(secs)
+	return total / 3600, (total % 3600) / 60, total % 60
 }
 
 // decOr returns dec if a decimal count was specified, otherwise def.

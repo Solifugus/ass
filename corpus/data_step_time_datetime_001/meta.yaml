@@ -1,0 +1,34 @@
+id: data_step_time_datetime_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - informats
+  - dates
+  - assignment
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    lits:
+      columns: [t, dt]
+      rows:
+        # '14:30:00't = 52200 sec since midnight; '01JAN1960:00:00:01'dt = 1 sec.
+        - [52200, 1]
+    read:
+      columns: [t, dt]
+      rows:
+        # TIME8. and DATETIME19. informats read the same forms to the same values.
+        - [52200, 1]
+priority: 2
+notes: |
+  Value-verifies SAS time/datetime literals and informats. The time literal
+  '14:30:00't is seconds since midnight (52200); the datetime literal
+  '01JAN1960:00:00:01'dt is seconds since the SAS datetime epoch 1960-01-01
+  (here 1). The TIME8. and DATETIME19. informats read the same text forms back
+  to the same numeric values, so the literal-built `lits` and informat-read
+  `read` datasets agree.

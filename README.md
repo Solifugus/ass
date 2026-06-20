@@ -87,8 +87,8 @@ Obs  name  age
 | PROC REG/GLM | OLS linear regression: estimates, std err, t-value, `Pr>|t|`, R²; CLASS categorical predictors (reference-cell coding) |
 | PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT |
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
-| Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
-| Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
+| Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), `time`/`datetime`, date/time/datetime literals `'01JAN2020'd`/`'14:30:00't`/`'01JAN2020:14:30:00'dt` |
+| Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `time`/`datetime`, `$w.` |
 
 Not yet supported (selected): combining `#n` with a trailing `@`/`@@` hold (multi-line `#n` line pointers on INPUT and PUT, trailing `@`/`@@` line-hold on INPUT **and PUT**, and single-line column/pointer input and output `@`/`+n`/`1-10` ranges are supported), big-endian `.sas7bdat` files (32/64-bit little-endian — uncompressed and RLE/RDC row-compressed — are read; `.xlsx` import/export — delimited CSV/TAB/DLM and native `.sas7bdat` read are supported), PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
 

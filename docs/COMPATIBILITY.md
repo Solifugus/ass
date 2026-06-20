@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; put named/_all_ output).
+Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; time/datetime literals & informats).
 Each percentage is the share of corpus items tagged with a feature that pass
 (parse + execute as the item's `meta.yaml` expects). Regenerate with:
 
@@ -30,11 +30,11 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 52 |
-| Parsed | 52 (100.0%) |
-| Executed | 52 (100.0%) |
-| Passed | 52 (100.0%) |
-| Value-verified | 26 items assert dataset values; all match |
+| Items | 53 |
+| Parsed | 53 (100.0%) |
+| Executed | 53 (100.0%) |
+| Passed | 53 (100.0%) |
+| Value-verified | 27 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -45,7 +45,7 @@ passing cosmetic check.
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
 | class | 1/1 | 100.0% |
-| data-step | 45/45 | 100.0% |
+| data-step | 46/46 | 100.0% |
 | dataset-options | 3/3 | 100.0% |
 | datalines | 9/9 | 100.0% |
 | do-loop | 2/2 | 100.0% |
@@ -55,7 +55,7 @@ passing cosmetic check.
 | labels | 1/1 | 100.0% |
 | if-then-else | 4/4 | 100.0% |
 | infile | 5/5 | 100.0% |
-| informats | 2/2 | 100.0% |
+| informats | 3/3 | 100.0% |
 | input | 10/10 | 100.0% |
 | libname | 7/7 | 100.0% |
 | line-hold | 3/3 | 100.0% |
@@ -70,7 +70,7 @@ passing cosmetic check.
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 38/38 | 100.0% |
+| proc-print | 39/39 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
 | proc-sort | 4/4 | 100.0% |
 | proc-sql | 7/7 | 100.0% |
@@ -99,7 +99,7 @@ passing cosmetic check.
 - PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
 - The `label <var>="text";` statement is supported in the DATA step and in PROC steps (e.g. PROC PRINT). DATA-step labels become permanent column metadata and are inherited through SET/MERGE (an explicit `label` in a later step overrides); `proc print ... label` renders labels as column headers, and a `label` statement inside the step overrides the stored label for that listing. `label` is correctly disambiguated as a variable name when used as `label = expr` (it is not a reserved word). Not yet: SAS's multi-line header wrapping of long labels (ASS prints each label on one header line — a presentation detail, not a value difference).
-- Time/datetime informats and `'..'t`/`'..'dt` time/datetime literals. Multi-line **`#n` line pointers** are supported on both INPUT and PUT (`input #1 a #2 b;` reads one observation across physical lines; `put #1 a #2 b;` writes one observation as several lines); column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; **trailing `@`/`@@` line-hold on INPUT and PUT is supported** — on INPUT `@@` reads several observations from one line across iterations and `@` holds the line within the iteration; on PUT the same modifiers hold the output line so several PUTs (or observations) build one physical line; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported. Not yet: combining `#n` with a trailing `@`/`@@` hold on the same statement
+- **Time/datetime informats and `'..'t`/`'..'dt` literals are supported**: `'14:30:00't` is a SAS time (seconds since midnight), `'01JAN2020:14:30:00'dt` a SAS datetime (seconds since 1960-01-01 00:00:00); the `TIMEw.`/`DATETIMEw.` informats read those forms and the matching output formats render them. Multi-line **`#n` line pointers** are supported on both INPUT and PUT (`input #1 a #2 b;` reads one observation across physical lines; `put #1 a #2 b;` writes one observation as several lines); column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; **trailing `@`/`@@` line-hold on INPUT and PUT is supported** — on INPUT `@@` reads several observations from one line across iterations and `@` holds the line within the iteration; on PUT the same modifiers hold the output line so several PUTs (or observations) build one physical line; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported. Not yet: combining `#n` with a trailing `@`/`@@` hold on the same statement
 - Options on PROC `out=`. Supported dataset options on SET/MERGE/DATA/PROC `data=`: `keep=`/`drop=`/`rename=`/`where=` and **`firstobs=`/`obs=`** (positional observation range — `firstobs=` first observation, `obs=` last-observation number, applied before WHERE). **Numbered var-list ranges** (`keep=x1-x5`, `keep x1-x5;`, `drop=x2-x3`) expand to the enumerated names in both the dataset-option and statement forms, zero-padded to the low endpoint's digit width
 - PROC GLM with SAS's generalized-inverse (sweep) parameterization, Type I/III SS, F tests, and LSMEANS/CONTRAST/ESTIMATE. CLASS effects **are** supported via **reference-cell coding** (k−1 indicators, last level = reference at estimate 0) — numerically correct for the fit, predictions, and level-vs-reference differences, but the intercept and per-level estimates **differ from SAS by convention** (SAS keeps all levels and flags the aliased one "Biased"). This is a deliberate, documented divergence; the design→solve seam allows a future sweep-based upgrade when a real-SAS reference is available.
 - Flat-file **reading** via `infile "<path>"` + list `input` is supported, including `dlm=`/`delimiter=`, `dsd` (CSV-style quoted fields, embedded delimiters, consecutive-delimiter missings), `firstobs=`, and `obs=`. Flat-file **writing** via `file "<path>"` + `put` is supported, including `dlm=`/`dsd` (the delimiter joins items; DSD quotes values containing the delimiter or a quote), string literals, inline/associated formats, and `data _null_` (a side-effect-only step that creates no dataset). Note: a missing numeric writes as `.` and a missing character as empty, as the DATA step `put` does (not the empty-field convention of PROC EXPORT). `PROC IMPORT`/`PROC EXPORT` handle delimited files (`dbms=csv`/`tab`/`dlm`): IMPORT reads the header for column names (`getnames=`, default yes), honors `datarow=` and `delimiter=`/`dlm=`, and sniffs each column's type (numeric if every non-empty value parses, else character); EXPORT writes a header row (`putnames=`, default yes), DSD-quotes values containing the delimiter/quote, and writes a missing value as an empty field. **Column/pointer input and output** are supported: column input reads each variable from a 1-based column range (`input id 1-3 name $ 5-14 age 16-17;`), formatted input reads an informat width from the column pointer, and `@n`/`+n` move the pointer; column output positions each `put` item by range or pointer (`put name $ 1-10 age 11-13;`, `put @5 label $ @10 id 3.;`), left-justifying character and right-justifying numeric values within an explicit range. Trailing `@`/`@@` line-hold on INPUT **and PUT** is supported (see above): on PUT, `@` holds the output line within the iteration (released automatically at the iteration boundary) and `@@` holds it across iterations (released by a PUT without a trailing hold, or at end of step), so several PUTs — or several observations — build one physical line; list segments join by the FILE separator and column/pointer segments overlay at their absolute columns. **Multi-line `#n` line pointers are supported on both INPUT and PUT** — `#n` reads/writes the n-th physical line of one observation (input reads an observation spread over several lines; output writes an observation as several lines), resetting the column pointer to 1 at each `#n`. **Named output and `_all_` are supported**: `put var=;` writes `var=value`, and `put _all_;` writes every PDV variable (including the automatic `_n_`/`_error_`) as `name=value`. Not yet: combining `#n` with a trailing `@`/`@@` hold, `infile`/`file` options beyond the above (e.g. `lrecl=`, `pad`, `end=`, `mod`), and non-delimited `PROC IMPORT`/`PROC EXPORT` targets such as `.xlsx` (native `.sas7bdat` files are read via the base LIBNAME engine — see below).

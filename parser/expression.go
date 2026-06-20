@@ -53,13 +53,31 @@ func (p *Parser) parsePrefixExpr() ast.Expression {
 		p.next()
 		return &ast.NumberLiteral{Literal: lit, Value: v}
 	case lexer.STRING:
-		// Date literal: a string immediately followed by `d`, e.g. '01JAN2020'd.
-		if p.peek.Type == lexer.IDENT && strings.ToLower(p.peek.Literal) == "d" && p.peek.Pos == p.cur.End {
-			if day, ok := formats.ParseDateLiteral(p.cur.Literal); ok {
-				lit := "'" + p.cur.Literal + "'d"
-				p.next() // string
-				p.next() // 'd'
-				return &ast.NumberLiteral{Literal: lit, Value: day}
+		// Date/time/datetime literal: a string immediately followed by a `d`, `t`,
+		// or `dt` suffix, e.g. '01JAN2020'd, '14:30:00't, '01JAN2020:14:30:00'dt.
+		if p.peek.Type == lexer.IDENT && p.peek.Pos == p.cur.End {
+			switch strings.ToLower(p.peek.Literal) {
+			case "d":
+				if day, ok := formats.ParseDateLiteral(p.cur.Literal); ok {
+					lit := "'" + p.cur.Literal + "'d"
+					p.next() // string
+					p.next() // 'd'
+					return &ast.NumberLiteral{Literal: lit, Value: day}
+				}
+			case "t":
+				if sec, ok := formats.ParseTimeLiteral(p.cur.Literal); ok {
+					lit := "'" + p.cur.Literal + "'t"
+					p.next() // string
+					p.next() // 't'
+					return &ast.NumberLiteral{Literal: lit, Value: sec}
+				}
+			case "dt":
+				if sec, ok := formats.ParseDatetimeLiteral(p.cur.Literal); ok {
+					lit := "'" + p.cur.Literal + "'dt"
+					p.next() // string
+					p.next() // 'dt'
+					return &ast.NumberLiteral{Literal: lit, Value: sec}
+				}
 			}
 		}
 		s := &ast.StringLiteral{Value: p.cur.Literal}

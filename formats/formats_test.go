@@ -123,3 +123,43 @@ func TestParseInputDates(t *testing.T) {
 		t.Errorf("yymmdd %v != date9 %v", ymd.Num, d9.Num)
 	}
 }
+
+func TestTimeLiteralAndFormats(t *testing.T) {
+	// '14:30:00't -> 14*3600 + 30*60 = 52200 seconds.
+	sec, ok := ParseTimeLiteral("14:30:00")
+	if !ok || sec != 52200 {
+		t.Fatalf("ParseTimeLiteral = %v,%v want 52200", sec, ok)
+	}
+	// HH:MM form.
+	if s, ok := ParseTimeLiteral("9:15"); !ok || s != 9*3600+15*60 {
+		t.Errorf("ParseTimeLiteral(9:15) = %v,%v", s, ok)
+	}
+	// Round-trip through the time informat and time format.
+	v := ParseInput("14:30:00", "time8.")
+	if v.IsMissing() || v.Num != 52200 {
+		t.Fatalf("ParseInput time8. = %v", v.Display())
+	}
+	if got := Apply(v, "time8."); got != "14:30:00" {
+		t.Errorf("Apply time8. = %q, want 14:30:00", got)
+	}
+	if got := Apply(v, "time5."); got != "14:30" {
+		t.Errorf("Apply time5. = %q, want 14:30", got)
+	}
+}
+
+func TestDatetimeLiteralAndFormats(t *testing.T) {
+	// Datetime = date-day * 86400 + time-seconds.
+	day, _ := ParseDateLiteral("01JAN2020")
+	dt, ok := ParseDatetimeLiteral("01JAN2020:14:30:00")
+	if !ok || dt != day*86400+52200 {
+		t.Fatalf("ParseDatetimeLiteral = %v,%v want %v", dt, ok, day*86400+52200)
+	}
+	// Round-trip through the datetime informat and format.
+	v := ParseInput("01JAN2020:14:30:00", "datetime19.")
+	if v.IsMissing() || v.Num != dt {
+		t.Fatalf("ParseInput datetime19. = %v", v.Display())
+	}
+	if got := Apply(v, "datetime19."); got != "01JAN2020:14:30:00" {
+		t.Errorf("Apply datetime19. = %q, want 01JAN2020:14:30:00", got)
+	}
+}
