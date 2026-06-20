@@ -47,7 +47,37 @@ URL — whatever that driver accepts).
 | `sqlserver`, `mssql` | `microsoft/go-mssqldb` | ✅ | URL form (`sqlserver://user:pass@host?database=db`). |
 | `oracle` | `sijms/go-ora` | ✅ | URL form (`oracle://user:pass@host:1521/service`). |
 | `sqlite`, `sqlite3` | `mattn/go-sqlite3` | ❌ CGo | A single database file (or `:memory:`): `libname db sqlite "/path/file.db";`. Registered only in CGo builds (the project already requires CGo for PROC SQL); ideal for local files and as the write-back path that needs no server. |
-| `db2` | *(not built in)* | ❌ CGo | Needs the IBM CLI driver (`ibmdb/go_ibm_db`); excluded so the default build stays `CGO_ENABLED=0`. A future build tag will add it. |
+| `db2` | `ibmdb/go_ibm_db` | ❌ CGo + CLI driver, `-tags db2` | IBM Db2 (LUW). Connection string is the CLI form: `HOSTNAME=host;PORT=50000;DATABASE=db;UID=user;PWD=pw`. Registered only under the `db2` build tag (see below) because the driver links IBM's native CLI driver, which the default build must not require. |
+
+### Building the DB2 engine
+
+The DB2 driver is CGo and links against IBM's **CLI driver** (`clidriver`), a
+native library the driver's installer downloads. To keep a plain
+`go build ./...` free of that dependency, DB2 is gated behind the `db2` build
+tag — `dbio/dbio_db2.go` (which imports `go_ibm_db` and registers the engine) is
+compiled only with `-tags db2`. One-time setup:
+
+```bash
+# 1. Add the module (already in go.mod) and download the CLI driver:
+go run github.com/ibmdb/go_ibm_db/installer/setup.go   # extracts clidriver into the module cache
+
+# 2. Point the toolchain and loader at it (the installer prints these paths):
+export IBM_DB_HOME="$(go env GOMODCACHE)/github.com/ibmdb/clidriver"
+export CGO_CFLAGS="-I$IBM_DB_HOME/include"
+export CGO_LDFLAGS="-L$IBM_DB_HOME/lib -ldb2"
+export LD_LIBRARY_PATH="$IBM_DB_HOME/lib:$LD_LIBRARY_PATH"
+
+# 3. Build / run with the tag:
+go build -tags db2 ./...
+go run -tags db2 ./cmd/ass run program.sas
+```
+
+`libdb2.so` also needs `libxml2.so.2` (the older libxml2 ABI). Distributions
+that ship only `libxml2.so.16` (e.g. recent Ubuntu) won't have it; install an
+older libxml2 or place a `libxml2.so.2` on `LD_LIBRARY_PATH`. A default
+`go mod tidy` ignores the `db2` tag and will try to drop `go_ibm_db` from
+`go.mod` — a comment there flags it; restore the line (or use `go mod tidy -e`)
+if that happens.
 
 Because all engines go through Go's `database/sql`, adding another is mostly a
 driver import plus its dialect quirks.
@@ -282,3 +312,33 @@ running and inspecting this sandbox.
 > recreating a table; `IF EXISTS` on DDL is an **Oracle 23ai** feature (what the
 > `gvenzl/oracle-free` image runs). On older Oracle the replace path would need an
 > ignore-ORA-00942 drop instead — not yet implemented.
+
+The **DB2** write path has the same env-gated test (`TestDB2Integration`,
+build-tagged `db2`): it writes through `Store`, reads back through `Load`
+(type mapping, `DATE` round-trip, NULL→missing), then `Append`s a row in place.
+Run it (with the CLI driver env from "Building the DB2 engine" set):
+
+```bash
+ASS_DB2_DSN="HOSTNAME=localhost;PORT=50000;DATABASE=testdb;UID=db2inst1;PWD=ass_test" \
+    go test -tags db2 ./dbio/ -run TestDB2Integration -v
+```
+
+A throwaway DB2 is one container away (IBM's community image), but note it needs
+**rootful** podman (or Docker): Db2's `db2start` runs setuid-root binaries, which
+rootless podman blocks via its `nosuid` mounts (`SQL1641N`). The image also takes
+several minutes to initialize:
+
+```bash
+sudo podman run -d --name db2 --privileged=true -p 50000:50000 \
+    -e LICENSE=accept -e DB2INST1_PASSWORD=ass_test -e DBNAME=testdb \
+    icr.io/db2_community/db2
+# ready when this connects (not SQL1032N/SQL1035N):
+sudo podman exec db2 su - db2inst1 -c "db2 connect to testdb"
+```
+
+The DB2 backend connects over TCP (`localhost:50000`), so once the server is up
+the implement/test loop needs no further `sudo` — only container lifecycle does.
+
+> **DB2 version note.** DB2 has no `DROP TABLE IF EXISTS`, so `Store`'s replace
+> step issues a plain `DROP TABLE` and treats a "table does not exist" error
+> (`SQL0204N` / SQLSTATE 42704) as success — see `dropIfExists`.

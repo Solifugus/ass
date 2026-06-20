@@ -18,8 +18,9 @@ import (
 
 	"github.com/solifugus/ass/table"
 
-	// Pure-Go database/sql drivers. DB2 (CGo, github.com/ibmdb/go_ibm_db) is not
-	// included here so the build stays CGO_ENABLED=0-friendly.
+	// Pure-Go database/sql drivers. DB2 (CGo + IBM CLI driver,
+	// github.com/ibmdb/go_ibm_db) is registered only under the `db2` build tag
+	// (see dbio_db2.go) so the default build needs neither CGo nor the CLI driver.
 	_ "github.com/jackc/pgx/v5/stdlib"  // "pgx"
 	_ "github.com/microsoft/go-mssqldb" // "sqlserver"
 	_ "github.com/sijms/go-ora/v2"      // "oracle"
@@ -50,7 +51,7 @@ type Backend struct {
 func Open(engine, connection string) (*Backend, error) {
 	driver, ok := engineDriver[strings.ToLower(engine)]
 	if !ok {
-		return nil, fmt.Errorf("LIBNAME engine %q is not supported (built-in: postgres, sqlserver, oracle; sqlite when built with cgo)", engine)
+		return nil, fmt.Errorf("LIBNAME engine %q is not supported (built-in: postgres, sqlserver, oracle; sqlite when built with cgo; db2 when built with -tags db2)", engine)
 	}
 	db, err := gosql.Open(driver, connection)
 	if err != nil {
@@ -309,7 +310,7 @@ func (b *Backend) Store(ds *table.Dataset) error {
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 
-	if _, err := tx.Exec("DROP TABLE IF EXISTS " + qname); err != nil {
+	if err := b.dropIfExists(tx, qname); err != nil {
 		return fmt.Errorf("replace %s: %w", ds.Name, err)
 	}
 	if _, err := tx.Exec(b.createTableSQL(qname, ds.Columns)); err != nil {
@@ -342,6 +343,26 @@ func (b *Backend) Append(ds *table.Dataset) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// dropIfExists drops a table if it is present, swallowing a "table does not
+// exist" error. Most engines support `DROP TABLE IF EXISTS`, but DB2 (and older
+// Oracle) do not, so for those a plain DROP is issued and a missing-table error
+// is treated as success. Used by Store's replace step.
+func (b *Backend) dropIfExists(tx *gosql.Tx, qname string) error {
+	switch b.engine {
+	case "db2":
+		if _, err := tx.Exec("DROP TABLE " + qname); err != nil {
+			if isMissingTableErr(err) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	default:
+		_, err := tx.Exec("DROP TABLE IF EXISTS " + qname)
+		return err
+	}
 }
 
 // Drop removes a table (member) from the database — the engine path for PROC SQL
@@ -430,6 +451,8 @@ func (b *Backend) columnType(c table.Column) string {
 		return "FLOAT"
 	case "oracle":
 		return "BINARY_DOUBLE"
+	case "db2":
+		return "DOUBLE"
 	case "sqlite", "sqlite3":
 		return "REAL"
 	default: // postgres
@@ -581,13 +604,14 @@ func isTimestampType(dbType string) bool {
 // (as opposed to a connection or syntax failure), so a Load of an absent member
 // can report not-found rather than an error. The messages are matched across the
 // built-in engines: SQLite ("no such table"), Postgres ("does not exist"), SQL
-// Server ("Invalid object name"), and Oracle ("ORA-00942").
+// Server ("Invalid object name"), Oracle ("ORA-00942"), and DB2 ("SQL0204N" /
+// SQLSTATE 42704 "undefined name").
 func isMissingTableErr(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	for _, s := range []string{"no such table", "does not exist", "invalid object name", "ora-00942"} {
+	for _, s := range []string{"no such table", "does not exist", "invalid object name", "ora-00942", "sql0204n", "42704", "undefined name"} {
 		if strings.Contains(msg, s) {
 			return true
 		}
