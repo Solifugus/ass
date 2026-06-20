@@ -42,6 +42,9 @@ type dataStep struct {
 	n         int                     // current iteration (_N_)
 	records   []string                // data lines (datalines or infile file contents)
 	recPtr    int                     // next data record to read
+	recCursor int                     // 1-based column in the current record where the next list read resumes (line-hold)
+	holdCross bool                    // a trailing `@@` is holding the current line across iterations
+	holdLine  bool                    // a trailing `@` is holding the current line within the iteration
 	infile    *ast.InfileStatement    // external flat-file record source (nil = datalines)
 	file      *ast.FileStatement      // external flat-file PUT destination (nil = log)
 	putLines  []string                // lines accumulated by PUT for the FILE destination
@@ -156,7 +159,14 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 			if err := d.runIteration(ds.Body); err != nil {
 				return err
 			}
-			if d.recPtr == start { // safety: ensure progress if no INPUT executed
+			// A single `@` holds the line only within the iteration; release it at
+			// the iteration boundary so the next iteration reads a fresh record.
+			if d.holdLine && !d.holdCross {
+				d.holdLine = false
+				d.recPtr++
+				d.recCursor = 1
+			}
+			if d.recPtr == start && !d.holdCross { // ensure progress unless `@@` holds the line
 				d.recPtr++
 			}
 		}
@@ -243,13 +253,7 @@ func (d *dataStep) execStatement(s ast.Statement) (flow, error) {
 		d.output(st.Datasets)
 		return flowNormal, nil
 	case *ast.InputStatement:
-		if d.recPtr >= len(d.records) {
-			// No more records: stop this iteration without output.
-			return flowDelete, nil
-		}
-		d.applyInput(st, d.records[d.recPtr])
-		d.recPtr++
-		return d.applyWhere()
+		return d.execInput(st)
 	case *ast.DatalinesStatement:
 		// The data is collected up front; the statement itself does nothing.
 		return flowNormal, nil
@@ -506,6 +510,62 @@ func (d *dataStep) recordSourceCols(ds *table.Dataset) {
 // matched positionally to the INPUT variable list) and stores the values in the
 // PDV. A `$` variable is character; otherwise the field is parsed as a number.
 // Missing fields, "." , and unparseable numbers become the typed missing value.
+// execInput executes one INPUT statement, honoring trailing line-hold modifiers
+// (`@@` across iterations, `@` within the iteration). Without a hold it consumes
+// the current record and advances to the next, exactly as before. While a hold is
+// active (set by this statement or a previous one), reads resume from a 1-based
+// cursor into the current line so several observations can be read from one
+// physical record; the record advances only when the held line is exhausted
+// (`@@`), at the end of the iteration (`@`), or immediately (no hold).
+func (d *dataStep) execInput(st *ast.InputStatement) (flow, error) {
+	holding := d.holdCross || d.holdLine
+	if !holding {
+		d.recCursor = 1
+	}
+	// While holding across iterations, skip any held lines whose remaining content
+	// has no more tokens (move on to the next physical record).
+	if d.holdCross {
+		for d.recPtr < len(d.records) && noMoreTokens(d.records[d.recPtr], d.recCursor) {
+			d.recPtr++
+			d.recCursor = 1
+		}
+	}
+	if d.recPtr >= len(d.records) {
+		return flowDelete, nil // records exhausted
+	}
+	line := d.records[d.recPtr]
+
+	if holding || st.TrailingAt > 0 {
+		// Cursor-based read so consecutive reads share the physical line.
+		if columnMode(st) {
+			d.recCursor = d.applyColumnInputFrom(st, line, d.recCursor)
+		} else {
+			d.recCursor = d.applyListInputFrom(st, line, d.recCursor)
+		}
+	} else {
+		d.applyInput(st, line)
+	}
+
+	switch st.TrailingAt {
+	case 2: // @@ — hold the line across iterations
+		d.holdCross, d.holdLine = true, false
+	case 1: // @ — hold the line for the rest of this iteration
+		d.holdLine = true
+	default: // no hold — release and advance to the next record
+		d.holdCross, d.holdLine = false, false
+		d.recPtr++
+		d.recCursor = 1
+	}
+	return d.applyWhere()
+}
+
+// noMoreTokens reports whether the line has no further whitespace-delimited token
+// at or after the 1-based cursor (only trailing blanks remain).
+func noMoreTokens(line string, cursor int) bool {
+	tok, _ := scanToken(line, cursor)
+	return tok == ""
+}
+
 func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
 	if columnMode(st) {
 		d.applyColumnInput(st, line)
@@ -532,6 +592,35 @@ func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
 	}
 }
 
+// applyListInputFrom reads list-input variables starting at the 1-based cursor
+// into the line (whitespace-delimited), returning the cursor just past the last
+// token read. Used for line-hold (`@`/`@@`) reads, where consecutive INPUTs share
+// one physical record.
+func (d *dataStep) applyListInputFrom(st *ast.InputStatement, line string, cursor int) int {
+	col := cursor
+	for _, v := range st.Vars {
+		var field string
+		field, col = scanToken(line, col)
+		var val table.Value
+		switch {
+		case field == "":
+			if v.Char {
+				val = table.MissingChar()
+			} else {
+				val = table.MissingNum()
+			}
+		case v.Informat != "":
+			val = formats.ParseInput(field, v.Informat)
+		case v.Char:
+			val = table.Char(field)
+		default:
+			val = parseNum(field)
+		}
+		d.pdv.Set(v.Name, val)
+	}
+	return col
+}
+
 // columnMode reports whether an INPUT statement uses column/pointer input
 // (explicit column ranges or `@n`/`+n` pointers) rather than delimited list
 // input. In that mode fields are read by character position, not by splitting on
@@ -551,7 +640,13 @@ func columnMode(st *ast.InputStatement) bool {
 // an informat reads its width from the pointer, and a bare variable scans a
 // whitespace-delimited token from the pointer.
 func (d *dataStep) applyColumnInput(st *ast.InputStatement, line string) {
-	col := 1 // 1-based next read column
+	d.applyColumnInputFrom(st, line, 1)
+}
+
+// applyColumnInputFrom is applyColumnInput starting at a given 1-based column
+// (for line-hold reads) and returning the column just past the last field read.
+func (d *dataStep) applyColumnInputFrom(st *ast.InputStatement, line string, startCol int) int {
+	col := startCol // 1-based next read column
 	for _, v := range st.Vars {
 		if v.At > 0 {
 			col = v.At
@@ -592,6 +687,7 @@ func (d *dataStep) applyColumnInput(st *ast.InputStatement, line string) {
 		}
 		d.pdv.Set(v.Name, val)
 	}
+	return col
 }
 
 // colSlice returns the 1-based inclusive [start,end] substring of line, clamped

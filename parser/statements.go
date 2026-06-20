@@ -665,6 +665,31 @@ func (p *Parser) parseInput() ast.Statement {
 	// informats bind to the most recent variable.
 	stmt := &ast.InputStatement{}
 	toks := strings.Fields(raw)
+
+	// A trailing `@@` (hold across iterations) or `@` (hold within the iteration)
+	// at the very end is a line-hold modifier, not an `@n` column pointer (those
+	// carry digits and precede a variable). Detect and strip it before the field
+	// loop. It may be spaced (`x @@`) or attached (`x@@`).
+	if n := len(toks); n > 0 {
+		last := toks[n-1]
+		switch {
+		case last == "@@":
+			stmt.TrailingAt = 2
+			toks = toks[:n-1]
+		case last == "@":
+			stmt.TrailingAt = 1
+			toks = toks[:n-1]
+		case strings.HasSuffix(last, "@@"):
+			stmt.TrailingAt = 2
+			toks[n-1] = strings.TrimSuffix(last, "@@")
+		case strings.HasSuffix(last, "@"):
+			// No `@n` column pointer ever ends with `@`, so a trailing `@` here is
+			// always a line-hold (e.g. the attached form `x@`).
+			stmt.TrailingAt = 1
+			toks[n-1] = strings.TrimSuffix(last, "@")
+		}
+	}
+
 	var pendAt, pendPlus int
 	for i := 0; i < len(toks); i++ {
 		tok := toks[i]

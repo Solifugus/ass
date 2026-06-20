@@ -93,9 +93,14 @@ type InputVar struct {
 	Plus     int
 }
 
-// InputStatement is `input <var [$]>...;`.
+// InputStatement is `input <var [$]>...;`. TrailingAt records a line-hold
+// modifier at the end of the statement: 0 = none (the record is released after
+// this INPUT), 1 = a single `@` (hold the line for the next INPUT in the same
+// iteration), 2 = `@@` (hold the line across iterations, so several observations
+// can be read from one physical line).
 type InputStatement struct {
-	Vars []InputVar
+	Vars       []InputVar
+	TrailingAt int
 }
 
 func (in *InputStatement) statementNode() {}

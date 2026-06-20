@@ -70,7 +70,7 @@ Obs  name  age
 
 | Area | Highlights |
 |------|------------|
-| DATA step | `input`/`datalines`, `infile` (external flat files), `file`/`put` (write flat files), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `label`, `output`, `data _null_` |
+| DATA step | `input`/`datalines` (incl. trailing `@`/`@@` line-hold), `infile` (external flat files), `file`/`put` (write flat files), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `label`, `output`, `data _null_` |
 | Flat-file input | `infile "path"` with `dlm=`/`delimiter=`, `dsd` (CSV: quoted fields, embedded delimiters, missing), `firstobs=`, `obs=`; list, column (`1-10`), formatted, and `@n`/`+n` pointer input |
 | Flat-file output | `file "path"` with `dlm=`/`dsd` (CSV: quotes values containing the delimiter); `put` of variables, string literals, formatted values, and column/pointer placement (`name $ 1-10`, `@n`/`+n`) |
 | PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files: `dbms=csv/tab/dlm`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row |
@@ -90,7 +90,7 @@ Obs  name  age
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), date literals `'01JAN2020'd` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `$w.` |
 
-Not yet supported (selected): multi-line input/output (`#n` line pointers, trailing `@`/`@@` line-hold; single-line column/pointer input and output `@`/`+n`/`1-10` ranges are supported), big-endian `.sas7bdat` files (32/64-bit little-endian — uncompressed and RLE/RDC row-compressed — are read; `.xlsx` import/export — delimited CSV/TAB/DLM and native `.sas7bdat` read are supported), PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
+Not yet supported (selected): multi-line input/output (`#n` line pointers; trailing `@`/`@@` line-hold on INPUT and single-line column/pointer input and output `@`/`+n`/`1-10` ranges are supported), big-endian `.sas7bdat` files (32/64-bit little-endian — uncompressed and RLE/RDC row-compressed — are read; `.xlsx` import/export — delimited CSV/TAB/DLM and native `.sas7bdat` read are supported), PROC FREQ n-way tables and association statistics, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
 
 ## Contributing
 

@@ -1,0 +1,42 @@
+id: data_step_trailing_at_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - line-hold
+  - if-then-else
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    pairs:
+      columns: [x, y]
+      rows:
+        - [1, 2]
+        - [3, 4]
+        - [5, 6]
+    classified:
+      columns: [kind, value, label]
+      rows:
+        # @ holds the line: kind read first, then value OR label read from the
+        # rest of the same line. The unread side of each row is missing.
+        - ["N", 42, "."]
+        - ["T", ".", "hello"]
+        - ["N", 7, "."]
+priority: 2
+notes: |
+  Value-verifies trailing line-hold modifiers on INPUT.
+
+  `pairs` uses `input x y @@;`: `@@` holds the physical line across DATA-step
+  iterations, so multiple observations are read from one line — and continues
+  across line breaks until the data is exhausted (three pairs from two lines).
+
+  `classified` uses a single trailing `@` (`input kind $ @;`): the line is held
+  within the iteration so a control value (kind) is read, then the rest of the
+  line is read conditionally (a number when kind='N', a string otherwise). Each
+  physical line is one observation; the branch not taken leaves its variable
+  missing.

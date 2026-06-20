@@ -42,6 +42,29 @@ func TestParseAssignmentAndInput(t *testing.T) {
 	}
 }
 
+func TestParseInputTrailingAt(t *testing.T) {
+	cases := []struct {
+		src      string
+		wantHold int
+		wantVars int
+	}{
+		{"data s; input x @@; run;", 2, 1},
+		{"data s; input x@@; run;", 2, 1},
+		{"data s; input type $ @; run;", 1, 1},
+		{"data s; input a b; run;", 0, 2},
+		{"data s; input @3 x 2.; run;", 0, 1}, // leading @n pointer is not a hold
+	}
+	for _, c := range cases {
+		in := dataBody(t, c.src)[0].(*ast.InputStatement)
+		if in.TrailingAt != c.wantHold {
+			t.Errorf("%q: TrailingAt = %d, want %d", c.src, in.TrailingAt, c.wantHold)
+		}
+		if len(in.Vars) != c.wantVars {
+			t.Errorf("%q: vars = %d, want %d (%+v)", c.src, len(in.Vars), c.wantVars, in.Vars)
+		}
+	}
+}
+
 func TestParseColumnAndPointerInput(t *testing.T) {
 	body := dataBody(t, "data s; input name $ 1-10 age 11-13 @1 id $5. +2 x 3.; run;")
 	in, ok := body[0].(*ast.InputStatement)
