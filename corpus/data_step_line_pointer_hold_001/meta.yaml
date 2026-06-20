@@ -1,0 +1,33 @@
+id: data_step_line_pointer_hold_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - line-hold
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    paired:
+      columns: [a, b]
+      rows:
+        # @@ holds the 2-line record group; per-line cursors advance so the
+        # second token of each line forms a second observation.
+        - [1, 2]
+        - [10, 20]
+priority: 2
+notes: |
+  Value-verifies combining a `#n` line pointer with a trailing `@@` hold. The
+  statement `input a #2 b @@;` reads a 2-line logical record (a from the first
+  line, b from the second). `@@` holds the record group across DATA-step
+  iterations, maintaining a separate column cursor per line, so the two tokens on
+  each line produce two observations: (1,2) from the first tokens and (10,20)
+  from the second. The group releases — advancing to the next group — when its
+  first line has no more tokens.
+
+  Semantics are hand-derived from documented SAS pointer behavior (held record +
+  per-line column cursors); no real-SAS reference was used.

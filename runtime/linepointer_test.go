@@ -61,3 +61,39 @@ func TestPutLinePointer(t *testing.T) {
 		t.Errorf("output lines = %v, want %v", got, want)
 	}
 }
+
+// TestInputLinePointerDoubleHold combines `#n` with a trailing `@@`: the
+// multi-line record group is held across iterations with per-line cursors, so
+// several observations are read from one group. Two values per line -> two obs
+// from one 2-line group: (1,2) then (10,20).
+func TestInputLinePointerDoubleHold(t *testing.T) {
+	src := "data out;\n  input a #2 b @@;\n  datalines;\n1 10\n2 20\n;\nrun;"
+	lib := runStep(t, src)
+	ds, ok := lib.Get("out")
+	if !ok {
+		t.Fatal("OUT not created")
+	}
+	if got := names(ds, "a"); !eqStr(got, []string{"1", "10"}) {
+		t.Errorf("a = %v, want [1 10]", got)
+	}
+	if got := names(ds, "b"); !eqStr(got, []string{"2", "20"}) {
+		t.Errorf("b = %v, want [2 20]", got)
+	}
+}
+
+// TestInputLinePointerHoldSingleToken: one token per line -> the held group is
+// exhausted after one observation and the pointer advances to the next group.
+func TestInputLinePointerHoldSingleToken(t *testing.T) {
+	src := "data out;\n  input a #2 b @@;\n  datalines;\n1\n2\n3\n4\n;\nrun;"
+	lib := runStep(t, src)
+	ds, _ := lib.Get("out")
+	if ds.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2", ds.NObs())
+	}
+	if got := names(ds, "a"); !eqStr(got, []string{"1", "3"}) {
+		t.Errorf("a = %v, want [1 3]", got)
+	}
+	if got := names(ds, "b"); !eqStr(got, []string{"2", "4"}) {
+		t.Errorf("b = %v, want [2 4]", got)
+	}
+}

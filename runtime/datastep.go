@@ -45,6 +45,9 @@ type dataStep struct {
 	recCursor int                     // 1-based column in the current record where the next list read resumes (line-hold)
 	holdCross bool                    // a trailing `@@` is holding the current line across iterations
 	holdLine  bool                    // a trailing `@` is holding the current line within the iteration
+	mlHold    bool                    // a trailing hold is active on a `#n` multi-line record
+	mlBase    int                     // held base record index for the multi-line hold
+	mlCursors map[int]int             // per-line-offset 1-based cursor for the held multi-line record
 	infile    *ast.InfileStatement    // external flat-file record source (nil = datalines)
 	file      *ast.FileStatement      // external flat-file PUT destination (nil = log)
 	putLines  []string                // lines accumulated by PUT for the FILE destination
@@ -165,8 +168,14 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 			// A single `@` holds the line only within the iteration; release it at
 			// the iteration boundary so the next iteration reads a fresh record.
 			if d.holdLine && !d.holdCross {
+				if d.mlHold { // multi-line `@`: advance past the whole record group
+					d.recPtr = d.mlBase + 1
+					d.mlHold = false
+					d.mlCursors = nil
+				} else {
+					d.recPtr++
+				}
 				d.holdLine = false
-				d.recPtr++
 				d.recCursor = 1
 			}
 			if d.recPtr == start && !d.holdCross { // ensure progress unless `@@` holds the line
@@ -526,9 +535,13 @@ func (d *dataStep) recordSourceCols(ds *table.Dataset) {
 // (`@@`), at the end of the iteration (`@`), or immediately (no hold).
 func (d *dataStep) execInput(st *ast.InputStatement) (flow, error) {
 	// A `#n` line pointer reads one observation across several physical records.
-	// This path advances by the number of lines consumed; combining it with a
-	// trailing line-hold modifier is not supported (the hold is ignored).
 	if hasLinePointer(st) {
+		// With a trailing `@`/`@@` hold (or while one is active), the multi-line
+		// record is held across reads with per-line cursors; otherwise the record
+		// advances by the number of lines consumed.
+		if st.TrailingAt > 0 || d.mlHold {
+			return d.execMultiLineHeld(st)
+		}
 		if d.recPtr >= len(d.records) {
 			return flowDelete, nil // records exhausted
 		}
@@ -779,6 +792,110 @@ func (d *dataStep) applyMultiLineInput(st *ast.InputStatement, base int) int {
 		d.pdv.Set(v.Name, val)
 	}
 	return maxLine
+}
+
+// maxLinePointer returns the highest `#n` line referenced by the statement (at
+// least 1), i.e. the number of physical lines the logical record spans.
+func maxLinePointer(st *ast.InputStatement) int {
+	max := 1
+	for _, v := range st.Vars {
+		if v.Line > max {
+			max = v.Line
+		}
+	}
+	return max
+}
+
+// execMultiLineHeld reads a `#n` multi-line INPUT statement under a trailing
+// `@`/`@@` hold. The logical record's base line is held across iterations and a
+// per-line-offset cursor lets each line be re-read token by token, so several
+// observations are read from one multi-line record group (the `#n` analogue of
+// `input x @@;`). The group is released — and the record pointer advanced past it
+// — once its first line runs out of tokens.
+func (d *dataStep) execMultiLineHeld(st *ast.InputStatement) (flow, error) {
+	maxLine := maxLinePointer(st)
+	if !d.mlHold {
+		d.mlBase = d.recPtr
+		d.mlCursors = map[int]int{}
+	}
+
+	// Release an exhausted held group (its first line has no more tokens) and
+	// advance to the next record group.
+	if d.mlHold {
+		startCur := d.mlCursors[0]
+		if startCur == 0 {
+			startCur = 1
+		}
+		base0 := ""
+		if d.mlBase >= 0 && d.mlBase < len(d.records) {
+			base0 = d.records[d.mlBase]
+		}
+		if d.mlBase+maxLine > len(d.records) || noMoreTokens(base0, startCur) {
+			d.recPtr = d.mlBase + maxLine
+			d.mlHold, d.holdCross, d.holdLine = false, false, false
+			d.mlCursors = map[int]int{}
+			if d.recPtr >= len(d.records) {
+				return flowDelete, nil
+			}
+			d.mlBase = d.recPtr
+		}
+	}
+	if d.mlBase >= len(d.records) {
+		return flowDelete, nil
+	}
+
+	d.applyMultiLineInputCursors(st)
+
+	switch st.TrailingAt {
+	case 2: // @@ — hold across iterations
+		d.mlHold, d.holdCross, d.holdLine = true, true, false
+	case 1: // @ — hold for the rest of this iteration
+		d.mlHold, d.holdLine, d.holdCross = true, true, false
+	default: // entered via an active hold but this read has no trailing hold: release
+		d.recPtr = d.mlBase + maxLine
+		d.mlHold, d.holdCross, d.holdLine = false, false, false
+		d.mlCursors = map[int]int{}
+	}
+	return d.applyWhere()
+}
+
+// applyMultiLineInputCursors reads a `#n` statement using the held per-line
+// cursors (d.mlCursors, keyed by 0-based line offset from d.mlBase), advancing
+// each line's cursor as tokens/fields are consumed.
+func (d *dataStep) applyMultiLineInputCursors(st *ast.InputStatement) {
+	colMode := columnMode(st)
+	lineOff := 0
+	lineAt := func(off int) string {
+		idx := d.mlBase + off
+		if idx < 0 || idx >= len(d.records) {
+			return ""
+		}
+		return d.records[idx]
+	}
+	for _, v := range st.Vars {
+		if v.Line > 0 {
+			lineOff = v.Line - 1
+		}
+		col := d.mlCursors[lineOff]
+		if col == 0 {
+			col = 1
+		}
+		line := lineAt(lineOff)
+		var val table.Value
+		if colMode {
+			if v.At > 0 {
+				col = v.At
+			}
+			if v.Plus > 0 {
+				col += v.Plus
+			}
+			val, col = readColumnField(line, col, v)
+		} else {
+			val, col = readListField(line, col, v)
+		}
+		d.mlCursors[lineOff] = col
+		d.pdv.Set(v.Name, val)
+	}
 }
 
 // colSlice returns the 1-based inclusive [start,end] substring of line, clamped
