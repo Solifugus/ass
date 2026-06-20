@@ -54,7 +54,7 @@ func (d *dataStep) buildMerge(m *ast.MergeStatement, byVars []string) error {
 	// merge order (so column layout is dataset1 then dataset2's new vars).
 	var sources []mergeSource
 	for _, ref := range m.Refs {
-		raw, ok, err := d.lib.Resolve(ref.Name)
+		raw, ok, err := d.lib.ResolveFiltered(ref.Name, pushdownSelection(ref.Options))
 		if err != nil {
 			return err
 		}

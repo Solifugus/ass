@@ -12,6 +12,7 @@ package dbio
 import (
 	gosql "database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,6 +87,143 @@ func (b *Backend) Load(member string) (*table.Dataset, bool, error) {
 		return nil, false, err
 	}
 	return ds, true, nil
+}
+
+// LoadFiltered materializes a member like Load, but pushes a column projection
+// and/or row filter into the SELECT so the database returns less data (the
+// table.FilterBackend optimization for dataset-option `keep=`/`where=`). It is
+// strictly value-safe: the projection is mapped to the table's actual column
+// names (so case differences across engines don't matter) and bails to SELECT *
+// if any requested column is absent; the filter is only emitted for columns the
+// table reports as numeric, using operators (=, >, >=) whose SQL row selection
+// matches SAS exactly. Anything not safely translatable is simply not pushed —
+// the caller re-applies the full dataset options locally regardless.
+func (b *Backend) LoadFiltered(member string, sel table.Selection) (*table.Dataset, bool, error) {
+	if !safeIdent(member) {
+		return nil, false, fmt.Errorf("invalid table name %q", member)
+	}
+	qname := quoteIdent(b.engine, member)
+
+	// Fetch the table's real column names + kinds to map the projection and to
+	// validate the filter. If this metadata probe fails (e.g. table missing), fall
+	// back to a plain SELECT *; the main query below reports not-found/errors.
+	meta, metaErr := b.columnMeta(member)
+
+	colList := "*"
+	if metaErr == nil && len(sel.Columns) > 0 {
+		if names, ok := mapColumns(sel.Columns, meta); ok {
+			parts := make([]string, len(names))
+			for i, n := range names {
+				parts[i] = quoteIdent(b.engine, n)
+			}
+			colList = strings.Join(parts, ", ")
+		}
+	}
+
+	where := ""
+	if metaErr == nil && sel.Filter != nil {
+		byName := map[string]colMeta{}
+		for _, m := range meta {
+			byName[strings.ToLower(m.Name)] = m
+		}
+		if sql, ok := b.renderFilter(sel.Filter, byName); ok {
+			where = " WHERE " + sql
+		}
+	}
+
+	rows, err := b.db.Query("SELECT " + colList + " FROM " + qname + where)
+	if err != nil {
+		if isMissingTableErr(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("read %s: %w", member, err)
+	}
+	defer rows.Close()
+	ds, err := scanResult(rows, member)
+	if err != nil {
+		return nil, false, err
+	}
+	return ds, true, nil
+}
+
+// colMeta is a table column's name (in the database's own case) and inferred SAS
+// kind, used to map a projection and validate a pushed filter.
+type colMeta struct {
+	Name string
+	Kind table.Kind
+}
+
+// columnMeta probes a member's columns without fetching rows (SELECT * ...
+// WHERE 1=0), returning each column's real name and inferred SAS kind.
+func (b *Backend) columnMeta(member string) ([]colMeta, error) {
+	rows, err := b.db.Query("SELECT * FROM " + quoteIdent(b.engine, member) + " WHERE 1=0")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cts, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]colMeta, len(cts))
+	for i, ct := range cts {
+		out[i] = colMeta{Name: ct.Name(), Kind: sasKind(ct.DatabaseTypeName())}
+	}
+	return out, nil
+}
+
+// mapColumns resolves the requested (case-insensitive) projection names to the
+// table's actual column names. ok is false if any requested column is not present
+// (so the caller falls back to SELECT * — local KEEP/DROP still does the right
+// thing).
+func mapColumns(want []string, meta []colMeta) (names []string, ok bool) {
+	byName := map[string]string{}
+	for _, m := range meta {
+		byName[strings.ToLower(m.Name)] = m.Name
+	}
+	names = make([]string, 0, len(want))
+	for _, w := range want {
+		actual, found := byName[strings.ToLower(w)]
+		if !found {
+			return nil, false
+		}
+		names = append(names, actual)
+	}
+	return names, true
+}
+
+// renderFilter turns a dialect-neutral Filter into this engine's SQL. ok is false
+// if the filter references any column the table does not report as numeric (the
+// whole filter is then dropped rather than risk a type-coerced, value-divergent
+// comparison) — the caller filters locally instead.
+func (b *Backend) renderFilter(f *table.Filter, byName map[string]colMeta) (string, bool) {
+	switch f.Kind {
+	case table.FilterAnd, table.FilterOr:
+		parts := make([]string, 0, len(f.Sub))
+		for _, sub := range f.Sub {
+			s, ok := b.renderFilter(sub, byName)
+			if !ok {
+				return "", false
+			}
+			parts = append(parts, s)
+		}
+		if len(parts) == 0 {
+			return "", false
+		}
+		joiner := " AND "
+		if f.Kind == table.FilterOr {
+			joiner = " OR "
+		}
+		return "(" + strings.Join(parts, joiner) + ")", true
+	case table.FilterCmp:
+		m, found := byName[strings.ToLower(f.Column)]
+		if !found || m.Kind != table.Numeric {
+			return "", false
+		}
+		lit := strconv.FormatFloat(f.Number, 'g', -1, 64)
+		return quoteIdent(b.engine, m.Name) + " " + f.Op + " " + lit, true
+	}
+	return "", false
 }
 
 // QuerySQL runs a native (dialect-specific) query against the database and

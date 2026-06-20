@@ -49,6 +49,57 @@ type DropBackend interface {
 	Drop(member string) error
 }
 
+// Selection is a dialect-neutral pushdown request: a column projection and/or a
+// row filter that a FilterBackend may apply while loading a member, so the data
+// source returns less data. It is an optimization only — the caller still applies
+// the full dataset options locally, so a backend may apply none, some, or all of
+// a Selection and the result is identical either way (see FilterBackend).
+type Selection struct {
+	Columns []string // original column names to project; nil/empty = all columns
+	Filter  *Filter  // row filter to push down; nil = no filter
+}
+
+// IsEmpty reports whether a Selection requests no pushdown at all.
+func (s Selection) IsEmpty() bool { return len(s.Columns) == 0 && s.Filter == nil }
+
+// FilterKind tags a Filter node as a boolean combinator or a leaf comparison.
+type FilterKind int
+
+const (
+	FilterAnd FilterKind = iota // all Sub must hold
+	FilterOr                    // any Sub must hold
+	FilterCmp                   // a leaf: Column Op Number
+)
+
+// Filter is a small dialect-neutral boolean tree over column-vs-numeric-literal
+// comparisons — deliberately limited to the subset whose SQL row selection
+// provably matches SAS's. Only the operators "=", ">", ">=" appear at a leaf:
+// SAS orders a missing value below every number, so these three exclude missing
+// exactly as SQL's NULL handling excludes NULL, making the pushed predicate a
+// faithful (not merely a superset) filter. Operators that keep missing in SAS
+// ("<", "<=", "ne") are never represented here, so they are never pushed.
+// Backends render a Filter to their own SQL dialect and validate that each
+// referenced column is numeric before using it.
+type Filter struct {
+	Kind   FilterKind
+	Sub    []*Filter // for FilterAnd / FilterOr
+	Column string    // for FilterCmp: the (case-insensitive) column name
+	Op     string    // for FilterCmp: one of "=", ">", ">="
+	Number float64   // for FilterCmp: the numeric literal
+}
+
+// FilterBackend is an optional Backend that can apply a Selection (column
+// projection and/or row filter) while loading, pushing the work to the data
+// source instead of materializing the whole table. A Backend that does not
+// implement it is loaded in full via Load and filtered locally. Because the
+// caller always re-applies the dataset options locally, a FilterBackend is free
+// to honor a Selection partially (or ignore it) without affecting correctness —
+// it only affects how much data is transferred.
+type FilterBackend interface {
+	Backend
+	LoadFiltered(member string, sel Selection) (ds *Dataset, ok bool, err error)
+}
+
 // Library models a SAS session's libraries. The unnamed in-memory store is WORK
 // (where steps pass datasets to one another); additional librefs may be bound to
 // external Backends via Assign (the LIBNAME statement). Names are
@@ -104,6 +155,26 @@ func (l *Library) Backend(libref string) (Backend, bool) {
 func (l *Library) Resolve(name string) (*Dataset, bool, error) {
 	if ref := strings.ToUpper(librefOf(name)); ref != "" {
 		if b, ok := l.backends[ref]; ok {
+			return b.Load(datasetKey(name))
+		}
+	}
+	ds, ok := l.Get(name)
+	return ds, ok, nil
+}
+
+// ResolveFiltered resolves a (possibly qualified) name like Resolve, but when the
+// name is bound to a FilterBackend it pushes the given Selection (column
+// projection and/or row filter) to the source so less data is transferred. For
+// the WORK store or a backend that is not a FilterBackend it behaves exactly like
+// Resolve (the Selection is ignored and the caller applies it locally). It never
+// changes results — pushdown is a transfer optimization layered beneath the
+// caller's own dataset-option pass.
+func (l *Library) ResolveFiltered(name string, sel Selection) (*Dataset, bool, error) {
+	if ref := strings.ToUpper(librefOf(name)); ref != "" {
+		if b, ok := l.backends[ref]; ok {
+			if fb, ok := b.(FilterBackend); ok && !sel.IsEmpty() {
+				return fb.LoadFiltered(datasetKey(name), sel)
+			}
 			return b.Load(datasetKey(name))
 		}
 	}

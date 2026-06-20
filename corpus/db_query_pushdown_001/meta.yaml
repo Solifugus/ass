@@ -1,0 +1,46 @@
+id: db_query_pushdown_001
+source: hand-written
+license: MIT
+features:
+  - libname
+  - set
+  - data-step
+  - dataset-options
+  - where
+  - query-pushdown
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    safe:
+      columns: [id, x]
+      rows:
+        - [1, 10]
+        - [3, 3]
+    unsafe:
+      columns: [id, x]
+      rows:
+        - [2, "."]
+        - [3, 3]
+priority: 2
+notes: |
+  Value-verifies that implicit query pushdown over an external database source is
+  identical to local filtering. The seeded table has a MISSING numeric (id=2),
+  the case where SAS and SQL filtering diverge.
+
+  `safe` reads with `keep=id x where=(x >= 3)`: `>=` is value-safe to push (SAS
+  orders missing below every number, so it excludes missing exactly as SQL's NULL
+  handling does), and `keep=` becomes a column projection — the database does the
+  work. Result: id 1 and 3 (missing excluded).
+
+  `unsafe` reads with `where=(x < 5)`: `<` keeps missing in SAS but SQL would drop
+  it, so it is NOT pushed; the table is read in full and filtered locally. Result:
+  id 2 (missing, kept) and 3 — proving the local pass remains the source of truth
+  and pushdown never changes results.
+
+  SQLite is the engine locally verifiable without a server; the same pushdown path
+  (table.FilterBackend -> dbio.Backend.LoadFiltered) serves the Postgres/SQL
+  Server/Oracle engines. Requires a CGo build. @TMP@ is a fresh temp dir removed
+  after the run.

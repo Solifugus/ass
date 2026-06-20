@@ -86,7 +86,7 @@ func runProcStep(s *ast.ProcStep, lib *table.Library, logger *log.Logger) error 
 	if s.DataOptions.IsEmpty() && !external {
 		return proc.Run(lib, s, logger)
 	}
-	src, ok, err := lib.Resolve(s.Data)
+	src, ok, err := lib.ResolveFiltered(s.Data, pushdownSelection(s.DataOptions))
 	if err != nil {
 		return err
 	}

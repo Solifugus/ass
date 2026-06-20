@@ -9,8 +9,10 @@ SAS/ACCESS LIBNAME-engine model.
 > datasets is supported, a DATA step can write a dataset back to a database
 > library (`data pg.newtab; set …;`), replacing the table, and PROC SQL can send
 > a database its own native SQL (`connect to` / `from connection to` / `execute`)
-> — see [PROC SQL pass-through](#proc-sql-pass-through) below. Streaming for very
-> large tables and implicit query pushdown remain future work.
+> — see [PROC SQL pass-through](#proc-sql-pass-through) below. A value-safe subset
+> of `keep=`/`where=` is pushed down to the database (column projection + numeric
+> filters); streaming for very large tables and pushing joins/aggregation remain
+> future work.
 
 ## Assigning a library
 
@@ -207,11 +209,17 @@ maps columns on read:
 
 ## Compatibility notes
 
-- **Same results, computed locally.** ASS reads the table and processes it in the
-  DATA step / PROC. SAS can *push down* `WHERE`/joins/aggregation to the database
-  for speed (implicit pass-through); ASS does not yet — results are identical, but
-  large tables transfer in full. Use a dataset-option `where=`/`keep=` to limit
-  what is materialized.
+- **Implicit query pushdown (value-safe subset).** A dataset-option `keep=` is
+  pushed as a column projection and a `where=` of numeric comparisons using
+  `=`/`>`/`>=` is pushed as a SQL `WHERE`, so the database returns only the needed
+  columns/rows. The subset is chosen so the pushed predicate selects exactly the
+  same rows SAS would: SAS orders a missing value below every number, so
+  `=`/`>`/`>=` exclude missing just as SQL excludes NULL. Operators that *keep*
+  missing in SAS (`<`, `<=`, `ne`), string/function predicates, `drop=`, and
+  joins/aggregation are **not** pushed — they are computed locally after a full
+  read. Either way the result is identical; pushdown only reduces transfer. ASS
+  validates each pushed column is numeric (via a zero-row metadata probe) and
+  falls back to a full read on anything it cannot prove safe.
 - **Explicit PROC SQL pass-through** (`connect to … ; select … from connection
   to …`) **is supported** — see [PROC SQL pass-through](#proc-sql-pass-through).
   The in-process SQLite engine still backs ordinary `proc sql` (joins, group by,
