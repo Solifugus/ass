@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -382,17 +383,60 @@ func (p *Parser) parseDatasetOptionParen() (in string, opts *ast.DatasetOptions)
 }
 
 // parseOptionVarList collects a space-separated variable list (for keep=/drop=),
-// stopping at `)`, `;`, or the start of the next `option=` clause.
+// stopping at `)`, `;`, or the start of the next `option=` clause. A numbered
+// range `name1-name5` (lexed as IDENT MINUS IDENT) expands to name1..name5.
 func (p *Parser) parseOptionVarList() []string {
 	var vars []string
 	for p.curIs(lexer.IDENT) {
 		if p.peek.Type == lexer.EQ { // this ident begins the next option
 			break
 		}
-		vars = append(vars, p.cur.Literal)
+		lo := p.cur.Literal
 		p.next()
+		if p.curIs(lexer.MINUS) && p.peek.Type == lexer.IDENT {
+			p.next() // consume '-'
+			hi := p.cur.Literal
+			p.next()
+			vars = append(vars, expandVarRange(lo, hi)...)
+			continue
+		}
+		vars = append(vars, lo)
 	}
 	return vars
+}
+
+// expandVarRange expands a numbered variable range `lo`-`hi` (e.g. x1-x5) into
+// the list x1,x2,...,x5. Both endpoints must share a common non-numeric prefix
+// and end in digits, with hi's number >= lo's; otherwise the two names are
+// returned unchanged. The generated suffix is zero-padded to lo's digit width
+// (so x01-x03 yields x01,x02,x03).
+func expandVarRange(lo, hi string) []string {
+	pre1, digs1 := splitTrailingDigits(lo)
+	pre2, digs2 := splitTrailingDigits(hi)
+	if digs1 == "" || digs2 == "" || !strings.EqualFold(pre1, pre2) {
+		return []string{lo, hi}
+	}
+	n1, err1 := strconv.Atoi(digs1)
+	n2, err2 := strconv.Atoi(digs2)
+	if err1 != nil || err2 != nil || n2 < n1 {
+		return []string{lo, hi}
+	}
+	width := len(digs1)
+	out := make([]string, 0, n2-n1+1)
+	for n := n1; n <= n2; n++ {
+		out = append(out, fmt.Sprintf("%s%0*d", pre1, width, n))
+	}
+	return out
+}
+
+// splitTrailingDigits splits s into its non-digit prefix and trailing run of
+// digits (e.g. "var12" -> "var","12"; "abc" -> "abc","").
+func splitTrailingDigits(s string) (prefix, digits string) {
+	i := len(s)
+	for i > 0 && s[i-1] >= '0' && s[i-1] <= '9' {
+		i--
+	}
+	return s[:i], s[i:]
 }
 
 // parseRenameList parses `(old=new old2=new2 ...)` into m (keys lowercased).
@@ -930,13 +974,22 @@ func (p *Parser) parseOutput() ast.Statement {
 	return stmt
 }
 
-// parseNameListStmt parses `keep`/`drop <vars...>;`.
+// parseNameListStmt parses `keep`/`drop <vars...>;`, expanding numbered ranges
+// (`keep x1-x5;`).
 func (p *Parser) parseNameListStmt(kw string) ast.Statement {
 	p.next() // the keyword
 	var vars []string
 	for p.curIs(lexer.IDENT) {
-		vars = append(vars, p.cur.Literal)
+		lo := p.cur.Literal
 		p.next()
+		if p.curIs(lexer.MINUS) && p.peek.Type == lexer.IDENT {
+			p.next() // consume '-'
+			hi := p.cur.Literal
+			p.next()
+			vars = append(vars, expandVarRange(lo, hi)...)
+			continue
+		}
+		vars = append(vars, lo)
 	}
 	p.expectSemicolon()
 	if kw == "keep" {

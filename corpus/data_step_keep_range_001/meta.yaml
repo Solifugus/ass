@@ -1,0 +1,32 @@
+id: data_step_keep_range_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - keep-drop
+  - dataset-options
+  - set
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    narrow:
+      columns: [id, x1, x2, x3]
+      rows:
+        - [1, 10, 20, 30]
+        - [2, 11, 21, 31]
+    fewer:
+      columns: [id, x1, x4]
+      rows:
+        - [1, 10, 40]
+        - [2, 11, 41]
+priority: 2
+notes: |
+  Value-verifies numbered variable-list ranges. `keep id x1-x3;` (statement
+  form) expands to id,x1,x2,x3. `drop=x2-x3` (dataset-option form) expands to
+  x2,x3, leaving id,x1,x4 — confirming the range expands in both the keep/drop
+  statement and the parenthesized dataset option.
