@@ -8,6 +8,29 @@ The DB-specific sandboxes have their own pages:
 [`oracle-test-sandbox.md`](oracle-test-sandbox.md),
 [`db2-test-sandbox.md`](db2-test-sandbox.md). This page is the generic toolbox.
 
+## Test sandbox credentials (at a glance)
+
+The local throwaway containers all use the disposable password **`ass_test`** —
+fine to hardcode because they're local, data-less sandboxes you `rm` when done.
+
+| Engine | Host:port | User / password | Database / service | ASS connection string |
+|--------|-----------|-----------------|--------------------|-----------------------|
+| Oracle | `localhost:1521` | `system` / `ass_test` | service `FREEPDB1` | `oracle://system:ass_test@localhost:1521/FREEPDB1` |
+| DB2 | `localhost:50000` | `db2inst1` / `ass_test` | db `testdb` | `HOSTNAME=localhost;PORT=50000;DATABASE=testdb;UID=db2inst1;PWD=ass_test` |
+
+The matching `-e` env vars at `podman run` time:
+
+```bash
+# Oracle (gvenzl/oracle-free):       -e ORACLE_PASSWORD=ass_test
+# DB2 (icr.io/db2_community/db2):     -e DB2INST1_PASSWORD=ass_test -e DBNAME=testdb -e LICENSE=accept
+```
+
+Postgres and SQL Server have no local sandbox page here — point their integration
+tests at your own server via `ASS_PG_DSN` / `ASS_MSSQL_DSN` (DSN formats in
+[`databases.md`](databases.md)); use that server's own credentials, and keep real
+passwords out of committed files. Full per-engine details: the
+[Oracle](oracle-test-sandbox.md) and [DB2](db2-test-sandbox.md) sheets.
+
 ## Rootless vs rootful — read this first
 
 By default `podman` runs **rootless** (as your user, no `sudo`). That's safer and
