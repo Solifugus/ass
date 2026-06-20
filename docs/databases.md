@@ -173,3 +173,30 @@ ASS_PG_DSN="postgres://user:pass@localhost:5432/dbname?sslmode=disable" \
 
 It creates a throwaway table, reads it through the backend, asserts the SAS value
 mapping, and drops the table.
+
+The **SQL Server** and **Oracle** write paths have matching env-gated tests
+(`TestSQLServerIntegration` / `TestOracleIntegration`). Each writes a dataset
+through `Store`, reads it back through `Load` (asserting the type mapping, the
+`DATE` round-trip, and NULL→missing), and the Oracle test additionally appends a
+row through `Append` to confirm the in-place INSERT on a live server:
+
+```bash
+ASS_MSSQL_DSN="sqlserver://user:pass@host:1433?database=db&encrypt=disable" \
+    go test ./dbio/ -run TestSQLServerIntegration -v
+
+ASS_ORACLE_DSN="oracle://system:pass@localhost:1521/FREEPDB1" \
+    go test ./dbio/ -run TestOracleIntegration -v
+```
+
+A throwaway Oracle is one container away (no SAS or Oracle account needed for the
+community image):
+
+```bash
+podman run -d --name oracle-free -p 1521:1521 -e ORACLE_PASSWORD=pass \
+    docker.io/gvenzl/oracle-free:slim     # ready when the log says "DATABASE IS READY TO USE!"
+```
+
+> **Oracle version note.** ASS's `Store` issues `DROP TABLE IF EXISTS` before
+> recreating a table; `IF EXISTS` on DDL is an **Oracle 23ai** feature (what the
+> `gvenzl/oracle-free` image runs). On older Oracle the replace path would need an
+> ignore-ORA-00942 drop instead — not yet implemented.
