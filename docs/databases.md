@@ -339,6 +339,11 @@ sudo podman exec db2 su - db2inst1 -c "db2 connect to testdb"
 The DB2 backend connects over TCP (`localhost:50000`), so once the server is up
 the implement/test loop needs no further `sudo` — only container lifecycle does.
 
+See [`db2-test-sandbox.md`](db2-test-sandbox.md) for the full DB2 sandbox cheat
+sheet (lifecycle, the `libxml2.so.2` workaround, poking at it with the db2 CLP,
+and every gotcha) and [`podman-cheatsheet.md`](podman-cheatsheet.md) for general
+container ops.
+
 > **DB2 version note.** DB2 has no `DROP TABLE IF EXISTS`, so `Store`'s replace
 > step issues a plain `DROP TABLE` and treats a "table does not exist" error
 > (`SQL0204N` / SQLSTATE 42704) as success — see `dropIfExists`.

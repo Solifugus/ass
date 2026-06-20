@@ -102,8 +102,12 @@ ASS_ORACLE_DSN="oracle://system:ass_test@localhost:1521/FREEPDB1" \
 
 Same pattern for the other engines:
 
-| Engine | Env var | Test |
-|--------|---------|------|
-| Postgres | `ASS_PG_DSN` | `TestPostgresIntegration` |
-| SQL Server | `ASS_MSSQL_DSN` | `TestSQLServerIntegration` |
-| Oracle | `ASS_ORACLE_DSN` | `TestOracleIntegration` |
+| Engine | Env var | Test | Build |
+|--------|---------|------|-------|
+| Postgres | `ASS_PG_DSN` | `TestPostgresIntegration` | default |
+| SQL Server | `ASS_MSSQL_DSN` | `TestSQLServerIntegration` | default |
+| Oracle | `ASS_ORACLE_DSN` | `TestOracleIntegration` | default |
+| DB2 | `ASS_DB2_DSN` | `TestDB2Integration` | `-tags db2` |
+
+See [`db2-test-sandbox.md`](db2-test-sandbox.md) for the DB2 equivalent of this
+page and [`podman-cheatsheet.md`](podman-cheatsheet.md) for general container ops.
