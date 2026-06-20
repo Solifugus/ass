@@ -1,0 +1,42 @@
+id: proc_db_output_001
+source: hand-written
+license: MIT
+features:
+  - libname
+  - proc-sort
+  - proc-sql
+  - sql-create-table
+  - sql-groupby
+  - set
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    sorted_back:
+      columns: [id, name, region, amt]
+      rows:
+        - [1, "Alice", "east", 100]
+        - [2, "Bob", "east", 200]
+        - [3, "Carol", "west", 50]
+    totals_back:
+      columns: [region, total]
+      rows:
+        - ["east", 300]
+        - ["west", 50]
+priority: 2
+notes: |
+  Exercises PROC output targeting an external LIBNAME engine. PROC SORT writes
+  its OUT= dataset into the database (`proc sort data=people out=db.sorted;`) and
+  PROC SQL materializes an aggregate directly into it (`create table db.totals as
+  select ... group by region`). Both are read back from the database with a DATA
+  step (`set db.sorted;` / `set db.totals;`) and value-verified: SORTED keeps the
+  by-id ordering (Alice, Bob, Carol) and TOTALS holds the per-region sums
+  (east=100+200=300, west=50).
+
+  Both write paths route through `table.Library.Store` -> `StoreExternal` ->
+  `dbio.Backend.Store`, the same path as the DATA-step write-back. SQLite is the
+  locally verifiable engine (CGo, no external server); @TMP@ is a fresh temp dir
+  removed after the run.

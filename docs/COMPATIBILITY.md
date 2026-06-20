@@ -30,11 +30,11 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 41 |
-| Parsed | 41 (100.0%) |
-| Executed | 41 (100.0%) |
-| Passed | 41 (100.0%) |
-| Value-verified | 15 items assert dataset values; all match |
+| Items | 42 |
+| Parsed | 42 (100.0%) |
+| Executed | 42 (100.0%) |
+| Passed | 42 (100.0%) |
+| Value-verified | 16 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -45,7 +45,7 @@ passing cosmetic check.
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
 | class | 1/1 | 100.0% |
-| data-step | 35/35 | 100.0% |
+| data-step | 36/36 | 100.0% |
 | dataset-options | 1/1 | 100.0% |
 | datalines | 5/5 | 100.0% |
 | do-loop | 2/2 | 100.0% |
@@ -57,7 +57,7 @@ passing cosmetic check.
 | infile | 2/2 | 100.0% |
 | informats | 2/2 | 100.0% |
 | input | 7/7 | 100.0% |
-| libname | 3/3 | 100.0% |
+| libname | 4/4 | 100.0% |
 | macro-control | 1/1 | 100.0% |
 | macro-def | 2/2 | 100.0% |
 | macro-let | 1/1 | 100.0% |
@@ -68,15 +68,15 @@ passing cosmetic check.
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 28/28 | 100.0% |
+| proc-print | 29/29 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
-| proc-sort | 3/3 | 100.0% |
-| proc-sql | 4/4 | 100.0% |
+| proc-sort | 4/4 | 100.0% |
+| proc-sql | 5/5 | 100.0% |
 | retain | 2/2 | 100.0% |
 | sas7bdat | 2/2 | 100.0% |
-| set | 8/8 | 100.0% |
-| sql-create-table | 1/1 | 100.0% |
-| sql-groupby | 1/1 | 100.0% |
+| set | 9/9 | 100.0% |
+| sql-create-table | 2/2 | 100.0% |
+| sql-groupby | 2/2 | 100.0% |
 | sql-join | 1/1 | 100.0% |
 | sql-select | 4/4 | 100.0% |
 | sum-statement | 2/2 | 100.0% |
@@ -99,7 +99,7 @@ passing cosmetic check.
 - PROC GLM with SAS's generalized-inverse (sweep) parameterization, Type I/III SS, F tests, and LSMEANS/CONTRAST/ESTIMATE. CLASS effects **are** supported via **reference-cell coding** (k−1 indicators, last level = reference at estimate 0) — numerically correct for the fit, predictions, and level-vs-reference differences, but the intercept and per-level estimates **differ from SAS by convention** (SAS keeps all levels and flags the aliased one "Biased"). This is a deliberate, documented divergence; the design→solve seam allows a future sweep-based upgrade when a real-SAS reference is available.
 - Flat-file **reading** via `infile "<path>"` + list `input` is supported, including `dlm=`/`delimiter=`, `dsd` (CSV-style quoted fields, embedded delimiters, consecutive-delimiter missings), `firstobs=`, and `obs=`. Flat-file **writing** via `file "<path>"` + `put` is supported, including `dlm=`/`dsd` (the delimiter joins items; DSD quotes values containing the delimiter or a quote), string literals, inline/associated formats, and `data _null_` (a side-effect-only step that creates no dataset). Note: a missing numeric writes as `.` and a missing character as empty, as the DATA step `put` does (not the empty-field convention of PROC EXPORT). `PROC IMPORT`/`PROC EXPORT` handle delimited files (`dbms=csv`/`tab`/`dlm`): IMPORT reads the header for column names (`getnames=`, default yes), honors `datarow=` and `delimiter=`/`dlm=`, and sniffs each column's type (numeric if every non-empty value parses, else character); EXPORT writes a header row (`putnames=`, default yes), DSD-quotes values containing the delimiter/quote, and writes a missing value as an empty field. **Column/pointer input and output** are supported: column input reads each variable from a 1-based column range (`input id 1-3 name $ 5-14 age 16-17;`), formatted input reads an informat width from the column pointer, and `@n`/`+n` move the pointer; column output positions each `put` item by range or pointer (`put name $ 1-10 age 11-13;`, `put @5 label $ @10 id 3.;`), left-justifying character and right-justifying numeric values within an explicit range. Not yet: `put _all_`/named output (`var=`), multi-line `#n` line pointers and trailing `@`/`@@` line-hold, `infile`/`file` options beyond the above (e.g. `lrecl=`, `pad`, `end=`, `mod`), and non-delimited `PROC IMPORT`/`PROC EXPORT` targets such as `.xlsx` (native `.sas7bdat` files are read via the base LIBNAME engine — see below).
 - Native SAS dataset files (`.sas7bdat`) are read through a **base/directory LIBNAME engine**: `libname lib "/dir"; … set lib.member;` (or `proc print data=lib.member;`) reads `dir/member.sas7bdat`. The reader is a clean-room implementation from the public reverse-engineering literature on the format (the layout documented by the ReadStat and sas7bdat open-source projects and Matthew Shotwell's published format notes) — never from proprietary SAS documentation, source, or internals. Supported: 32-bit and 64-bit **little-endian** files; both **row-compression** schemes — `SASYZCRL` (RLE) and `SASYZCR2` (RDC, Ross Data Compression) — as well as uncompressed; numeric (including SAS's truncated <8-byte numerics) and character columns; SAS date/datetime values (stored as numeric days/seconds from 1960-01-01); and column metadata (names, lengths, formats, labels — labels/formats for 32-bit files; on 64-bit files the values read correctly but format/label recovery is skipped). The decompressors are clean-room ports of the public reverse-engineering literature (ReadStat's RLE command table, the sas7bdat R-package vignette, and Ed Ross's published RDC algorithm). Not yet: **big-endian** files (written on legacy big-endian platforms), writing `.sas7bdat`, and on-disk format catalogs. Read-only.
-- External-database LIBNAME engines are supported for **reading and writing** with Postgres, SQL Server, Oracle, and SQLite (`libname pg postgres "…"; … set pg.table;` to read; `data pg.out; set …;` to write — the target table is dropped and recreated in one transaction, SAS replace semantics; SAS→DB types map character→`VARCHAR`/`NVARCHAR`/`VARCHAR2`, numeric→the engine's double, and date/datetime-formatted numerics→`DATE`/`TIMESTAMP`). The SQLite engine (single file or `:memory:`) and the DB write path are CGo-only, registered when the project's required CGo build is on. Not yet: appending to an existing table, `proc sort out=db.x` / `proc sql create table db.x` targeting an external libref, implicit query pushdown (ASS reads the table and computes locally — same results, full transfer), PROC SQL pass-through to external librefs, DB2 (needs the CGo IBM CLI driver), and the long tail of SAS/ACCESS options. See [`databases.md`](databases.md).
+- External-database LIBNAME engines are supported for **reading and writing** with Postgres, SQL Server, Oracle, and SQLite (`libname pg postgres "…"; … set pg.table;` to read; `data pg.out; set …;` to write — the target table is dropped and recreated in one transaction, SAS replace semantics; SAS→DB types map character→`VARCHAR`/`NVARCHAR`/`VARCHAR2`, numeric→the engine's double, and date/datetime-formatted numerics→`DATE`/`TIMESTAMP`). **PROC output can also target an external libref**: `proc sort data=work out=db.sorted;` and `proc sql; create table db.totals as select …;` write their results to the bound engine (same replace semantics) via the shared `Library.Store` routing point. The SQLite engine (single file or `:memory:`) and the DB write path are CGo-only, registered when the project's required CGo build is on. Not yet: appending to an existing table (`mod`), implicit query pushdown (ASS reads the table and computes locally — same results, full transfer), PROC SQL pass-through to external librefs, DB2 (needs the CGo IBM CLI driver), and the long tail of SAS/ACCESS options. See [`databases.md`](databases.md).
 - JSON harness output (machine-readable report); SAS-byte-identical listing comparison (a non-goal — see "What compatibility means" above; value comparison via `expected.datasets` is the supported mechanism)
 
 See [`../corpus/FEATURES.md`](../corpus/FEATURES.md) for the full feature-tag catalog and intended levels.

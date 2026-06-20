@@ -37,11 +37,41 @@ func (sqlProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 			fmt.Print(renderListing(ds, printOptions{}))
 
 		case strings.HasPrefix(low, "create table"):
+			name := createdTableName(stmt)
+			// A libref-qualified target (e.g. `create table db.sorted as ...`)
+			// can't be created directly in the SQLite engine (the dot reads as
+			// schema.table) and may belong to an external LIBNAME engine. Build it
+			// under a safe temp name, then route the result through lib.Store, which
+			// writes it to the bound Backend or to WORK as appropriate.
+			if dot := strings.LastIndex(name, "."); dot >= 0 {
+				member := name[dot+1:]
+				tmp := "_sqlct_" + member
+				exec := strings.Replace(stmt, name, tmp, 1)
+				if err := eng.Exec(exec); err != nil {
+					logger.Error("PROC SQL: %v", err)
+					continue
+				}
+				if err := eng.Save(lib, tmp); err != nil {
+					logger.Error("PROC SQL: %v", err)
+					continue
+				}
+				ds, ok := lib.Get(tmp)
+				lib.Delete(tmp)
+				if !ok {
+					continue
+				}
+				if err := lib.Store(name, ds); err != nil {
+					logger.Error("PROC SQL: %v", err)
+					continue
+				}
+				logger.Note("Table %s.%s created, with %d rows and %d columns.",
+					strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name), ds.NObs(), len(ds.Columns))
+				continue
+			}
 			if err := eng.Exec(stmt); err != nil {
 				logger.Error("PROC SQL: %v", err)
 				continue
 			}
-			name := createdTableName(stmt)
 			if name != "" {
 				if err := eng.Save(lib, name); err != nil {
 					logger.Error("PROC SQL: %v", err)

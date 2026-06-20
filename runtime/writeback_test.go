@@ -75,6 +75,119 @@ run;
 	}
 }
 
+// TestProcSortOutToDB verifies PROC SORT can write its OUT= dataset to an
+// external LIBNAME engine (`proc sort data=work out=db.sorted; ...`). The sorted
+// rows must land in the database (not WORK) and read back in order.
+func TestProcSortOutToDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "sort.db")
+	src := `
+libname db sqlite "` + dbPath + `";
+
+data people;
+  input id name $;
+  datalines;
+3 Carol
+1 Alice
+2 Bob
+;
+run;
+
+proc sort data=people out=db.sorted;
+  by id;
+run;
+
+data back;
+  set db.sorted;
+run;
+`
+	prog := parser.New(src).ParseProgram()
+	lib := table.NewLibrary()
+	var b strings.Builder
+	if err := RunProgram(prog, lib, log.New(&b)); err != nil {
+		t.Fatalf("RunProgram error: %v", err)
+	}
+
+	if _, ok := lib.Get("sorted"); ok {
+		t.Errorf("SORTED should live in the external library, not WORK")
+	}
+	back, ok := lib.Get("back")
+	if !ok {
+		t.Fatalf("BACK not built")
+	}
+	if back.NObs() != 3 {
+		t.Fatalf("back nobs = %d, want 3", back.NObs())
+	}
+	wantNames := []string{"Alice", "Bob", "Carol"} // sorted by id 1,2,3
+	for i, want := range wantNames {
+		if got := back.Get(back.Rows[i], "name").Str; got != want {
+			t.Errorf("row %d name = %q, want %q", i, got, want)
+		}
+	}
+	if out := b.String(); !strings.Contains(out, "DB.SORTED") {
+		t.Errorf("expected a NOTE for DB.SORTED; log:\n%s", out)
+	}
+}
+
+// TestProcSQLCreateTableToDB verifies PROC SQL `create table db.x as select ...`
+// materializes the result into an external LIBNAME engine rather than WORK.
+func TestProcSQLCreateTableToDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "sql.db")
+	src := `
+libname db sqlite "` + dbPath + `";
+
+data sales;
+  input region $ amt;
+  datalines;
+east 100
+west 200
+east 50
+;
+run;
+
+proc sql;
+  create table db.totals as
+    select region, sum(amt) as total
+    from sales
+    group by region
+    order by region;
+quit;
+
+data back;
+  set db.totals;
+run;
+`
+	prog := parser.New(src).ParseProgram()
+	lib := table.NewLibrary()
+	var b strings.Builder
+	if err := RunProgram(prog, lib, log.New(&b)); err != nil {
+		t.Fatalf("RunProgram error: %v", err)
+	}
+
+	if _, ok := lib.Get("totals"); ok {
+		t.Errorf("TOTALS should live in the external library, not WORK")
+	}
+	back, ok := lib.Get("back")
+	if !ok {
+		t.Fatalf("BACK not built")
+	}
+	if back.NObs() != 2 {
+		t.Fatalf("back nobs = %d, want 2 (one row per region)", back.NObs())
+	}
+	// Ordered by region: east (100+50=150), west (200).
+	if r := back.Get(back.Rows[0], "region").Str; r != "east" {
+		t.Errorf("row 0 region = %q, want east", r)
+	}
+	if v := back.Get(back.Rows[0], "total"); v.Num != 150 {
+		t.Errorf("east total = %v, want 150", v.Display())
+	}
+	if v := back.Get(back.Rows[1], "total"); v.Num != 200 {
+		t.Errorf("west total = %v, want 200", v.Display())
+	}
+	if out := b.String(); !strings.Contains(out, "DB.TOTALS") {
+		t.Errorf("expected a NOTE for DB.TOTALS; log:\n%s", out)
+	}
+}
+
 // TestDataStepWriteBackReadOnly verifies a clear error when a DATA step targets a
 // read-only library (a base/directory .sas7bdat libref does not implement write).
 func TestDataStepWriteBackReadOnly(t *testing.T) {

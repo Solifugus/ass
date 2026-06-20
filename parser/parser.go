@@ -143,6 +143,12 @@ func (p *Parser) parseProcStep() ast.Step {
 				ref := p.parseDatasetRef()
 				ps.Data = ref.Name
 				ps.DataOptions = ref.Options
+			} else if p.curIs(lexer.IDENT) {
+				// A possibly library-qualified value (e.g. out=db.sorted): keep the
+				// libref so PROC output can target an external library. Plain values
+				// (out=sorted) parse unchanged since the trailing `.name` is optional.
+				value := p.parseQualifiedName()
+				ps.Options = append(ps.Options, ast.ProcOption{Name: name, Value: value})
 			} else {
 				value := p.cur.Literal
 				p.next()

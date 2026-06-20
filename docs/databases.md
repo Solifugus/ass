@@ -77,8 +77,35 @@ Semantics:
   back to a calendar value. Missing values become SQL `NULL`.
 - **Read-only libraries** (a base/directory `.sas7bdat` libref) reject a write
   with a clear error.
-- Not yet: appending to an existing table (`mod`-style), `proc sort out=db.x` /
-  `proc sql create table db.x`, and per-column type overrides.
+- Not yet: appending to an existing table (`mod`-style) and per-column type
+  overrides.
+
+### PROC output to a database
+
+PROCs that produce a dataset can also target a database libref, with the same
+replace-in-one-transaction semantics as the DATA step:
+
+```sas
+libname db sqlite "/path/sales.db";
+
+proc sort data=work.orders out=db.sorted;   /* writes table SORTED to the DB */
+  by id;
+run;
+
+proc sql;                                    /* materializes TOTALS in the DB */
+  create table db.totals as
+    select region, sum(amount) as total
+    from work.orders
+    group by region;
+quit;
+```
+
+PROC SORT's `out=` and PROC SQL's `create table <libref>.<name> as …` both route
+through `table.Library.Store`, the single write-routing point (`StoreExternal` →
+`Backend.Store` for a database libref, the WORK store otherwise) shared with the
+DATA step. PROC SQL builds the result under a temporary in-engine name first
+(since a `libref.name` target can't be created directly in the embedded SQLite),
+then stores the materialized dataset to the bound engine.
 
 ## Type mapping (database → SAS)
 

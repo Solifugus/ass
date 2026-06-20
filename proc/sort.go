@@ -59,13 +59,21 @@ func (sortProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 		rows = dropDupKeys(src, rows, by)
 	}
 
+	// Destination: in place (DATA=) when no OUT=, otherwise the OUT= name. A
+	// libref-qualified OUT= (e.g. out=db.sorted) is written to that LIBNAME engine
+	// via lib.Store; everything else lands in WORK.
+	dest := step.Data
 	target := src
 	if out != "" {
+		dest = out
 		target = table.NewDataset("", datasetName(out))
 		target.Columns = src.Columns // share immutable column metadata
 	}
 	target.Rows = rows
-	lib.Put(target)
+	if err := lib.Store(dest, target); err != nil {
+		logger.Error("PROC SORT: %v", err)
+		return nil
+	}
 	logger.Note("The data set %s.%s has %d observations and %d variables.",
 		strings.ToUpper(target.Lib), strings.ToUpper(target.Name), target.NObs(), len(target.Columns))
 	return nil

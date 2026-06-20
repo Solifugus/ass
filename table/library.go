@@ -103,6 +103,26 @@ func (l *Library) StoreExternal(name string, ds *Dataset) (handled bool, err err
 	return true, wb.Store(ds)
 }
 
+// Store routes a dataset to the destination named by `name`: a libref-qualified
+// name bound to a writable Backend is written there (replace semantics, via
+// StoreExternal); anything else is stored in the WORK in-memory store under the
+// name's member component. On success ds.Lib/ds.Name reflect the resolved
+// destination so callers can log an accurate NOTE. It is the write counterpart of
+// Resolve and the single routing point PROCs (PROC SORT out=, PROC SQL create
+// table) and the DATA step share.
+func (l *Library) Store(name string, ds *Dataset) error {
+	handled, err := l.StoreExternal(name, ds)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+	ds.Name = datasetKey(name)
+	l.Put(ds)
+	return nil
+}
+
 // Get retrieves a dataset by name (case-insensitive). A name may be qualified
 // as "lib.name"; the library component is currently ignored (everything lives
 // in one in-memory library).
