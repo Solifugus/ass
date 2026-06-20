@@ -196,6 +196,9 @@ podman run -d --name oracle-free -p 1521:1521 -e ORACLE_PASSWORD=pass \
     docker.io/gvenzl/oracle-free:slim     # ready when the log says "DATABASE IS READY TO USE!"
 ```
 
+See [`oracle-test-sandbox.md`](oracle-test-sandbox.md) for a full cheat sheet on
+running and inspecting this sandbox.
+
 > **Oracle version note.** ASS's `Store` issues `DROP TABLE IF EXISTS` before
 > recreating a table; `IF EXISTS` on DDL is an **Oracle 23ai** feature (what the
 > `gvenzl/oracle-free` image runs). On older Oracle the replace path would need an
