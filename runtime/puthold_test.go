@@ -68,3 +68,33 @@ func TestPutNoTrailingAtUnchanged(t *testing.T) {
 		t.Errorf("output = %v, want %v", got, want)
 	}
 }
+
+// TestPutNamedOutput: `put id= name=;` renders each value as name=value.
+func TestPutNamedOutput(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/named.txt"
+	src := "data _null_;\n  input id name $;\n  file \"" + path + "\";\n" +
+		"  put id= name=;\n  datalines;\n1 Amy\n2 Bob\n;\nrun;"
+	runStep(t, src)
+	got := strings.Split(strings.TrimRight(readFile(t, path), "\n"), "\n")
+	want := []string{"id=1 name=Amy", "id=2 name=Bob"}
+	if !eqStr(got, want) {
+		t.Errorf("output = %v, want %v", got, want)
+	}
+}
+
+// TestPutAllVars: `put _all_;` writes every PDV variable (including the
+// automatic _n_/_error_) as name=value. We assert the user variables appear.
+func TestPutAllVars(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/all.txt"
+	src := "data _null_;\n  input id name $;\n  file \"" + path + "\";\n" +
+		"  put _all_;\n  datalines;\n7 Cy\n;\nrun;"
+	runStep(t, src)
+	got := readFile(t, path)
+	for _, want := range []string{"id=7", "name=Cy", "_n_=1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output %q missing %q", got, want)
+		}
+	}
+}

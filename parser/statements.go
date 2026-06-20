@@ -666,6 +666,22 @@ func parsePutItems(raw string) []ast.PutItem {
 		switch {
 		case tok == "$": // character marker in column output — kind is known at runtime
 			continue
+		case strings.EqualFold(tok, "_all_"): // _all_ pseudo-item: every PDV var as name=value
+			items = append(items, ast.PutItem{AllVars: true, At: pendAt, Plus: pendPlus, Line: pendLine})
+			pendAt, pendPlus, pendLine = 0, 0, 0
+			continue
+		case tok == "=": // spaced named-output marker: `x =`
+			for j := len(items) - 1; j >= 0; j-- {
+				if !items[j].IsLiteral {
+					items[j].Named = true
+					break
+				}
+			}
+			continue
+		case len(tok) > 1 && strings.HasSuffix(tok, "=") && !strings.ContainsAny(tok, "."): // attached named output `x=`
+			items = append(items, ast.PutItem{Var: strings.TrimSuffix(tok, "="), Named: true, At: pendAt, Plus: pendPlus, Line: pendLine})
+			pendAt, pendPlus, pendLine = 0, 0, 0
+			continue
 		case strings.HasPrefix(tok, "#") && isDigits(tok[1:]): // #n line pointer
 			pendLine, _ = strconv.Atoi(tok[1:])
 			continue

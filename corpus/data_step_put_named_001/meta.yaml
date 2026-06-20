@@ -1,0 +1,30 @@
+id: data_step_put_named_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - infile
+  - file-put
+  - set
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    back:
+      columns: [lbl, idval]
+      rows:
+        # `put id=;` wrote "id=1" / "id=2"; the =-delimited INFILE split each
+        # into label "id" and the numeric value.
+        - ["id", 1]
+        - ["id", 2]
+priority: 2
+notes: |
+  Value-verifies named PUT output (`put var=;`) by round-tripping through an
+  `=`-delimited flat file: `put id=;` renders "id=1"/"id=2", and the INFILE with
+  dlm='=' recovers lbl="id" and idval. `put _all_;` is also exercised (to the
+  log) to confirm the _all_ pseudo-item parses and executes; its multi-pair
+  output is covered by Go unit tests rather than value-checked here.

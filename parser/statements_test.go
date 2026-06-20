@@ -411,3 +411,28 @@ func TestParseFileAndPut(t *testing.T) {
 		t.Errorf("item 2 = %+v, want var age format dollar8.2", put.Items[2])
 	}
 }
+
+func TestParsePutNamedAndAll(t *testing.T) {
+	body := dataBody(t, "data _null_; put id= name= _all_; run;")
+	put := body[0].(*ast.PutStatement)
+	if len(put.Items) != 3 {
+		t.Fatalf("items = %d, want 3: %+v", len(put.Items), put.Items)
+	}
+	if !put.Items[0].Named || put.Items[0].Var != "id" {
+		t.Errorf("item0 = %+v, want Named id", put.Items[0])
+	}
+	if !put.Items[1].Named || put.Items[1].Var != "name" {
+		t.Errorf("item1 = %+v, want Named name", put.Items[1])
+	}
+	if !put.Items[2].AllVars {
+		t.Errorf("item2 = %+v, want AllVars", put.Items[2])
+	}
+}
+
+func TestParsePutNamedSpaced(t *testing.T) {
+	body := dataBody(t, "data _null_; put x =; run;")
+	put := body[0].(*ast.PutStatement)
+	if len(put.Items) != 1 || !put.Items[0].Named || put.Items[0].Var != "x" {
+		t.Fatalf("items = %+v, want one Named x", put.Items)
+	}
+}

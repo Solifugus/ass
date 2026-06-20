@@ -184,6 +184,11 @@ type PutItem struct {
 	At        int
 	Plus      int
 	Line      int
+	// Named renders the item as `name=value` (SAS named output, `put x=;`).
+	// AllVars is the `_all_` pseudo-item: every PDV variable written as
+	// `name=value`, expanded at render time.
+	Named   bool
+	AllVars bool
 }
 
 // PutStatement is `put <item>...;`, writing the items as one line to the current

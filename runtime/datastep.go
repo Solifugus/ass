@@ -1254,8 +1254,18 @@ func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
 	}
 	parts := make([]string, 0, len(st.Items))
 	for _, it := range st.Items {
+		if it.AllVars { // `_all_`: every PDV variable as name=value
+			for _, name := range d.pdv.Names() {
+				parts = append(parts, d.namedPart(name, "", dsd, sep))
+			}
+			continue
+		}
 		if it.IsLiteral {
 			parts = append(parts, it.Literal)
+			continue
+		}
+		if it.Named { // `x=` named output
+			parts = append(parts, d.namedPart(it.Var, it.Format, dsd, sep))
 			continue
 		}
 		format := it.Format
@@ -1269,6 +1279,19 @@ func (d *dataStep) buildPutLine(st *ast.PutStatement) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, sep)
+}
+
+// namedPart renders one named-output element as `name=value`, using the
+// variable's inline or associated format and DSD-quoting the value when needed.
+func (d *dataStep) namedPart(name, format string, dsd bool, sep string) string {
+	if format == "" {
+		format = d.formats[strings.ToLower(name)]
+	}
+	s := strings.TrimSpace(formats.Apply(d.pdv.Get(name), format))
+	if dsd {
+		s = flatfile.Quote(s, sep)
+	}
+	return name + "=" + s
 }
 
 // putColumnMode reports whether a PUT statement uses column/pointer output
