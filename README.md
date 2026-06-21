@@ -7,7 +7,13 @@
 
 ASS is an open-source, SAS-compatible data processing and analytics engine written in Go and driven from the command line. It aims for **behavioral compatibility** with a practical subset of SAS programs — the DATA step, PROC PRINT/SORT/SQL, formats, and macro basics — prioritizing real-world ETL and reporting over advanced statistics.
 
-Documentation lives in [`docs/`](docs/): [`design.md`](docs/design.md) (design rationale), [`PLAN.md`](docs/PLAN.md) (development log), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
+Documentation lives in [`docs/`](docs/). Start here:
+
+- [`tutorial.md`](docs/tutorial.md) — hands-on introduction, hello-world DATA step through SQL, macros, and files.
+- [`reference.md`](docs/reference.md) — the complete implemented language surface (statements, functions, formats, PROCs, CLI).
+- [`cookbook.md`](docs/cookbook.md) — task-oriented recipes (ETL, joins, reshaping, file round-trips, user formats, stats).
+
+Plus: [`design.md`](docs/design.md) (design rationale), [`PLAN.md`](docs/PLAN.md) (development log), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), [`databases.md`](docs/databases.md) (external-database LIBNAME engines), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
 
 ## Status
 
