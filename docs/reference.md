@@ -315,7 +315,9 @@ proc sql;
 quit;
 ```
 - `select`/`where`/`group by`/`having`/`order by`/joins; `create table ... as`.
-- Backed by embedded SQLite; ends with `quit;`.
+- Backed by embedded SQLite; ends with `quit;`. Requires a **CGo build**
+  (`CGO_ENABLED=1`); in a pure-Go build PROC SQL is compiled out and reports a
+  clear "requires a CGo build" message. See the README's build matrix.
 - Sources may be WORK datasets or a database libref; `create table` may target a
   database libref.
 - **Pass-through:** `select ... from connection to LIB (native-sql)` runs SQL on
