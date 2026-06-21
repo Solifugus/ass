@@ -16,8 +16,11 @@ func petsDS() *table.Dataset {
 	return ds
 }
 
+// dispFmt is the default (no user format) category formatter for FREQ tests.
+func dispFmt(v table.Value) string { return v.Display() }
+
 func TestFreqOneWay(t *testing.T) {
-	res := buildFreqResult(petsDS(), "kind")
+	res := buildFreqResult(petsDS(), "kind", dispFmt, false)
 	if res.NObs() != 3 { // cat, dog, fish
 		t.Fatalf("NObs = %d, want 3", res.NObs())
 	}
@@ -44,7 +47,7 @@ func TestFreqExcludesMissing(t *testing.T) {
 	ds.AppendRow(table.Row{"x": table.Char("a")})
 	ds.AppendRow(table.Row{"x": table.MissingChar()})
 	ds.AppendRow(table.Row{"x": table.Char("a")})
-	res := buildFreqResult(ds, "x")
+	res := buildFreqResult(ds, "x", dispFmt, false)
 	if res.NObs() != 1 {
 		t.Fatalf("NObs = %d, want 1 (missing excluded)", res.NObs())
 	}
@@ -68,7 +71,7 @@ func salesDS() *table.Dataset {
 }
 
 func TestFreqTwoWayCrossTab(t *testing.T) {
-	out := renderCrossTab(salesDS(), "region", "product")
+	out := renderCrossTab(salesDS(), "region", "product", dispFmt, dispFmt)
 	// Header and structure.
 	for _, want := range []string{
 		"Table of region by product",
@@ -93,3 +96,38 @@ func TestFreqTwoWayCrossTab(t *testing.T) {
 }
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+// TestFreqUserFormatGrouping verifies FREQ groups by the formatted category when
+// a user VALUE format applies: low-29 -> "Young", 30-high -> "Older".
+func TestFreqUserFormatGrouping(t *testing.T) {
+	cat := table.NewFormatCatalog()
+	cat.Define(&table.ValueFormat{
+		Name: "agegrp",
+		Ranges: []table.FormatRange{
+			{NoLow: true, High: table.Num(29), Label: "Young"},
+			{Low: table.Num(30), NoHigh: true, Label: "Older"},
+		},
+	})
+	ds := table.NewDataset("", "people")
+	ds.AddColumn(table.Column{Name: "age", Kind: table.Numeric, Format: "agegrp."})
+	for _, a := range []float64{22, 25, 40, 55, 33} {
+		ds.AppendRow(table.Row{"age": table.Num(a)})
+	}
+	fmtFn := freqFormatter(ds, cat, map[string]string{}, "age")
+	res := buildFreqResult(ds, "age", fmtFn, true)
+	if res.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (Young, Older)", res.NObs())
+	}
+	if got := res.Get(res.Rows[0], "age").Str; got != "Young" {
+		t.Errorf("cat0 = %q, want Young", got)
+	}
+	if got := res.Get(res.Rows[0], "Frequency").Num; got != 2 {
+		t.Errorf("Young freq = %v, want 2", got)
+	}
+	if got := res.Get(res.Rows[1], "age").Str; got != "Older" {
+		t.Errorf("cat1 = %q, want Older", got)
+	}
+	if got := res.Get(res.Rows[1], "Frequency").Num; got != 3 {
+		t.Errorf("Older freq = %v, want 3", got)
+	}
+}

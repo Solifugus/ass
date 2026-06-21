@@ -1,0 +1,19 @@
+id: proc_freq_format_001
+source: hand-written
+license: MIT
+features:
+  - proc-freq
+  - proc-format
+  - user-formats
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC FREQ grouping by a user VALUE format. The format agegrp. maps low-29 to
+  "Young" and 30-high to "Older"; FREQ groups observations by the formatted
+  category, so the one-way table shows Young (2: ages 22,25) and Older (3: ages
+  40,55,33) rather than five distinct ages. FREQ prints to the listing (no output
+  dataset), so this item is parse/execute-verified; the grouping values are
+  asserted by the Go unit test TestFreqUserFormatGrouping.

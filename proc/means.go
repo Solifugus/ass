@@ -30,6 +30,7 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 
 	var analysisVars, classVars []string
+	procFormats := map[string]string{}
 	for _, s := range step.Body {
 		switch st := s.(type) {
 		case *ast.VarStatement:
@@ -38,26 +39,43 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 			classVars = append(classVars, st.Vars...)
 		case *ast.ByStatement:
 			classVars = append(classVars, st.Vars...)
+		case *ast.FormatStatement:
+			for k, v := range st.Formats {
+				procFormats[strings.ToLower(k)] = v
+			}
 		}
 	}
 	if len(analysisVars) == 0 {
 		analysisVars = numericColumns(src)
 	}
 
-	result := buildMeansResult(src, analysisVars, classVars)
+	result := buildMeansResult(src, analysisVars, classVars, lib.Formats, procFormats)
 	fmt.Print(renderListing(result, printOptions{}))
 	return nil
 }
 
-// buildMeansResult computes the statistics table.
-func buildMeansResult(src *table.Dataset, analysisVars, classVars []string) *table.Dataset {
+// buildMeansResult computes the statistics table. CLASS variables are grouped
+// (and displayed) by their user/built-in formatted value when a format applies,
+// matching SAS — so a user VALUE format collapses underlying values into one
+// class level.
+func buildMeansResult(src *table.Dataset, analysisVars, classVars []string, cat *table.FormatCatalog, procFormats map[string]string) *table.Dataset {
+	fmts := make([]func(table.Value) string, len(classVars))
+	formatted := make([]bool, len(classVars))
+	for i, cv := range classVars {
+		fmts[i] = freqFormatter(src, cat, procFormats, cv)
+		formatted[i] = varFormatSpec(src, procFormats, cv) != ""
+	}
+
 	out := table.NewDataset("", "_means_")
-	for _, cv := range classVars {
+	for i, cv := range classVars {
 		kind := table.Numeric
 		for _, c := range src.Columns {
 			if strings.EqualFold(c.Name, cv) {
 				kind = c.Kind
 			}
+		}
+		if formatted[i] {
+			kind = table.Character
 		}
 		out.AddColumn(table.Column{Name: cv, Kind: kind})
 	}
@@ -68,14 +86,18 @@ func buildMeansResult(src *table.Dataset, analysisVars, classVars []string) *tab
 	out.AddColumn(table.Column{Name: "Min", Kind: table.Numeric})
 	out.AddColumn(table.Column{Name: "Max", Kind: table.Numeric})
 
-	groups, order := groupRows(src, classVars)
+	groups, order := groupRows(src, classVars, fmts)
 	for _, key := range order {
 		rows := groups[key]
 		for _, v := range analysisVars {
 			st := computeStats(src, rows, v)
 			row := table.Row{}
-			for _, cv := range classVars {
-				row[strings.ToLower(cv)] = src.Get(rows[0], cv)
+			for i, cv := range classVars {
+				if formatted[i] {
+					row[strings.ToLower(cv)] = table.Char(fmts[i](src.Get(rows[0], cv)))
+				} else {
+					row[strings.ToLower(cv)] = src.Get(rows[0], cv)
+				}
 			}
 			row["variable"] = table.Char(v)
 			row["n"] = table.Num(float64(st.n))
@@ -153,7 +175,7 @@ func (s stats) maxVal() table.Value {
 // groupRows groups a dataset's rows by the class variables, returning the groups
 // and the keys in sorted order. With no class variables, a single group keyed ""
 // holds every row.
-func groupRows(ds *table.Dataset, classVars []string) (map[string][]table.Row, []string) {
+func groupRows(ds *table.Dataset, classVars []string, fmts []func(table.Value) string) (map[string][]table.Row, []string) {
 	groups := map[string][]table.Row{}
 	var order []string
 	for _, r := range ds.Rows {
@@ -161,7 +183,11 @@ func groupRows(ds *table.Dataset, classVars []string) (map[string][]table.Row, [
 		if len(classVars) > 0 {
 			parts := make([]string, len(classVars))
 			for i, c := range classVars {
-				parts[i] = ds.Get(r, c).Display()
+				if fmts != nil && fmts[i] != nil {
+					parts[i] = fmts[i](ds.Get(r, c))
+				} else {
+					parts[i] = ds.Get(r, c).Display()
+				}
 			}
 			key = strings.Join(parts, "\x00")
 		}

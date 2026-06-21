@@ -24,6 +24,7 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 	}
 
 	var requests [][]string
+	procFormats := map[string]string{}
 	for _, s := range step.Body {
 		switch st := s.(type) {
 		case *ast.TablesStatement:
@@ -32,6 +33,10 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			for _, v := range st.Vars {
 				requests = append(requests, []string{v})
 			}
+		case *ast.FormatStatement:
+			for k, v := range st.Formats {
+				procFormats[strings.ToLower(k)] = v
+			}
 		}
 	}
 	if len(requests) == 0 {
@@ -39,40 +44,86 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 		return nil
 	}
 
+	fmtFor := func(v string) func(table.Value) string {
+		return freqFormatter(src, lib.Formats, procFormats, v)
+	}
+
 	for _, req := range requests {
 		switch len(req) {
 		case 0:
 			continue
 		case 1:
-			fmt.Print(renderListing(buildFreqResult(src, req[0]), printOptions{}))
+			fmtted := varFormatSpec(src, procFormats, req[0]) != ""
+			fmt.Print(renderListing(buildFreqResult(src, req[0], fmtFor(req[0]), fmtted), printOptions{}))
 			fmt.Println()
 		default:
 			// Two (or more) variables: cross-tabulate the first two.
-			fmt.Print(renderCrossTab(src, req[0], req[1]))
+			fmt.Print(renderCrossTab(src, req[0], req[1], fmtFor(req[0]), fmtFor(req[1])))
 			fmt.Println()
 		}
 	}
 	return nil
 }
 
-// sortedDistinct returns the non-missing distinct values of variable v in src,
-// in SAS sort order (ascending by Value.Compare).
-func sortedDistinct(src *table.Dataset, v string) []table.Value {
-	seen := map[string]bool{}
-	var vals []table.Value
+// varFormatSpec returns the effective format spec for variable v: a FORMAT
+// statement in the PROC takes precedence over the column's stored format.
+func varFormatSpec(src *table.Dataset, procFormats map[string]string, v string) string {
+	if f, ok := procFormats[strings.ToLower(v)]; ok {
+		return f
+	}
+	for _, c := range src.Columns {
+		if strings.EqualFold(c.Name, v) {
+			return c.Format
+		}
+	}
+	return ""
+}
+
+// freqFormatter returns a function that maps a value of variable v to the label
+// FREQ groups and displays it under: the variable's user/built-in format if one
+// applies, else Value.Display(). User VALUE formats (from PROC FORMAT) let FREQ
+// collapse several underlying values into one formatted category, matching SAS.
+func freqFormatter(src *table.Dataset, cat *table.FormatCatalog, procFormats map[string]string, v string) func(table.Value) string {
+	spec := varFormatSpec(src, procFormats, v)
+	return func(val table.Value) string {
+		if spec == "" {
+			return val.Display()
+		}
+		return applyFmt(cat, val, spec)
+	}
+}
+
+// sortedDistinct returns the non-missing distinct formatted categories of
+// variable v in src, in SAS sort order. Grouping is by the formatted label
+// (fmtFn), so a user format collapses underlying values into one category; the
+// returned label/min-value pairs order by the smallest underlying value.
+func sortedDistinct(src *table.Dataset, v string, fmtFn func(table.Value) string) []freqCat {
+	idx := map[string]int{}
+	var cats []freqCat
 	for _, r := range src.Rows {
 		val := src.Get(r, v)
 		if val.IsMissing() {
 			continue
 		}
-		k := val.Display()
-		if !seen[k] {
-			seen[k] = true
-			vals = append(vals, val)
+		k := fmtFn(val)
+		if i, ok := idx[k]; ok {
+			if val.Compare(cats[i].min) < 0 {
+				cats[i].min = val
+			}
+			continue
 		}
+		idx[k] = len(cats)
+		cats = append(cats, freqCat{label: k, min: val})
 	}
-	sort.Slice(vals, func(i, j int) bool { return vals[i].Compare(vals[j]) < 0 })
-	return vals
+	sort.Slice(cats, func(i, j int) bool { return cats[i].min.Compare(cats[j].min) < 0 })
+	return cats
+}
+
+// freqCat is a distinct FREQ category: the formatted label and the smallest
+// underlying value mapped to it (used for ordering).
+type freqCat struct {
+	label string
+	min   table.Value
 }
 
 // renderCrossTab renders a SAS-style two-way frequency cross-tabulation of
@@ -80,9 +131,9 @@ func sortedDistinct(src *table.Dataset, v string) []table.Value {
 // total), Row Pct, and Col Pct; the right and bottom margins carry row/column
 // totals (Frequency and Percent). Missing values in either variable are
 // excluded.
-func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
-	rowVals := sortedDistinct(src, rowVar)
-	colVals := sortedDistinct(src, colVar)
+func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) string {
+	rowVals := sortedDistinct(src, rowVar, rowFmt)
+	colVals := sortedDistinct(src, colVar, colFmt)
 
 	count := map[string]map[string]int{}
 	rowTot := map[string]int{}
@@ -93,7 +144,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 		if rv.IsMissing() || cv.IsMissing() {
 			continue
 		}
-		rk, ck := rv.Display(), cv.Display()
+		rk, ck := rowFmt(rv), colFmt(cv)
 		if count[rk] == nil {
 			count[rk] = map[string]int{}
 		}
@@ -114,7 +165,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 	// labels and the row-variable values.
 	headers := make([]string, 0, len(colVals)+1)
 	for _, cv := range colVals {
-		headers = append(headers, cv.Display())
+		headers = append(headers, cv.label)
 	}
 	headers = append(headers, "Total")
 
@@ -126,7 +177,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 		}
 	}
 	for _, rv := range rowVals {
-		if w := len(rv.Display()); w > stubW {
+		if w := len(rv.label); w > stubW {
 			stubW = w
 		}
 	}
@@ -145,9 +196,9 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 		}
 	}
 	for _, rv := range rowVals {
-		rk := rv.Display()
+		rk := rv.label
 		for j, cv := range colVals {
-			ck := cv.Display()
+			ck := cv.label
 			n := count[rk][ck]
 			widen(j, fmt.Sprintf("%d", n))
 			widen(j, pct(n, grand))
@@ -159,7 +210,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 		widen(last, pct(rowTot[rk], grand))
 	}
 	for j, cv := range colVals {
-		ck := cv.Display()
+		ck := cv.label
 		widen(j, fmt.Sprintf("%d", colTot[ck]))
 		widen(j, pct(colTot[ck], grand))
 	}
@@ -189,10 +240,10 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 	// Body: one band of four lines per row value (freq, pct, row pct, col pct),
 	// with the row value labeling the first line and the rest left blank.
 	for _, rv := range rowVals {
-		rk := rv.Display()
+		rk := rv.label
 		var fr, pc, rp, cp []string
 		for _, cv := range colVals {
-			ck := cv.Display()
+			ck := cv.label
 			n := count[rk][ck]
 			fr = append(fr, fmt.Sprintf("%d", n))
 			pc = append(pc, pct(n, grand))
@@ -215,7 +266,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 	// Bottom margin: column totals and the grand total.
 	var ct, cpc []string
 	for _, cv := range colVals {
-		ck := cv.Display()
+		ck := cv.label
 		ct = append(ct, fmt.Sprintf("%d", colTot[ck]))
 		cpc = append(cpc, pct(colTot[ck], grand))
 	}
@@ -228,7 +279,11 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string) string {
 }
 
 // buildFreqResult builds the one-way frequency table for a single variable.
-func buildFreqResult(src *table.Dataset, v string) *table.Dataset {
+// Categories are grouped by the formatted label (fmtFn); when formatted is true
+// (a user/built-in format applies) the category column holds the character label
+// and several underlying values may collapse into one category, otherwise it
+// holds the underlying value as before.
+func buildFreqResult(src *table.Dataset, v string, fmtFn func(table.Value) string, formatted bool) *table.Dataset {
 	kind := table.Character
 	for _, c := range src.Columns {
 		if strings.EqualFold(c.Name, v) {
@@ -237,16 +292,18 @@ func buildFreqResult(src *table.Dataset, v string) *table.Dataset {
 	}
 
 	counts := map[string]int{}
-	values := map[string]table.Value{}
+	minVal := map[string]table.Value{} // smallest underlying value per label (ordering)
 	total := 0
 	for _, r := range src.Rows {
 		val := src.Get(r, v)
 		if val.IsMissing() {
 			continue // SAS excludes missing from one-way tables by default
 		}
-		key := val.Display()
+		key := fmtFn(val)
 		if _, seen := counts[key]; !seen {
-			values[key] = val
+			minVal[key] = val
+		} else if val.Compare(minVal[key]) < 0 {
+			minVal[key] = val
 		}
 		counts[key]++
 		total++
@@ -256,10 +313,14 @@ func buildFreqResult(src *table.Dataset, v string) *table.Dataset {
 	for k := range counts {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return values[keys[i]].Compare(values[keys[j]]) < 0 })
+	sort.Slice(keys, func(i, j int) bool { return minVal[keys[i]].Compare(minVal[keys[j]]) < 0 })
 
+	catKind := kind
+	if formatted {
+		catKind = table.Character
+	}
 	out := table.NewDataset("", "_freq_")
-	out.AddColumn(table.Column{Name: v, Kind: kind})
+	out.AddColumn(table.Column{Name: v, Kind: catKind})
 	out.AddColumn(table.Column{Name: "Frequency", Kind: table.Numeric})
 	out.AddColumn(table.Column{Name: "Percent", Kind: table.Numeric, Format: "5.1"})
 	out.AddColumn(table.Column{Name: "CumFreq", Kind: table.Numeric})
@@ -268,8 +329,12 @@ func buildFreqResult(src *table.Dataset, v string) *table.Dataset {
 	cum := 0
 	for _, k := range keys {
 		cum += counts[k]
+		cat := minVal[k]
+		if formatted {
+			cat = table.Char(k)
+		}
 		row := table.Row{
-			strings.ToLower(v): values[k],
+			strings.ToLower(v): cat,
 			"frequency":        table.Num(float64(counts[k])),
 			"percent":          pctVal(counts[k], total),
 			"cumfreq":          table.Num(float64(cum)),

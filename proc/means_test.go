@@ -20,7 +20,7 @@ func scoresDS() *table.Dataset {
 }
 
 func TestMeansNoClass(t *testing.T) {
-	res := buildMeansResult(scoresDS(), []string{"score"}, nil)
+	res := buildMeansResult(scoresDS(), []string{"score"}, nil, nil, nil)
 	if res.NObs() != 1 {
 		t.Fatalf("NObs = %d, want 1", res.NObs())
 	}
@@ -40,7 +40,7 @@ func TestMeansNoClass(t *testing.T) {
 }
 
 func TestMeansWithClass(t *testing.T) {
-	res := buildMeansResult(scoresDS(), []string{"score"}, []string{"grp"})
+	res := buildMeansResult(scoresDS(), []string{"score"}, []string{"grp"}, nil, nil)
 	if res.NObs() != 2 {
 		t.Fatalf("NObs = %d, want 2 (one per group)", res.NObs())
 	}
@@ -66,5 +66,43 @@ func TestStatsStdDevSingleValueMissing(t *testing.T) {
 	s := computeStats(ds, ds.Rows, "x")
 	if !s.stdVal().IsMissing() {
 		t.Errorf("StdDev of single value should be missing, got %v", s.stdVal().Display())
+	}
+}
+
+// TestMeansUserFormatClass verifies CLASS grouping by a user VALUE format:
+// ages <30 -> "Young" (n=2), >=30 -> "Older" (n=3).
+func TestMeansUserFormatClass(t *testing.T) {
+	cat := table.NewFormatCatalog()
+	cat.Define(&table.ValueFormat{
+		Name: "agegrp",
+		Ranges: []table.FormatRange{
+			{NoLow: true, High: table.Num(29), Label: "Young"},
+			{Low: table.Num(30), NoHigh: true, Label: "Older"},
+		},
+	})
+	ds := table.NewDataset("", "people")
+	ds.AddColumn(table.Column{Name: "age", Kind: table.Numeric, Format: "agegrp."})
+	ds.AddColumn(table.Column{Name: "score", Kind: table.Numeric})
+	add := func(a, s float64) { ds.AppendRow(table.Row{"age": table.Num(a), "score": table.Num(s)}) }
+	add(22, 80)
+	add(25, 90)
+	add(40, 70)
+	add(55, 60)
+	add(33, 100)
+	res := buildMeansResult(ds, []string{"score"}, []string{"age"}, cat, map[string]string{})
+	if res.NObs() != 2 {
+		t.Fatalf("NObs = %d, want 2 (Young, Older)", res.NObs())
+	}
+	if got := res.Get(res.Rows[0], "age").Str; got != "Young" {
+		t.Errorf("group0 = %q, want Young", got)
+	}
+	if got := res.Get(res.Rows[0], "N").Num; got != 2 {
+		t.Errorf("Young N = %v, want 2", got)
+	}
+	if got := res.Get(res.Rows[1], "age").Str; got != "Older" {
+		t.Errorf("group1 = %q, want Older", got)
+	}
+	if got := res.Get(res.Rows[1], "N").Num; got != 3 {
+		t.Errorf("Older N = %v, want 3", got)
 	}
 }

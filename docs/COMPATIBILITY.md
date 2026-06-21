@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; #n + trailing hold).
+Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; user formats in FREQ/MEANS).
 Each percentage is the share of corpus items tagged with a feature that pass
 (parse + execute as the item's `meta.yaml` expects). Regenerate with:
 
@@ -30,10 +30,10 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 54 |
-| Parsed | 54 (100.0%) |
-| Executed | 54 (100.0%) |
-| Passed | 54 (100.0%) |
+| Items | 55 |
+| Parsed | 55 (100.0%) |
+| Executed | 55 (100.0%) |
+| Passed | 55 (100.0%) |
 | Value-verified | 28 items assert dataset values; all match |
 
 ## Per-feature
@@ -66,7 +66,7 @@ passing cosmetic check.
 | merge | 1/1 | 100.0% |
 | proc-append | 1/1 | 100.0% |
 | proc-export | 1/1 | 100.0% |
-| proc-freq | 2/2 | 100.0% |
+| proc-freq | 3/3 | 100.0% |
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
@@ -85,7 +85,7 @@ passing cosmetic check.
 | sql-passthrough | 1/1 | 100.0% |
 | sql-select | 4/4 | 100.0% |
 | sum-statement | 2/2 | 100.0% |
-| user-formats | 1/1 | 100.0% |
+| user-formats | 2/2 | 100.0% |
 | where | 4/4 | 100.0% |
 
 > 100% means every corpus item *currently authored* for a feature passes — it is
@@ -97,7 +97,7 @@ passing cosmetic check.
 ## Known unsupported / deferred constructs
 
 - PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
-- `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT (not yet in MEANS/FREQ/SQL output)
+- `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT and used for **grouping in PROC FREQ and PROC MEANS/SUMMARY** (a user VALUE format collapses underlying values into one formatted category/class level, matching SAS). Not yet: user formats on PROC SQL output columns
 - The `label <var>="text";` statement is supported in the DATA step and in PROC steps (e.g. PROC PRINT). DATA-step labels become permanent column metadata and are inherited through SET/MERGE (an explicit `label` in a later step overrides); `proc print ... label` renders labels as column headers, and a `label` statement inside the step overrides the stored label for that listing. `label` is correctly disambiguated as a variable name when used as `label = expr` (it is not a reserved word). Not yet: SAS's multi-line header wrapping of long labels (ASS prints each label on one header line — a presentation detail, not a value difference).
 - **Time/datetime informats and `'..'t`/`'..'dt` literals are supported**: `'14:30:00't` is a SAS time (seconds since midnight), `'01JAN2020:14:30:00'dt` a SAS datetime (seconds since 1960-01-01 00:00:00); the `TIMEw.`/`DATETIMEw.` informats read those forms and the matching output formats render them. Multi-line **`#n` line pointers** are supported on both INPUT and PUT (`input #1 a #2 b;` reads one observation across physical lines; `put #1 a #2 b;` writes one observation as several lines); column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; **trailing `@`/`@@` line-hold on INPUT and PUT is supported** — on INPUT `@@` reads several observations from one line across iterations and `@` holds the line within the iteration; on PUT the same modifiers hold the output line so several PUTs (or observations) build one physical line; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported. **Combining `#n` with a trailing `@`/`@@` hold is supported** — `input a #2 b @@;` holds the multi-line record group across iterations with a separate column cursor per line, reading several observations from one group (semantics hand-derived from documented SAS pointer behavior)
 - Options on PROC `out=`. Supported dataset options on SET/MERGE/DATA/PROC `data=`: `keep=`/`drop=`/`rename=`/`where=` and **`firstobs=`/`obs=`** (positional observation range — `firstobs=` first observation, `obs=` last-observation number, applied before WHERE). **Numbered var-list ranges** (`keep=x1-x5`, `keep x1-x5;`, `drop=x2-x3`) expand to the enumerated names in both the dataset-option and statement forms, zero-padded to the low endpoint's digit width
