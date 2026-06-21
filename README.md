@@ -11,7 +11,7 @@ Documentation lives in [`docs/`](docs/): [`design.md`](docs/design.md) (design r
 
 ## Status
 
-Working engine. The lexer → macro → parser → runtime pipeline runs real SAS programs end to end; the bundled compatibility corpus passes **100%** (see `ass test`). Built one tested, corpus-backed feature at a time along the compatibility levels in the design doc — through the advanced DATA step (informats, dataset options, merge/BY-groups, arrays, retain), PROC PRINT/SORT/SQL/MEANS/FREQ (one- and two-way)/REG/GLM (incl. CLASS)/FORMAT, and macro basics. Compatibility is measured at the level of **values/results**, not byte-identical SAS presentation — see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+Working engine. The lexer → macro → parser → runtime pipeline runs real SAS programs end to end; the bundled compatibility corpus passes **100%** (see `ass test`). Built one tested, corpus-backed feature at a time along the compatibility levels in the design doc — through the advanced DATA step (informats, dataset options, merge/BY-groups, arrays, retain), PROC PRINT/SORT/SQL/MEANS/FREQ (one-/two-way + n-way list, chi-square)/REG/GLM (incl. CLASS)/FORMAT (VALUE + INVALUE), and macro basics. Compatibility is measured at the level of **values/results**, not byte-identical SAS presentation — see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 ## Building
 
@@ -71,11 +71,11 @@ Obs  name  age
 
 | Area | Highlights |
 |------|------------|
-| DATA step | `input`/`datalines` (incl. trailing `@`/`@@` line-hold), `infile` (external flat files), `file`/`put` (write flat files), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `label`, `output`, `data _null_` |
+| DATA step | `input`/`datalines` (incl. trailing `@`/`@@` line-hold), `infile` (external flat files), `file`/`put` (write flat files, incl. trailing `@`/`@@` output hold, `put _all_`, named `var=` output), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `label`, `output`, `data _null_` |
 | Flat-file input | `infile "path"` with `dlm=`/`delimiter=`, `dsd` (CSV: quoted fields, embedded delimiters, missing), `firstobs=`, `obs=`; list, column (`1-10`), formatted, `@n`/`+n` pointer, and `#n` multi-line input |
-| Flat-file output | `file "path"` with `dlm=`/`dsd` (CSV: quotes values containing the delimiter); `put` of variables, string literals, formatted values, column/pointer placement (`name $ 1-10`, `@n`/`+n`), and `#n` multi-line output |
-| PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files: `dbms=csv/tab/dlm`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row |
-| Dataset options | `(keep= drop= rename=(o=n) where=(...))` on `set`/`merge`/`data`/proc `data=` |
+| Flat-file output | `file "path"` with `dlm=`/`dsd` (CSV: quotes values containing the delimiter); `put` of variables, string literals, formatted values, column/pointer placement (`name $ 1-10`, `@n`/`+n`), `#n` multi-line output, trailing `@`/`@@` output hold, `put _all_`, and named `var=` output |
+| PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files **and `.xlsx` workbooks**: `dbms=csv/tab/dlm/xlsx`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row (the `.xlsx` reader/writer is dependency-free) |
+| Dataset options | `(keep= drop= rename=(o=n) where=(...) firstobs= obs=)` on `set`/`merge`/`data`/proc `data=`; numbered var-list ranges (`keep=x1-x5`) |
 | Native SAS datasets | `libname lib "/dir";` then read `lib.member` from `member.sas7bdat` — clean-room `.sas7bdat` reader (32/64-bit little-endian; RLE/RDC row compression and uncompressed; numeric, character, dates, formats, labels) |
 | Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset and write it back with `data pg.out; set …;`, `proc sort out=pg.x`, `proc sql; create table pg.x as …;`, or `proc append base=pg.x data=…;` (in-place INSERT) — Postgres, SQL Server, Oracle, SQLite, and DB2 (DB2 via `-tags db2`); see [`docs/databases.md`](docs/databases.md) |
 | Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
@@ -83,10 +83,10 @@ Obs  name  age
 | PROC SORT | `by` (+ `descending`), `out=` (incl. a database libref), `nodupkey` |
 | PROC APPEND | `base=`/`data=` (+ `force`): append observations to a base data set, created if absent; BASE= or DATA= may be a database libref (in-place INSERT) |
 | PROC SQL | `select`/`where`/`order by`/joins/`group by`, `create table as` (WORK or a database libref; via embedded SQLite) |
-| PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max with `class`/`by` |
-| PROC FREQ | one-way frequency tables and two-way cross-tabulation (`tables a*b`) |
+| PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max with `class`/`by` (CLASS groups by user formats) |
+| PROC FREQ | one-way frequency tables, two-way cross-tabulation (`tables a*b`), n-way list tables (`/ list`), `/ options` (nocol/norow/nopercent/nofreq/nocum), and `/ chisq` (Pearson chi-square); groups by user formats |
 | PROC REG/GLM | OLS linear regression: estimates, std err, t-value, `Pr>|t|`, R²; CLASS categorical predictors (reference-cell coding) |
-| PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT |
+| PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT and for grouping in PROC FREQ/MEANS; `invalue` user informats read by INPUT |
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), `time`/`datetime`, date/time/datetime literals `'01JAN2020'd`/`'14:30:00't`/`'01JAN2020:14:30:00'dt` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `time`/`datetime`, `$w.` |
