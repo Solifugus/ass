@@ -2,6 +2,7 @@ package corpus
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -310,9 +311,9 @@ func (rep Report) Summary() (total, parsed, executed, passed int) {
 
 // FeatureStats returns per-feature pass/total counts, sorted by feature name.
 type FeatureStat struct {
-	Feature string
-	Pass    int
-	Total   int
+	Feature string `json:"feature"`
+	Pass    int    `json:"pass"`
+	Total   int    `json:"total"`
 }
 
 func (rep Report) FeatureStats() []FeatureStat {
@@ -375,4 +376,77 @@ func pct(n, d int) float64 {
 		return 0
 	}
 	return 100 * float64(n) / float64(d)
+}
+
+// jsonReport is the machine-readable shape of a corpus run.
+type jsonReport struct {
+	Summary  jsonSummary   `json:"summary"`
+	Features []FeatureStat `json:"features"`
+	Items    []jsonItem    `json:"items"`
+}
+
+type jsonSummary struct {
+	Total         int `json:"total"`
+	Parsed        int `json:"parsed"`
+	Executed      int `json:"executed"`
+	Passed        int `json:"passed"`
+	ValueChecked  int `json:"value_checked"`
+	ValueVerified int `json:"value_verified"`
+}
+
+type jsonItem struct {
+	ID            string   `json:"id"`
+	Pass          bool     `json:"pass"`
+	ParsePass     bool     `json:"parse_pass"`
+	Executed      bool     `json:"executed"`
+	ExecPass      bool     `json:"exec_pass"`
+	Skipped       bool     `json:"skipped"`
+	OutputChecked bool     `json:"output_checked"`
+	OutputPass    bool     `json:"output_pass"`
+	ValueChecked  bool     `json:"value_checked"`
+	ValuePass     bool     `json:"value_pass"`
+	Features      []string `json:"features,omitempty"`
+	Detail        string   `json:"detail,omitempty"`
+}
+
+// WriteJSON writes the report as machine-readable JSON (a stable schema for CI
+// and tooling): an overall summary, per-feature pass/total counts, and a
+// per-item record. The same data the text report shows, without presentation.
+func (rep Report) WriteJSON(w io.Writer) error {
+	total, parsed, executed, passed := rep.Summary()
+	valChecked, valPass := 0, 0
+	for _, r := range rep.Results {
+		if r.ValChecked {
+			valChecked++
+			if r.ValPass {
+				valPass++
+			}
+		}
+	}
+	out := jsonReport{
+		Summary: jsonSummary{
+			Total: total, Parsed: parsed, Executed: executed, Passed: passed,
+			ValueChecked: valChecked, ValueVerified: valPass,
+		},
+		Features: rep.FeatureStats(),
+	}
+	for _, r := range rep.Results {
+		out.Items = append(out.Items, jsonItem{
+			ID:            r.Item.ID,
+			Pass:          r.Pass(),
+			ParsePass:     r.ParsePass,
+			Executed:      r.Executed,
+			ExecPass:      r.ExecPass,
+			Skipped:       r.Skipped,
+			OutputChecked: r.OutChecked,
+			OutputPass:    r.OutPass,
+			ValueChecked:  r.ValChecked,
+			ValuePass:     r.ValPass,
+			Features:      r.Item.Features,
+			Detail:        r.Detail,
+		})
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }

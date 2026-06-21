@@ -132,10 +132,12 @@ func dumpTokens(path string) error {
 //
 //	--parse-only        only check parsing
 //	--feature <tag>     only run items tagged <tag>
+//	--json              emit a machine-readable JSON report
 //	-v / --verbose      show failure detail
 func runTest(args []string) error {
 	var opts corpus.Options
 	verbose := false
+	jsonOut := false
 	dir := "corpus"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -143,6 +145,8 @@ func runTest(args []string) error {
 			opts.ParseOnly = true
 		case "-v", "--verbose":
 			verbose = true
+		case "--json":
+			jsonOut = true
 		case "--feature":
 			if i+1 >= len(args) {
 				return fmt.Errorf("test: --feature requires a tag")
@@ -163,7 +167,13 @@ func runTest(args []string) error {
 	}
 
 	rep := corpus.Run(items, opts)
-	rep.WriteReport(os.Stdout, verbose)
+	if jsonOut {
+		if err := rep.WriteJSON(os.Stdout); err != nil {
+			return err
+		}
+	} else {
+		rep.WriteReport(os.Stdout, verbose)
+	}
 
 	// CI-friendly: non-zero exit when any item fails.
 	for _, r := range rep.Results {

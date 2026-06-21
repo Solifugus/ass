@@ -1,6 +1,10 @@
 package corpus
 
-import "testing"
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+)
 
 // The tests load the real corpus items in this directory (".").
 
@@ -112,5 +116,33 @@ func TestValueVerificationCatchesMismatch(t *testing.T) {
 	r = runItem(missing, Options{})
 	if r.ValPass {
 		t.Errorf("missing dataset should fail; detail=%q", r.Detail)
+	}
+}
+
+func TestWriteJSON(t *testing.T) {
+	items, err := Load(".")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	rep := Run(items, Options{})
+	var buf bytes.Buffer
+	if err := rep.WriteJSON(&buf); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+	var got jsonReport
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("JSON did not round-trip: %v", err)
+	}
+	total, parsed, executed, passed := rep.Summary()
+	if got.Summary.Total != total || got.Summary.Parsed != parsed ||
+		got.Summary.Executed != executed || got.Summary.Passed != passed {
+		t.Errorf("summary mismatch: json=%+v want total=%d parsed=%d executed=%d passed=%d",
+			got.Summary, total, parsed, executed, passed)
+	}
+	if len(got.Items) != len(rep.Results) {
+		t.Errorf("items = %d, want %d", len(got.Items), len(rep.Results))
+	}
+	if len(got.Features) != len(rep.FeatureStats()) {
+		t.Errorf("features = %d, want %d", len(got.Features), len(rep.FeatureStats()))
 	}
 }
