@@ -21,9 +21,21 @@ func (formatProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 	if lib.Formats == nil {
 		lib.Formats = table.NewFormatCatalog()
 	}
+	if lib.Informats == nil {
+		lib.Informats = table.NewInformatCatalog()
+	}
 	for _, s := range step.Body {
 		vs, ok := s.(*ast.ValueStatement)
 		if !ok {
+			continue
+		}
+		if vs.Invalue {
+			inf := &table.UserInformat{Name: vs.Name, Char: vs.Char}
+			for _, r := range vs.Ranges {
+				inf.Ranges = append(inf.Ranges, convertInformatRange(r, vs.Char))
+			}
+			lib.Informats.Define(inf)
+			logger.Note("Informat %s has been output.", strings.ToUpper(strings.TrimPrefix(vs.Name, "$")))
 			continue
 		}
 		vf := &table.ValueFormat{Name: vs.Name, Char: vs.Char}
@@ -34,6 +46,43 @@ func (formatProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 		logger.Note("Format %s has been output.", strings.ToUpper(strings.TrimPrefix(vs.Name, "$")))
 	}
 	return nil
+}
+
+// convertInformatRange translates a parsed VALUE-style range into an
+// InformatRange. A range whose endpoints parse as numbers is a numeric interval
+// matched against the input value; otherwise it is a string key matched exactly.
+// The label is the result: a number for a numeric informat, a string for a `$`
+// (character) informat.
+func convertInformatRange(r ast.ValueRange, char bool) table.InformatRange {
+	out := table.InformatRange{Other: r.Other}
+	if char {
+		out.Result = table.Char(r.Label)
+	} else if n, err := strconv.ParseFloat(r.Label, 64); err == nil {
+		out.Result = table.Num(n)
+	} else {
+		out.Result = table.MissingNum()
+	}
+	if r.Other {
+		return out
+	}
+	lo, loNum := parseFloatOK(r.Low)
+	hi, hiNum := parseFloatOK(r.High)
+	// Numeric interval only when both present bounds parse as numbers.
+	if (r.NoLow || loNum) && (r.NoHigh || hiNum) && (loNum || hiNum) {
+		out.Numeric = true
+		out.Low, out.High = lo, hi
+		out.NoLow, out.NoHigh = r.NoLow, r.NoHigh
+		out.LowExcl, out.HighExcl = r.LowExcl, r.HighExcl
+		return out
+	}
+	out.Key = r.Low // exact string-key match
+	return out
+}
+
+// parseFloatOK reports whether s parses as a float (and its value).
+func parseFloatOK(s string) (float64, bool) {
+	n, err := strconv.ParseFloat(s, 64)
+	return n, err == nil
 }
 
 // convertRange translates a parsed AST range into a table.FormatRange, parsing

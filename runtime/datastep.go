@@ -616,7 +616,7 @@ func (d *dataStep) applyInput(st *ast.InputStatement, line string) {
 				val = table.MissingNum()
 			}
 		case v.Informat != "":
-			val = formats.ParseInput(fields[i], v.Informat)
+			val = d.parseInformatField(fields[i], v)
 		case v.Char:
 			val = table.Char(fields[i])
 		default:
@@ -634,7 +634,7 @@ func (d *dataStep) applyListInputFrom(st *ast.InputStatement, line string, curso
 	col := cursor
 	for _, v := range st.Vars {
 		var val table.Value
-		val, col = readListField(line, col, v)
+		val, col = d.readListField(line, col, v)
 		d.pdv.Set(v.Name, val)
 	}
 	return col
@@ -642,7 +642,7 @@ func (d *dataStep) applyListInputFrom(st *ast.InputStatement, line string, curso
 
 // readListField reads one whitespace-delimited list-input field for v starting at
 // the 1-based column, returning the typed value and the column just past it.
-func readListField(line string, col int, v ast.InputVar) (table.Value, int) {
+func (d *dataStep) readListField(line string, col int, v ast.InputVar) (table.Value, int) {
 	field, next := scanToken(line, col)
 	var val table.Value
 	switch {
@@ -653,13 +653,43 @@ func readListField(line string, col int, v ast.InputVar) (table.Value, int) {
 			val = table.MissingNum()
 		}
 	case v.Informat != "":
-		val = formats.ParseInput(field, v.Informat)
+		val = d.parseInformatField(field, v)
 	case v.Char:
 		val = table.Char(field)
 	default:
 		val = parseNum(field)
 	}
 	return val, next
+}
+
+// parseInformatField converts an input field through v's informat, consulting the
+// user INVALUE catalog first (PROC FORMAT INVALUE) and falling back to the
+// built-in informats. A user informat that matches nothing yields the
+// appropriate missing value.
+func (d *dataStep) parseInformatField(field string, v ast.InputVar) table.Value {
+	name := strings.TrimSuffix(strings.ToLower(v.Informat), ".")
+	lookup := func(n string) (table.Value, bool) {
+		inf, ok := d.lib.Informats.Lookup(n)
+		if !ok {
+			return table.Value{}, false
+		}
+		if val, matched := inf.Parse(field); matched {
+			return val, true
+		}
+		if inf.Char {
+			return table.MissingChar(), true
+		}
+		return table.MissingNum(), true
+	}
+	if val, ok := lookup(name); ok {
+		return val
+	}
+	if bare := strings.TrimRight(name, "0123456789"); bare != name {
+		if val, ok := lookup(bare); ok {
+			return val
+		}
+	}
+	return formats.ParseInput(field, v.Informat)
 }
 
 // columnMode reports whether an INPUT statement uses column/pointer input
@@ -696,7 +726,7 @@ func (d *dataStep) applyColumnInputFrom(st *ast.InputStatement, line string, sta
 			col += v.Plus
 		}
 		var val table.Value
-		val, col = readColumnField(line, col, v)
+		val, col = d.readColumnField(line, col, v)
 		d.pdv.Set(v.Name, val)
 	}
 	return col
@@ -705,7 +735,7 @@ func (d *dataStep) applyColumnInputFrom(st *ast.InputStatement, line string, sta
 // readColumnField reads one column/pointer-input field for v from line at the
 // 1-based column, returning the typed value and the column just past it. (The
 // caller applies any `@n`/`+n` adjustment to col before calling.)
-func readColumnField(line string, col int, v ast.InputVar) (table.Value, int) {
+func (d *dataStep) readColumnField(line string, col int, v ast.InputVar) (table.Value, int) {
 	var field string
 	switch {
 	case v.ColStart > 0:
@@ -730,7 +760,7 @@ func readColumnField(line string, col int, v ast.InputVar) (table.Value, int) {
 	var val table.Value
 	switch {
 	case v.Informat != "":
-		val = formats.ParseInput(field, v.Informat)
+		val = d.parseInformatField(strings.TrimSpace(field), v)
 	case v.Char:
 		val = table.Char(strings.TrimRight(field, " "))
 	default:
@@ -785,9 +815,9 @@ func (d *dataStep) applyMultiLineInput(st *ast.InputStatement, base int) int {
 			if v.Plus > 0 {
 				col += v.Plus
 			}
-			val, col = readColumnField(line, col, v)
+			val, col = d.readColumnField(line, col, v)
 		} else {
-			val, col = readListField(line, col, v)
+			val, col = d.readListField(line, col, v)
 		}
 		d.pdv.Set(v.Name, val)
 	}
@@ -889,9 +919,9 @@ func (d *dataStep) applyMultiLineInputCursors(st *ast.InputStatement) {
 			if v.Plus > 0 {
 				col += v.Plus
 			}
-			val, col = readColumnField(line, col, v)
+			val, col = d.readColumnField(line, col, v)
 		} else {
-			val, col = readListField(line, col, v)
+			val, col = d.readListField(line, col, v)
 		}
 		d.mlCursors[lineOff] = col
 		d.pdv.Set(v.Name, val)

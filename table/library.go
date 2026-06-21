@@ -111,14 +111,17 @@ type Library struct {
 	// Formats holds user-defined formats created by PROC FORMAT during the run.
 	// It is scoped to the library so definitions never leak between programs.
 	Formats *FormatCatalog
+	// Informats holds user-defined informats created by PROC FORMAT INVALUE.
+	Informats *InformatCatalog
 }
 
 // NewLibrary creates an empty library (WORK only).
 func NewLibrary() *Library {
 	return &Library{
-		datasets: make(map[string]*Dataset),
-		backends: make(map[string]Backend),
-		Formats:  NewFormatCatalog(),
+		datasets:  make(map[string]*Dataset),
+		backends:  make(map[string]Backend),
+		Formats:   NewFormatCatalog(),
+		Informats: NewInformatCatalog(),
 	}
 }
 

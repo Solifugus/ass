@@ -1074,7 +1074,9 @@ func (p *Parser) parseProcStatement() ast.Statement {
 	case p.identIs("model"):
 		return p.parseModel()
 	case p.identIs("value"):
-		return p.parseValueStmt()
+		return p.parseValueStmt(false)
+	case p.identIs("invalue"):
+		return p.parseValueStmt(true)
 	default:
 		return p.parseRawStatement()
 	}
@@ -1084,9 +1086,9 @@ func (p *Parser) parseProcStatement() ast.Statement {
 // statement into a ValueStatement. Ranges may be single values, `low`/`high`
 // open-ended or exclusive (`a <- b`, `a -< b`) intervals, comma lists (each
 // value shares the label), or the catch-all `other`.
-func (p *Parser) parseValueStmt() ast.Statement {
-	p.next() // 'value'
-	stmt := &ast.ValueStatement{}
+func (p *Parser) parseValueStmt(invalue bool) ast.Statement {
+	p.next() // 'value' / 'invalue'
+	stmt := &ast.ValueStatement{Invalue: invalue}
 	if p.curIs(lexer.DOLLAR) {
 		stmt.Char = true
 		stmt.Name = "$"

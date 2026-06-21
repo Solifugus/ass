@@ -1,0 +1,29 @@
+id: proc_format_invalue_001
+source: hand-written
+license: MIT
+features:
+  - proc-format
+  - informats
+  - data-step
+  - input
+  - datalines
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    scores:
+      columns: [letter, r, n]
+      rows:
+        # grade: A->4, B->3, Z->other 0; $resp: Y->Yes, N->No; band: 5->1,15->2,99->other 9
+        - [4, "Yes", 1]
+        - [3, "No", 2]
+        - [0, "Yes", 9]
+priority: 2
+notes: |
+  Value-verifies PROC FORMAT INVALUE (user-defined informats). Three informats
+  are defined — a numeric-result informat with string keys + other (grade.), a
+  character-result informat ($resp.), and a numeric-range informat (band.) — and
+  INPUT reads each field through its informat. The resulting `scores` dataset is
+  value-checked: grade A/B/Z -> 4/3/0, resp Y/N -> Yes/No, band 5/15/99 -> 1/2/9.

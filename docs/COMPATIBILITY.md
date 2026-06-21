@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; FREQ n-way & chisq).
+Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; proc format INVALUE).
 Each percentage is the share of corpus items tagged with a feature that pass
 (parse + execute as the item's `meta.yaml` expects). Regenerate with:
 
@@ -30,11 +30,11 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 56 |
-| Parsed | 56 (100.0%) |
-| Executed | 56 (100.0%) |
-| Passed | 56 (100.0%) |
-| Value-verified | 28 items assert dataset values; all match |
+| Items | 57 |
+| Parsed | 57 (100.0%) |
+| Executed | 57 (100.0%) |
+| Passed | 57 (100.0%) |
+| Value-verified | 29 items assert dataset values; all match |
 
 ## Per-feature
 
@@ -45,9 +45,9 @@ passing cosmetic check.
 | automatic-vars | 1/1 | 100.0% |
 | by-group | 2/2 | 100.0% |
 | class | 1/1 | 100.0% |
-| data-step | 47/47 | 100.0% |
+| data-step | 48/48 | 100.0% |
 | dataset-options | 3/3 | 100.0% |
-| datalines | 9/9 | 100.0% |
+| datalines | 10/10 | 100.0% |
 | do-loop | 2/2 | 100.0% |
 | expressions | 2/2 | 100.0% |
 | file-put | 5/5 | 100.0% |
@@ -55,8 +55,8 @@ passing cosmetic check.
 | labels | 1/1 | 100.0% |
 | if-then-else | 4/4 | 100.0% |
 | infile | 5/5 | 100.0% |
-| informats | 3/3 | 100.0% |
-| input | 10/10 | 100.0% |
+| informats | 4/4 | 100.0% |
+| input | 11/11 | 100.0% |
 | libname | 7/7 | 100.0% |
 | line-hold | 4/4 | 100.0% |
 | macro-control | 1/1 | 100.0% |
@@ -70,7 +70,7 @@ passing cosmetic check.
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
-| proc-print | 40/40 | 100.0% |
+| proc-print | 41/41 | 100.0% |
 | proc-reg | 1/1 | 100.0% |
 | proc-sort | 4/4 | 100.0% |
 | proc-sql | 7/7 | 100.0% |
@@ -97,7 +97,7 @@ passing cosmetic check.
 ## Known unsupported / deferred constructs
 
 - PROC FREQ: one- and two-way tables, **n-way (3+) via `/ list`** (one row per distinct combination), the **`/ options`** nocol/norow/nopercent/nofreq/nocum (suppress parts of the table) and **`/ chisq`** (Pearson chi-square statistic, DF, and p-value for a two-way table) are supported. Not yet: the default (non-`list`) stratified n-way layout, and association statistics beyond Pearson chi-square (likelihood-ratio, Fisher exact, measures of association)
-- `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT and used for **grouping in PROC FREQ and PROC MEANS/SUMMARY** (a user VALUE format collapses underlying values into one formatted category/class level, matching SAS). Not yet: user formats on PROC SQL output columns
+- `proc format` **VALUE and INVALUE** statements are supported (on-disk format catalogs and PICTURE are not). VALUE formats are applied in PROC PRINT and used for **grouping in PROC FREQ and PROC MEANS/SUMMARY** (a user VALUE format collapses underlying values into one formatted category/class level, matching SAS). **INVALUE** defines a user informat (`invalue grade 'A'=4 'B'=3 other=0;`, `invalue $resp 'Y'='Yes';`, numeric-range keys `1-10=1`) that INPUT applies to read input into mapped numeric/character values. Not yet: user formats on PROC SQL output columns, and `proc format` PICTURE templates
 - The `label <var>="text";` statement is supported in the DATA step and in PROC steps (e.g. PROC PRINT). DATA-step labels become permanent column metadata and are inherited through SET/MERGE (an explicit `label` in a later step overrides); `proc print ... label` renders labels as column headers, and a `label` statement inside the step overrides the stored label for that listing. `label` is correctly disambiguated as a variable name when used as `label = expr` (it is not a reserved word). Not yet: SAS's multi-line header wrapping of long labels (ASS prints each label on one header line — a presentation detail, not a value difference).
 - **Time/datetime informats and `'..'t`/`'..'dt` literals are supported**: `'14:30:00't` is a SAS time (seconds since midnight), `'01JAN2020:14:30:00'dt` a SAS datetime (seconds since 1960-01-01 00:00:00); the `TIMEw.`/`DATETIMEw.` informats read those forms and the matching output formats render them. Multi-line **`#n` line pointers** are supported on both INPUT and PUT (`input #1 a #2 b;` reads one observation across physical lines; `put #1 a #2 b;` writes one observation as several lines); column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; **trailing `@`/`@@` line-hold on INPUT and PUT is supported** — on INPUT `@@` reads several observations from one line across iterations and `@` holds the line within the iteration; on PUT the same modifiers hold the output line so several PUTs (or observations) build one physical line; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported. **Combining `#n` with a trailing `@`/`@@` hold is supported** — `input a #2 b @@;` holds the multi-line record group across iterations with a separate column cursor per line, reading several observations from one group (semantics hand-derived from documented SAS pointer behavior)
 - Options on PROC `out=`. Supported dataset options on SET/MERGE/DATA/PROC `data=`: `keep=`/`drop=`/`rename=`/`where=` and **`firstobs=`/`obs=`** (positional observation range — `firstobs=` first observation, `obs=` last-observation number, applied before WHERE). **Numbered var-list ranges** (`keep=x1-x5`, `keep x1-x5;`, `drop=x2-x3`) expand to the enumerated names in both the dataset-option and statement forms, zero-padded to the low endpoint's digit width

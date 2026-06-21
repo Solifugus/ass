@@ -494,11 +494,13 @@ type ValueRange struct {
 
 // ValueStatement is `value [$]name <range>=<label> ...;` inside PROC FORMAT. It
 // defines a user format; Char is true when the name began with `$` (a character
-// format).
+// format). Invalue is true when the statement was `invalue` (a user informat:
+// the ranges match the input being read and the labels are the result values).
 type ValueStatement struct {
-	Name   string
-	Char   bool
-	Ranges []ValueRange
+	Name    string
+	Char    bool
+	Invalue bool
+	Ranges  []ValueRange
 }
 
 func (v *ValueStatement) statementNode() {}
