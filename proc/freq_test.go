@@ -131,3 +131,58 @@ func TestFreqUserFormatGrouping(t *testing.T) {
 		t.Errorf("Older freq = %v, want 3", got)
 	}
 }
+
+// TestFreqNWayList verifies the n-way list-format table: distinct combinations
+// with frequencies, ordered by underlying values.
+func TestFreqNWayList(t *testing.T) {
+	ds := table.NewDataset("", "d")
+	ds.AddColumn(table.Column{Name: "a", Kind: table.Character})
+	ds.AddColumn(table.Column{Name: "b", Kind: table.Character})
+	add := func(a, b string) { ds.AppendRow(table.Row{"a": table.Char(a), "b": table.Char(b)}) }
+	add("x", "1")
+	add("x", "1")
+	add("x", "2")
+	add("y", "1")
+	fmtFor := func(string) func(table.Value) string { return func(v table.Value) string { return v.Display() } }
+	fmtdFor := func(string) bool { return false }
+	res := buildFreqResultN(ds, []string{"a", "b"}, fmtFor, fmtdFor)
+	if res.NObs() != 3 { // (x,1),(x,2),(y,1)
+		t.Fatalf("NObs = %d, want 3", res.NObs())
+	}
+	// First combo (x,1) has frequency 2.
+	if got := res.Get(res.Rows[0], "Frequency").Num; got != 2 {
+		t.Errorf("(x,1) freq = %v, want 2", got)
+	}
+	if a, b := res.Get(res.Rows[0], "a").Str, res.Get(res.Rows[0], "b").Str; a != "x" || b != "1" {
+		t.Errorf("combo0 = (%s,%s), want (x,1)", a, b)
+	}
+}
+
+// TestChiSquareStat verifies the Pearson chi-square on a 2x2 table with a
+// hand-computed statistic.
+func TestChiSquareStat(t *testing.T) {
+	ds := table.NewDataset("", "d")
+	ds.AddColumn(table.Column{Name: "r", Kind: table.Character})
+	ds.AddColumn(table.Column{Name: "c", Kind: table.Character})
+	add := func(r, c string, n int) {
+		for i := 0; i < n; i++ {
+			ds.AppendRow(table.Row{"r": table.Char(r), "c": table.Char(c)})
+		}
+	}
+	// Cells: r1c1=10, r1c2=20, r2c1=30, r2c2=40. Expected chi-square ~0.7937.
+	add("r1", "c1", 10)
+	add("r1", "c2", 20)
+	add("r2", "c1", 30)
+	add("r2", "c2", 40)
+	disp := func(v table.Value) string { return v.Display() }
+	stat, df, p := chiSquareStat(ds, "r", "c", disp, disp)
+	if df != 1 {
+		t.Errorf("df = %d, want 1", df)
+	}
+	if stat < 0.792 || stat > 0.795 {
+		t.Errorf("chi-square = %.4f, want ~0.7937", stat)
+	}
+	if p < 0.37 || p > 0.38 { // pchisq(0.7937,1,lower=F) ~ 0.3729
+		t.Errorf("p = %.4f, want ~0.373", p)
+	}
+}

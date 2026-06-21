@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -23,15 +24,21 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 		return nil
 	}
 
-	var requests [][]string
+	type freqReq struct {
+		vars []string
+		opts *ast.TablesStatement
+	}
+	var requests []freqReq
 	procFormats := map[string]string{}
 	for _, s := range step.Body {
 		switch st := s.(type) {
 		case *ast.TablesStatement:
-			requests = append(requests, st.Requests...)
+			for _, req := range st.Requests {
+				requests = append(requests, freqReq{vars: req, opts: st})
+			}
 		case *ast.VarStatement:
 			for _, v := range st.Vars {
-				requests = append(requests, []string{v})
+				requests = append(requests, freqReq{vars: []string{v}})
 			}
 		case *ast.FormatStatement:
 			for k, v := range st.Formats {
@@ -47,22 +54,68 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 	fmtFor := func(v string) func(table.Value) string {
 		return freqFormatter(src, lib.Formats, procFormats, v)
 	}
+	fmtdFor := func(v string) bool { return varFormatSpec(src, procFormats, v) != "" }
+	has := func(o *ast.TablesStatement, opt string) bool { return o != nil && o.HasOption(opt) }
 
 	for _, req := range requests {
-		switch len(req) {
-		case 0:
+		switch {
+		case len(req.vars) == 0:
 			continue
-		case 1:
-			fmtted := varFormatSpec(src, procFormats, req[0]) != ""
-			fmt.Print(renderListing(buildFreqResult(src, req[0], fmtFor(req[0]), fmtted), printOptions{}))
+		case len(req.vars) == 1 || has(req.opts, "list"):
+			// One-way, or an n-way list-format table (all distinct combinations).
+			res := buildFreqResultN(src, req.vars, fmtFor, fmtdFor)
+			res = applyFreqOptions(res, req.opts)
+			fmt.Print(renderListing(res, printOptions{}))
 			fmt.Println()
 		default:
 			// Two (or more) variables: cross-tabulate the first two.
-			fmt.Print(renderCrossTab(src, req[0], req[1], fmtFor(req[0]), fmtFor(req[1])))
+			fmt.Print(renderCrossTab(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
+			if has(req.opts, "chisq") {
+				fmt.Print(renderChiSquare(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
+			}
 			fmt.Println()
 		}
 	}
 	return nil
+}
+
+// applyFreqOptions drops result columns suppressed by `/ options`: nofreq removes
+// Frequency, nopercent removes Percent/CumPercent, nocum removes the cumulative
+// columns. The category and any remaining columns are preserved in order.
+func applyFreqOptions(res *table.Dataset, opts *ast.TablesStatement) *table.Dataset {
+	if opts == nil {
+		return res
+	}
+	drop := map[string]bool{}
+	if opts.HasOption("nofreq") {
+		drop["frequency"] = true
+	}
+	if opts.HasOption("nopercent") {
+		drop["percent"], drop["cumpercent"] = true, true
+	}
+	if opts.HasOption("nocum") {
+		drop["cumfreq"], drop["cumpercent"] = true, true
+	}
+	if len(drop) == 0 {
+		return res
+	}
+	out := table.NewDataset(res.Lib, res.Name)
+	var keep []string
+	for _, c := range res.Columns {
+		if drop[strings.ToLower(c.Name)] {
+			continue
+		}
+		out.AddColumn(c)
+		keep = append(keep, strings.ToLower(c.Name))
+	}
+	for _, r := range res.Rows {
+		nr := table.Row{}
+		for _, k := range keep {
+			nr[k] = r[k]
+		}
+		out.AppendRow(nr)
+	}
+	return out
 }
 
 // varFormatSpec returns the effective format spec for variable v: a FORMAT
@@ -343,6 +396,236 @@ func buildFreqResult(src *table.Dataset, v string, fmtFn func(table.Value) strin
 		out.AppendRow(row)
 	}
 	return out
+}
+
+// buildFreqResultN builds a list-format frequency table over one or more
+// variables: each distinct combination of (formatted) category values is a row
+// with the category columns followed by Frequency/Percent/CumFreq/CumPercent.
+// For a single variable this is the one-way table; for several it is the SAS
+// `tables a*b*c / list` style. Combinations are ordered by underlying value,
+// position by position.
+func buildFreqResultN(src *table.Dataset, vars []string, fmtFor func(string) func(table.Value) string, fmtdFor func(string) bool) *table.Dataset {
+	n := len(vars)
+	fmts := make([]func(table.Value) string, n)
+	formatted := make([]bool, n)
+	kinds := make([]table.Kind, n)
+	for i, v := range vars {
+		fmts[i] = fmtFor(v)
+		formatted[i] = fmtdFor(v)
+		kinds[i] = table.Character
+		for _, c := range src.Columns {
+			if strings.EqualFold(c.Name, v) {
+				kinds[i] = c.Kind
+			}
+		}
+	}
+
+	type combo struct {
+		labels []string      // per-var formatted label
+		mins   []table.Value // per-var smallest underlying value (ordering)
+	}
+	counts := map[string]int{}
+	combos := map[string]*combo{}
+	var keys []string
+	for _, r := range src.Rows {
+		labels := make([]string, n)
+		vals := make([]table.Value, n)
+		missing := false
+		for i, v := range vars {
+			val := src.Get(r, v)
+			if val.IsMissing() {
+				missing = true
+				break
+			}
+			vals[i] = val
+			labels[i] = fmts[i](val)
+		}
+		if missing {
+			continue // SAS excludes rows with any missing classification value
+		}
+		key := strings.Join(labels, "\x00")
+		if c, ok := combos[key]; ok {
+			for i := range vals {
+				if vals[i].Compare(c.mins[i]) < 0 {
+					c.mins[i] = vals[i]
+				}
+			}
+		} else {
+			cp := make([]table.Value, n)
+			copy(cp, vals)
+			combos[key] = &combo{labels: labels, mins: cp}
+			keys = append(keys, key)
+		}
+		counts[key]++
+	}
+
+	sort.Slice(keys, func(a, b int) bool {
+		ca, cb := combos[keys[a]], combos[keys[b]]
+		for i := 0; i < n; i++ {
+			if cmp := ca.mins[i].Compare(cb.mins[i]); cmp != 0 {
+				return cmp < 0
+			}
+		}
+		return false
+	})
+
+	total := 0
+	for _, k := range keys {
+		total += counts[k]
+	}
+
+	out := table.NewDataset("", "_freq_")
+	for i, v := range vars {
+		k := kinds[i]
+		if formatted[i] {
+			k = table.Character
+		}
+		out.AddColumn(table.Column{Name: v, Kind: k})
+	}
+	out.AddColumn(table.Column{Name: "Frequency", Kind: table.Numeric})
+	out.AddColumn(table.Column{Name: "Percent", Kind: table.Numeric, Format: "5.1"})
+	out.AddColumn(table.Column{Name: "CumFreq", Kind: table.Numeric})
+	out.AddColumn(table.Column{Name: "CumPercent", Kind: table.Numeric, Format: "5.1"})
+
+	cum := 0
+	for _, k := range keys {
+		c := combos[k]
+		cum += counts[k]
+		row := table.Row{}
+		for i, v := range vars {
+			if formatted[i] {
+				row[strings.ToLower(v)] = table.Char(c.labels[i])
+			} else {
+				row[strings.ToLower(v)] = c.mins[i]
+			}
+		}
+		row["frequency"] = table.Num(float64(counts[k]))
+		row["percent"] = pctVal(counts[k], total)
+		row["cumfreq"] = table.Num(float64(cum))
+		row["cumpercent"] = pctVal(cum, total)
+		out.AppendRow(row)
+	}
+	return out
+}
+
+// chiSquareStat computes the Pearson chi-square statistic, its degrees of
+// freedom, and the right-tail p-value for the two-way table of rowVar by colVar
+// (grouped by the formatted categories). Rows with a missing value in either
+// variable are excluded, matching the cross-tabulation.
+func chiSquareStat(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) (stat float64, df int, p float64) {
+	rowCats := sortedDistinct(src, rowVar, rowFmt)
+	colCats := sortedDistinct(src, colVar, colFmt)
+	count := map[string]map[string]int{}
+	rowTot := map[string]int{}
+	colTot := map[string]int{}
+	grand := 0
+	for _, r := range src.Rows {
+		rv, cv := src.Get(r, rowVar), src.Get(r, colVar)
+		if rv.IsMissing() || cv.IsMissing() {
+			continue
+		}
+		rk, ck := rowFmt(rv), colFmt(cv)
+		if count[rk] == nil {
+			count[rk] = map[string]int{}
+		}
+		count[rk][ck]++
+		rowTot[rk]++
+		colTot[ck]++
+		grand++
+	}
+	if grand == 0 || len(rowCats) < 2 || len(colCats) < 2 {
+		return 0, 0, 1
+	}
+	for _, rc := range rowCats {
+		for _, cc := range colCats {
+			exp := float64(rowTot[rc.label]) * float64(colTot[cc.label]) / float64(grand)
+			if exp == 0 {
+				continue
+			}
+			obs := float64(count[rc.label][cc.label])
+			d := obs - exp
+			stat += d * d / exp
+		}
+	}
+	df = (len(rowCats) - 1) * (len(colCats) - 1)
+	p = chiSquareSF(stat, df)
+	return stat, df, p
+}
+
+// renderChiSquare returns the chi-square statistic block appended after a two-way
+// table when the `chisq` option is given.
+func renderChiSquare(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) string {
+	stat, df, p := chiSquareStat(src, rowVar, colVar, rowFmt, colFmt)
+	return fmt.Sprintf("Statistics for Table of %s by %s\n\nChi-Square  DF=%d  Value=%.4f  Prob=%.4f\n",
+		rowVar, colVar, df, stat, p)
+}
+
+// chiSquareSF returns the right-tail probability Pr(X > x) for a chi-square
+// distribution with df degrees of freedom, i.e. the regularized upper incomplete
+// gamma Q(df/2, x/2).
+func chiSquareSF(x float64, df int) float64 {
+	if x <= 0 || df <= 0 {
+		return 1
+	}
+	return gammaQ(float64(df)/2, x/2)
+}
+
+// gammaP/gammaQ are the regularized lower/upper incomplete gamma functions,
+// computed by series (gammaP, for x < a+1) or continued fraction (gammaQ),
+// following the standard Numerical Recipes formulation.
+func gammaP(a, x float64) float64 {
+	if x < 0 || a <= 0 {
+		return 0
+	}
+	if x < a+1 {
+		// Series representation.
+		ap := a
+		sum := 1.0 / a
+		del := sum
+		for n := 0; n < 200; n++ {
+			ap++
+			del *= x / ap
+			sum += del
+			if math.Abs(del) < math.Abs(sum)*1e-15 {
+				break
+			}
+		}
+		lg, _ := math.Lgamma(a)
+		return sum * math.Exp(-x+a*math.Log(x)-lg)
+	}
+	return 1 - gammaQ(a, x)
+}
+
+func gammaQ(a, x float64) float64 {
+	if x < a+1 {
+		return 1 - gammaP(a, x)
+	}
+	// Continued-fraction representation (Lentz's method).
+	const tiny = 1e-30
+	b := x + 1 - a
+	c := 1 / tiny
+	d := 1 / b
+	h := d
+	for i := 1; i < 200; i++ {
+		an := -float64(i) * (float64(i) - a)
+		b += 2
+		d = an*d + b
+		if math.Abs(d) < tiny {
+			d = tiny
+		}
+		c = b + an/c
+		if math.Abs(c) < tiny {
+			c = tiny
+		}
+		d = 1 / d
+		del := d * c
+		h *= del
+		if math.Abs(del-1) < 1e-15 {
+			break
+		}
+	}
+	lg, _ := math.Lgamma(a)
+	return math.Exp(-x+a*math.Log(x)-lg) * h
 }
 
 func pctVal(n, total int) table.Value {

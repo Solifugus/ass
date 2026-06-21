@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; user formats in FREQ/MEANS).
+Generated from the compatibility corpus via `ass test corpus/` (2026-06-20; FREQ n-way & chisq).
 Each percentage is the share of corpus items tagged with a feature that pass
 (parse + execute as the item's `meta.yaml` expects). Regenerate with:
 
@@ -30,10 +30,10 @@ passing cosmetic check.
 
 | Metric | Result |
 |--------|--------|
-| Items | 55 |
-| Parsed | 55 (100.0%) |
-| Executed | 55 (100.0%) |
-| Passed | 55 (100.0%) |
+| Items | 56 |
+| Parsed | 56 (100.0%) |
+| Executed | 56 (100.0%) |
+| Passed | 56 (100.0%) |
 | Value-verified | 28 items assert dataset values; all match |
 
 ## Per-feature
@@ -66,7 +66,7 @@ passing cosmetic check.
 | merge | 1/1 | 100.0% |
 | proc-append | 1/1 | 100.0% |
 | proc-export | 1/1 | 100.0% |
-| proc-freq | 3/3 | 100.0% |
+| proc-freq | 4/4 | 100.0% |
 | proc-glm | 1/1 | 100.0% |
 | proc-import | 1/1 | 100.0% |
 | proc-means | 1/1 | 100.0% |
@@ -96,7 +96,7 @@ passing cosmetic check.
 
 ## Known unsupported / deferred constructs
 
-- PROC FREQ n-way (3+) tables, `/ options` (nocol/norow/chisq), and association statistics (one- and two-way tables are supported)
+- PROC FREQ: one- and two-way tables, **n-way (3+) via `/ list`** (one row per distinct combination), the **`/ options`** nocol/norow/nopercent/nofreq/nocum (suppress parts of the table) and **`/ chisq`** (Pearson chi-square statistic, DF, and p-value for a two-way table) are supported. Not yet: the default (non-`list`) stratified n-way layout, and association statistics beyond Pearson chi-square (likelihood-ratio, Fisher exact, measures of association)
 - `proc format` PICTURE/INVALUE statements and on-disk format catalogs (VALUE formats are supported); user formats are applied in PROC PRINT and used for **grouping in PROC FREQ and PROC MEANS/SUMMARY** (a user VALUE format collapses underlying values into one formatted category/class level, matching SAS). Not yet: user formats on PROC SQL output columns
 - The `label <var>="text";` statement is supported in the DATA step and in PROC steps (e.g. PROC PRINT). DATA-step labels become permanent column metadata and are inherited through SET/MERGE (an explicit `label` in a later step overrides); `proc print ... label` renders labels as column headers, and a `label` statement inside the step overrides the stored label for that listing. `label` is correctly disambiguated as a variable name when used as `label = expr` (it is not a reserved word). Not yet: SAS's multi-line header wrapping of long labels (ASS prints each label on one header line — a presentation detail, not a value difference).
 - **Time/datetime informats and `'..'t`/`'..'dt` literals are supported**: `'14:30:00't` is a SAS time (seconds since midnight), `'01JAN2020:14:30:00'dt` a SAS datetime (seconds since 1960-01-01 00:00:00); the `TIMEw.`/`DATETIMEw.` informats read those forms and the matching output formats render them. Multi-line **`#n` line pointers** are supported on both INPUT and PUT (`input #1 a #2 b;` reads one observation across physical lines; `put #1 a #2 b;` writes one observation as several lines); column input `input name $ 1-10 age 11-13;`/`@n`/`+n` and column output `put name $ 1-10;`/`@n`/`+n` are supported; **trailing `@`/`@@` line-hold on INPUT and PUT is supported** — on INPUT `@@` reads several observations from one line across iterations and `@` holds the line within the iteration; on PUT the same modifiers hold the output line so several PUTs (or observations) build one physical line; list-input informats such as `comma`/`dollar`/`date9`/`mmddyy` are supported. **Combining `#n` with a trailing `@`/`@@` hold is supported** — `input a #2 b @@;` holds the multi-line record group across iterations with a separate column cursor per line, reading several observations from one group (semantics hand-derived from documented SAS pointer behavior)

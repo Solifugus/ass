@@ -1,0 +1,17 @@
+id: proc_freq_nway_001
+source: hand-written
+license: MIT
+features:
+  - proc-freq
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+priority: 2
+notes: |
+  PROC FREQ n-way (3-way) list-format table and two-way chi-square. The `/ list`
+  option produces one row per distinct region*product*size combination; the
+  `/ chisq` option adds the Pearson chi-square statistic, DF, and p-value to the
+  two-way table (nocol/norow suppress the per-cell column/row percentages). FREQ
+  prints to the listing (no output dataset), so the computed values are asserted
+  by the Go unit tests TestFreqNWayList and TestChiSquareStat.

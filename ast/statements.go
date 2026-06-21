@@ -524,6 +524,19 @@ func (c *ClassStatement) String() string {
 type TablesStatement struct {
 	Vars     []string
 	Requests [][]string
+	// Options holds the `/ options` tail (lowercased), e.g. nocol/norow/
+	// nopercent/nocum/nofreq/list/chisq.
+	Options []string
+}
+
+// HasOption reports whether the tables `/ options` tail included opt.
+func (t *TablesStatement) HasOption(opt string) bool {
+	for _, o := range t.Options {
+		if o == opt {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *TablesStatement) statementNode() {}

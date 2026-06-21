@@ -1224,8 +1224,13 @@ func (p *Parser) parseTables() ast.Statement {
 	if len(cur) > 0 {
 		stmt.Requests = append(stmt.Requests, cur)
 	}
-	// Skip any trailing `/ options` up to the terminating semicolon.
+	// Collect any trailing `/ options` (lowercased identifiers) up to the
+	// terminating semicolon. A `/` introduces the option list; option values
+	// (`opt=...`) are recorded by name only.
 	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		if p.curIs(lexer.IDENT) {
+			stmt.Options = append(stmt.Options, strings.ToLower(p.cur.Literal))
+		}
 		p.next()
 	}
 	p.expectSemicolon()
