@@ -8,6 +8,7 @@ import (
 	"github.com/solifugus/ass/flatfile"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
+	"github.com/solifugus/ass/xlsx"
 )
 
 func init() { Register("import", importProc{}) }
@@ -50,12 +51,27 @@ func (importProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 	}
 
 	opts := readImportOptions(step.Body)
-	sep := delimiterFor(dbms, opts.delimiter)
 
-	lines, err := flatfile.ReadLines(datafile, 0, 0)
-	if err != nil {
-		logger.Error("PROC IMPORT: %v", err)
-		return nil
+	// Read the file into rows of string cells: an .xlsx worksheet, or delimited
+	// text split by the DBMS/DLM= separator.
+	var rows [][]string
+	if dbms == "xlsx" || dbms == "excel" {
+		r, err := xlsx.Read(datafile)
+		if err != nil {
+			logger.Error("PROC IMPORT: %v", err)
+			return nil
+		}
+		rows = r
+	} else {
+		sep := delimiterFor(dbms, opts.delimiter)
+		lines, err := flatfile.ReadLines(datafile, 0, 0)
+		if err != nil {
+			logger.Error("PROC IMPORT: %v", err)
+			return nil
+		}
+		for _, ln := range lines {
+			rows = append(rows, flatfile.SplitDelim(ln, sep, true))
+		}
 	}
 
 	// Resolve the header and the first data row. GETNAMES=YES uses row 1 for
@@ -64,8 +80,8 @@ func (importProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 	var names []string
 	dataStart := 0
 	if opts.getnames {
-		if len(lines) > 0 {
-			names = flatfile.SplitDelim(lines[0], sep, true)
+		if len(rows) > 0 {
+			names = append([]string(nil), rows[0]...)
 		}
 		dataStart = 1
 	}
@@ -77,8 +93,8 @@ func (importProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 	}
 
 	var records [][]string
-	for i := dataStart; i < len(lines); i++ {
-		records = append(records, flatfile.SplitDelim(lines[i], sep, true))
+	for i := dataStart; i < len(rows); i++ {
+		records = append(records, rows[i])
 	}
 
 	ncol := len(names)

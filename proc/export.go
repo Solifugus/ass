@@ -8,6 +8,7 @@ import (
 	"github.com/solifugus/ass/flatfile"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
+	"github.com/solifugus/ass/xlsx"
 )
 
 func init() { Register("export", exportProc{}) }
@@ -65,6 +66,17 @@ func (exportProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 			}
 		}
 	}
+	// .xlsx output: write a single worksheet (header row + data) with numeric
+	// cells as numbers and everything else as inline strings.
+	if dbms == "xlsx" || dbms == "excel" {
+		if err := exportXLSX(outfile, src, putnames); err != nil {
+			logger.Error("PROC EXPORT: %v", err)
+			return nil
+		}
+		logger.Note("%d records were written to the file %s.", src.NObs(), outfile)
+		return nil
+	}
+
 	sep := delimiterFor(dbms, delim)
 	sepStr := string(sep)
 
@@ -91,6 +103,33 @@ func (exportProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 	}
 	logger.Note("%d records were written to the file %s.", src.NObs(), outfile)
 	return nil
+}
+
+// exportXLSX writes the dataset to an .xlsx worksheet: an optional header row of
+// column names followed by one row per observation. A cell is numeric when its
+// column is numeric and the value is non-missing; missing values and character
+// columns write as (possibly empty) strings.
+func exportXLSX(path string, src *table.Dataset, putnames bool) error {
+	var rows [][]string
+	headerRows := 0
+	if putnames {
+		rows = append(rows, src.ColumnNames())
+		headerRows = 1
+	}
+	for _, r := range src.Rows {
+		fields := make([]string, len(src.Columns))
+		for i, c := range src.Columns {
+			fields[i] = exportCell(src.Get(r, c.Name))
+		}
+		rows = append(rows, fields)
+	}
+	numericCol := func(rowIdx, col int) bool {
+		if rowIdx < headerRows || col >= len(src.Columns) {
+			return false // header cells are always text
+		}
+		return src.Columns[col].Kind == table.Numeric
+	}
+	return xlsx.Write(path, rows, numericCol)
 }
 
 // exportCell renders one value for EXPORT: a missing value (numeric or

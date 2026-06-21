@@ -1,0 +1,26 @@
+id: proc_xlsx_roundtrip_001
+source: hand-written
+license: MIT
+features:
+  - proc-export
+  - proc-import
+  - data-step
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    back:
+      columns: [region, amount]
+      rows:
+        - ["North", 100]
+        - ["South", 250]
+        - ["East", 75]
+priority: 2
+notes: |
+  Value-verifies the PROC EXPORT -> PROC IMPORT round-trip through an .xlsx
+  workbook (DBMS=XLSX). EXPORT writes one worksheet (header + data); IMPORT reads
+  it back and sniffs column types (region character, amount numeric). The
+  re-imported `back` dataset equals the original. The .xlsx reader/writer is
+  dependency-free (archive/zip + encoding/xml). @TMP@ is a per-run temp dir.
