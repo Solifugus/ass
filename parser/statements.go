@@ -1155,7 +1155,7 @@ func (p *Parser) parseProofStatement() ast.Statement {
 	case "key":
 		p.next()
 		s := &ast.ProofStatement{Kind: "key"}
-		if p.curIs(lexer.IDENT) {
+		for p.curIs(lexer.IDENT) && !p.identIs("references") { // child key columns
 			s.Vars = append(s.Vars, p.cur.Literal)
 			p.next()
 		}
@@ -1167,14 +1167,21 @@ func (p *Parser) parseProofStatement() ast.Statement {
 			}
 			if p.curIs(lexer.LPAREN) {
 				p.next()
-				if p.curIs(lexer.IDENT) {
-					s.RefCol = p.cur.Literal
-					p.next()
+				for !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+					if p.curIs(lexer.IDENT) {
+						s.RefCols = append(s.RefCols, p.cur.Literal)
+					}
+					p.next() // also steps over commas between parent columns
 				}
 				if p.curIs(lexer.RPAREN) {
 					p.next()
 				}
 			}
+		}
+		// A bare `key region` (no references) defaults the parent column list to the
+		// child columns' names — harmless, and keeps single-column usage terse.
+		if len(s.RefCols) == 0 {
+			s.RefCols = append(s.RefCols, s.Vars...)
 		}
 		p.parseProofTail(s)
 		p.expectSemicolon()
@@ -1186,11 +1193,17 @@ func (p *Parser) parseProofStatement() ast.Statement {
 			s.Vars = append(s.Vars, p.cur.Literal)
 			p.next()
 		}
-		s.Low = p.parseProofNumber()
-		if p.curIs(lexer.MINUS) { // the lo - hi separator
+		if op, ok := proofRangeOp(p.cur.Type); ok { // relational form: range x >= 0
+			s.Op = op
 			p.next()
+			s.Bound = p.parseProofNumber()
+		} else { // inclusive form: range x lo - hi
+			s.Low = p.parseProofNumber()
+			if p.curIs(lexer.MINUS) { // the lo - hi separator
+				p.next()
+			}
+			s.High = p.parseProofNumber()
 		}
-		s.High = p.parseProofNumber()
 		p.parseProofTail(s)
 		p.expectSemicolon()
 		return s
@@ -1204,13 +1217,48 @@ func (p *Parser) parseProofStatement() ast.Statement {
 		if p.curIs(lexer.COLON) {
 			p.next()
 		}
-		s.Expr = p.parseExpression(pLOWEST)
+		// Capture the rule expression as raw source up to the terminating `;` or a
+		// `/ severity=`/`/ message=` option tail, then parse it in isolation. This
+		// lets a rule expression use `/` as division without colliding with the
+		// option-tail introducer (which a left-to-right expression parse cannot
+		// distinguish).
+		start := p.cur.Pos
+		end := start
+		for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+			if p.curIs(lexer.SLASH) && (p.peekIdentIs("severity") || p.peekIdentIs("message")) {
+				break // start of the option tail
+			}
+			end = p.cur.End
+			p.next()
+		}
+		s.Expr = ParseExpressionString(p.l.Slice(start, end))
 		p.parseProofTail(s)
 		p.expectSemicolon()
 		return s
 	default:
 		return p.parseRawStatement()
 	}
+}
+
+// proofRangeOp maps a comparison token to its operator text for the relational
+// `range <var> <op> <num>` form. The second return is false for a non-comparison
+// token (the inclusive `lo - hi` form).
+func proofRangeOp(t lexer.TokenType) (string, bool) {
+	switch t {
+	case lexer.GE:
+		return ">=", true
+	case lexer.LE:
+		return "<=", true
+	case lexer.GT:
+		return ">", true
+	case lexer.LT:
+		return "<", true
+	case lexer.EQ:
+		return "=", true
+	case lexer.NE:
+		return "^=", true
+	}
+	return "", false
 }
 
 // parseProofNumber reads an optionally-signed numeric literal (a range endpoint)

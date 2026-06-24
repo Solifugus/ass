@@ -1,0 +1,25 @@
+id: proof_003
+source: hand-written
+license: MIT
+features:
+  - proc-proof
+  - data-quality
+  - data-step
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    bad:
+      columns: [region, yr, amt, num, den, _rule_, _obs_]
+      rows:
+        - ["west", 2025, -5, 9, 3, "key region yr references dim(region yr)", 2]
+        - ["west", 2025, -5, 9, 3, "range amt >= 0", 2]
+priority: 1
+notes: |
+  Value-verifies the PROC PROOF catalog-completion features: the relational range
+  form (`range amt >= 0`), a `rule` whose expression uses `/` as division
+  (`num / den < 5`, both rows pass), and a composite foreign key
+  (`key region yr references dim(region yr)`). Only obs 2 (west, 2025) violates:
+  amt=-5 breaks the range, and (west,2025) is absent from DIM. The out= dataset
+  has both violation records, sorted by (_obs_, _rule_) -> key before range.

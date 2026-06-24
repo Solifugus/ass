@@ -224,6 +224,77 @@ run;`
 	}
 }
 
+func TestProofRangeRelational(t *testing.T) {
+	src := `
+data t; input x; datalines;
+5
+-3
+0
+;
+run;
+proc proof data=t out=bad;
+  range x >= 0;
+run;`
+	lib, errs := runProofProg(t, src)
+	if errs == 0 {
+		t.Error("expected failure: x=-3 violates range x >= 0")
+	}
+	bad, _ := lib.Get("bad")
+	if bad.NObs() != 1 {
+		t.Fatalf("BAD nobs = %d, want 1", bad.NObs())
+	}
+	if got := bad.Get(bad.Rows[0], "x").Num; got != -3 {
+		t.Errorf("offending x = %v, want -3", got)
+	}
+}
+
+func TestProofRuleDivisionAndSeverityTail(t *testing.T) {
+	// The rule expression uses `/` as division and also carries a `/ severity=`
+	// tail; the two must not collide. obs1 (10/2=5, not <3) violates at warn level,
+	// so the exit code is unaffected.
+	src := `
+data t; input a b; datalines;
+10 2
+3 4
+;
+run;
+proc proof data=t;
+  rule "ratio under 3": a / b < 3 / severity=warn;
+run;`
+	_, errs := runProofProg(t, src)
+	if errs != 0 {
+		t.Errorf("warn-level rule failure raised error count %d, want 0", errs)
+	}
+}
+
+func TestProofCompositeKey(t *testing.T) {
+	src := `
+data dim; input region $ yr; datalines;
+east 2024
+west 2024
+;
+run;
+data f; input region $ yr; datalines;
+east 2024
+west 2025
+;
+run;
+proc proof data=f out=bad;
+  key region yr references dim(region yr);
+run;`
+	lib, errs := runProofProg(t, src)
+	if errs == 0 {
+		t.Error("expected composite-key violation: (west,2025) absent from dim")
+	}
+	bad, _ := lib.Get("bad")
+	if bad.NObs() != 1 {
+		t.Fatalf("BAD nobs = %d, want 1", bad.NObs())
+	}
+	if got := bad.Get(bad.Rows[0], "yr").Num; got != 2025 {
+		t.Errorf("offending yr = %v, want 2025", got)
+	}
+}
+
 func TestProofMissingColumnCannotRun(t *testing.T) {
 	src := `
 data t; input x; datalines;

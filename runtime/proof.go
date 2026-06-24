@@ -111,7 +111,7 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 		case "unique":
 			uniqueKeys[i] = make(map[string][]int)
 		case "key":
-			set, err := loadKeySet(lib, r.stmt.RefTable, r.stmt.RefCol)
+			set, err := loadKeySet(lib, r.stmt.RefTable, r.stmt.RefCols)
 			if err != nil {
 				r.couldRun = false
 				r.why = err.Error()
@@ -136,8 +136,7 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 				uniqueKeys[i][key] = append(uniqueKeys[i][key], obs)
 			case "key":
 				r.checked++
-				val := pdv.Get(r.stmt.Vars[0])
-				if !val.IsMissing() && !keySets[i][scalarKey(val)] { // missing FK passes
+				if k, ok := foreignKey(pdv, r.stmt.Vars); ok && !keySets[i][k] { // any-missing FK passes
 					r.violObs = append(r.violObs, obs)
 				}
 			default:
@@ -226,6 +225,10 @@ func proofRowViolates(ps *ast.ProofStatement, pdv *PDV, logger *log.Logger) bool
 		if val.IsMissing() {
 			return true
 		}
+		if ps.Op != "" { // relational form: range x >= 0
+			bound, ok := parseFloat(ps.Bound)
+			return ok && !numCmp(val.Num, ps.Op, bound)
+		}
 		lo, loOK := parseFloat(ps.Low)
 		hi, hiOK := parseFloat(ps.High)
 		if loOK && val.Num < lo {
@@ -289,28 +292,78 @@ func scalarKey(v table.Value) string {
 	return v.Str
 }
 
-// loadKeySet loads a parent table's key column into a set, for `key … references`
-// referential-integrity checks. The parent is resolved from WORK (or any already
-// materialized member); external librefs are not yet supported here.
-func loadKeySet(lib *table.Library, refTable, refCol string) (map[string]bool, error) {
-	if refTable == "" || refCol == "" {
+// loadKeySet loads a parent table's key column(s) into a set, for
+// `key … references` referential-integrity checks. The parent is resolved via the
+// library (WORK, a base/directory libref, or an external database libref). A
+// parent row with any missing key component is skipped (it can never match a
+// non-missing foreign key).
+func loadKeySet(lib *table.Library, refTable string, refCols []string) (map[string]bool, error) {
+	if refTable == "" || len(refCols) == 0 {
 		return nil, fmt.Errorf("malformed key…references")
 	}
-	parent, ok := lib.Get(refTable)
+	parent, ok, err := lib.Resolve(refTable)
+	if err != nil {
+		return nil, fmt.Errorf("parent table %s: %v", strings.ToUpper(refTable), err)
+	}
 	if !ok {
 		return nil, fmt.Errorf("parent table %s not found", strings.ToUpper(refTable))
 	}
-	if !parent.HasColumn(refCol) {
-		return nil, fmt.Errorf("parent table %s has no column %s", strings.ToUpper(refTable), refCol)
+	for _, c := range refCols {
+		if !parent.HasColumn(c) {
+			return nil, fmt.Errorf("parent table %s has no column %s", strings.ToUpper(refTable), c)
+		}
 	}
 	set := make(map[string]bool, parent.NObs())
 	for _, row := range parent.Rows {
-		v := parent.Get(row, refCol)
-		if !v.IsMissing() {
-			set[scalarKey(v)] = true
+		parts := make([]string, len(refCols))
+		missing := false
+		for i, c := range refCols {
+			v := parent.Get(row, c)
+			if v.IsMissing() {
+				missing = true
+				break
+			}
+			parts[i] = scalarKey(v)
+		}
+		if !missing {
+			set[strings.Join(parts, "\x01")] = true
 		}
 	}
 	return set, nil
+}
+
+// foreignKey builds the composite key string for the current row from the child
+// key columns. ok is false when any component is missing — a foreign key with a
+// missing part passes (SQL NULL-FK semantics) and is not checked for membership.
+func foreignKey(pdv *PDV, vars []string) (key string, ok bool) {
+	parts := make([]string, len(vars))
+	for i, v := range vars {
+		val := pdv.Get(v)
+		if val.IsMissing() {
+			return "", false
+		}
+		parts[i] = scalarKey(val)
+	}
+	return strings.Join(parts, "\x01"), true
+}
+
+// numCmp evaluates `a <op> b` for the relational range form.
+func numCmp(a float64, op string, b float64) bool {
+	switch op {
+	case ">=":
+		return a >= b
+	case "<=":
+		return a <= b
+	case ">":
+		return a > b
+	case "<":
+		return a < b
+	case "=":
+		return a == b
+	case "^=":
+		return a != b
+	}
+	return false
 }
 
 // columnKind returns the declared kind of a dataset column.
@@ -471,6 +524,9 @@ func proofDesc(ps *ast.ProofStatement) string {
 	case "values":
 		return "values " + first(ps.Vars) + " in (" + strings.Join(ps.Values, " ") + ")"
 	case "range":
+		if ps.Op != "" {
+			return "range " + first(ps.Vars) + " " + ps.Op + " " + ps.Bound
+		}
 		return "range " + first(ps.Vars) + " " + ps.Low + " - " + ps.High
 	case "rule":
 		if ps.Label != "" {
@@ -491,7 +547,7 @@ func proofDesc(ps *ast.ProofStatement) string {
 		}
 		return "type " + strings.Join(pairs, " ")
 	case "key":
-		return "key " + first(ps.Vars) + " references " + ps.RefTable + "(" + ps.RefCol + ")"
+		return "key " + strings.Join(ps.Vars, " ") + " references " + ps.RefTable + "(" + strings.Join(ps.RefCols, " ") + ")"
 	default: // require, notnull, unique
 		return ps.Kind + " " + strings.Join(ps.Vars, " ")
 	}

@@ -1,8 +1,9 @@
 # Data-Quality Proofing — Design
 
-**Status:** v1 implemented (2026-06-24) — see §11 for what shipped vs. deferred.
-**Scope:** `PROC PROOF` (the validation tier). Inline row-level guarding is
-recorded as a deferred decision in §9, not part of this design.
+**Status:** validation tier complete (2026-06-24) — the full §8 catalog is
+implemented; only the separate statistical tier remains. See §11. **Scope:**
+`PROC PROOF` (the validation tier). Inline row-level guarding is recorded as a
+deferred decision in §9, not part of this design.
 
 This document locks the shape of the feature before any code, following the same
 practice as the architecture decision record in [`design.md`](design.md) §14–16.
@@ -196,23 +197,27 @@ exercising **both** a passing case and a violating case, asserting:
 Because a proof step's product is a verdict plus an optional dataset, the existing
 value-verification harness covers it directly through `out=`.
 
-## 11. Implementation status (v1 2026-06-24, v2 2026-06-24)
+## 11. Implementation status (validation tier complete, 2026-06-24)
 
 Implemented (`runtime/proof.go`, parsed in `parser` as `ast.ProofStatement`,
 dispatched from `runtime.dispatchProc` because it reuses the DATA-step evaluator
-and PDV):
+and PDV). The **entire §8 validation catalog is done** — only the separate
+statistical tier remains.
 
-- **Assertions:** the full v1 catalog (§8) — `require`, `type` (declared-kind
-  schema check, num/char), `notnull`, `values … in (…)`, `range <var> lo - hi`
-  (inclusive), `rule "label": <expr>` (any boolean expression over the row),
-  `unique <vars>` (flags every row in a duplicated key group), and
-  `key <col> references <parent>(<col>)` (referential integrity; a missing
-  foreign key passes, mirroring SQL NULL-FK semantics; parent is a WORK/
-  materialized member).
+- **Assertions:** `require`, `type` (declared-kind schema check, num/char),
+  `notnull`, `values … in (…)`, `range <var> lo - hi` (inclusive) **and the
+  relational form** `range <var> >=|<=|>|<|=|^= <num>`, `rule "label": <expr>`
+  (any boolean expression over the row — `/` is division), `unique <vars>` (flags
+  every row in a duplicated key group), and
+  `key <cols> references <parent>(<cols>)` — **single- or multi-column**
+  referential integrity (a foreign key with any missing component passes,
+  mirroring SQL NULL-FK semantics; the parent is resolved through the library, so
+  WORK, base/directory, and database librefs all work).
 - **PROC options:** `out=`, `maxsample=` (default 20), `severity=` (step default).
-- **Per-assertion tail:** `/ severity=warn|error message="…"` — on every assertion
-  **except `rule`**, whose expression consumes `/` as division (so a rule's
-  severity comes from the step default; see below).
+- **Per-assertion tail:** `/ severity=warn|error message="…"` on **every**
+  assertion, including `rule` — the rule expression is captured raw up to the tail
+  introducer, so `rule "r": a / b < 3 / severity=warn` parses the `/` inside the
+  expression as division and the trailing `/ severity=` as the option tail.
 - **Outcome model:** per-assertion report to stdout (PASS/FAIL/N-RUN +
   violations/checked + sampled offending obs); `out=` dataset with one record per
   (source row × failed assertion) annotated `_rule_`/`_obs_`, sorted by
@@ -226,19 +231,15 @@ and PDV):
 
 Still deferred:
 
-- **`range`'s relational form** (`range premium >= 0`) — use `rule` for relational
-  bounds; `range` currently takes the inclusive `lo - hi` form only.
-- **Composite / external `key … references`** — v2 handles a single-column foreign
-  key against a WORK (or already materialized) parent; multi-column keys and
-  parents behind a database libref are not yet supported.
-- A **`/` option tail on `rule`** — blocked by the division-operator ambiguity;
-  revisit if rule-level severity overrides are wanted (e.g. capture the rule body
-  raw and split the tail before parsing the expression).
 - **`abort`** (immediate halt) — the run always continues to the next step and
-  gates via the exit code.
-- **Statistical tier** (§8) — distribution/anomaly/historical checks.
+  gates via the exit code. Add if a fail-fast mode is wanted.
+- **Statistical tier** (§8) — distribution/anomaly/historical checks. A separate,
+  later phase: it needs aggregation + (usually) a reference baseline, unlike the
+  per-row/set-level validation tier completed here.
 
-Tests: `runtime/proof_test.go` (violations + out= shape + exit semantics, all
-pass, warn-only, unique duplicates, values, type mismatch, key references, missing
-parent / unknown column → could-not-run) and corpus `proof_001` (row-local +
-unique) and `proof_002` (type + key references), both value-verifying `out=`.
+Tests: `runtime/proof_test.go` (violations + out= shape + exit semantics; all
+pass; warn-only; unique duplicates; values; type mismatch; single & composite key
+references; relational range; rule with division + severity tail; missing parent /
+unknown column → could-not-run) and corpus `proof_001` (row-local + unique),
+`proof_002` (type + key references), `proof_003` (relational range + rule division
++ composite key), all value-verifying `out=`.

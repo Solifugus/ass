@@ -566,14 +566,16 @@ func (v *VarStatement) String() string {
 // per-assertion tail (`/ severity= message=`) fills Severity and Message.
 type ProofStatement struct {
 	Kind     string     // assertion kind (see above)
-	Vars     []string   // columns: require/notnull/unique vars; target column is Vars[0] for values/range/key; declared columns for type
+	Vars     []string   // columns: require/notnull/unique vars; target column is Vars[0] for values/range; child key columns for key; declared columns for type
 	Values   []string   // allowed-set literals for `values <var> in (...)`; declared types (parallel to Vars) for `type`
 	Low      string     // inclusive lower bound for `range <var> lo - hi` (literal text)
 	High     string     // inclusive upper bound for `range`
+	Op       string     // comparison operator for the relational `range <var> <op> <num>` form (e.g. ">=")
+	Bound    string     // bound literal for the relational range form
 	Expr     Expression // boolean expression for `rule`
 	Label    string     // label for `rule "label": ...`
-	RefTable string     // parent table for `key <col> references <table>(<col>)`
-	RefCol   string     // parent column for `key`
+	RefTable string     // parent table for `key <cols> references <table>(<cols>)`
+	RefCols  []string   // parent columns for `key` (parallel to Vars)
 	Severity string     // "warn"/"error"/"" (empty = step default)
 	Message  string     // custom violation message ("" = a generated default)
 }
@@ -592,7 +594,11 @@ func (s *ProofStatement) String() string {
 		b.WriteString(" in (" + strings.Join(s.Values, " ") + ")")
 	}
 	if s.Kind == "range" {
-		b.WriteString(" " + s.Low + " - " + s.High)
+		if s.Op != "" {
+			b.WriteString(" " + s.Op + " " + s.Bound)
+		} else {
+			b.WriteString(" " + s.Low + " - " + s.High)
+		}
 	}
 	if s.Kind == "type" {
 		b.Reset()
@@ -606,7 +612,7 @@ func (s *ProofStatement) String() string {
 		}
 	}
 	if s.Kind == "key" {
-		b.WriteString(" references " + s.RefTable + "(" + s.RefCol + ")")
+		b.WriteString(" references " + s.RefTable + "(" + strings.Join(s.RefCols, " ") + ")")
 	}
 	if s.Expr != nil {
 		b.WriteString(": " + s.Expr.String())

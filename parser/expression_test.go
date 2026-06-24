@@ -18,19 +18,19 @@ func parseExpr(t *testing.T, src string) string {
 
 func TestExpressionPrecedence(t *testing.T) {
 	cases := map[string]string{
-		"a + b * c":      "(a + (b * c))",
-		"a * b + c":      "((a * b) + c)",
-		"a + b + c":      "((a + b) + c)",
-		"(a + b) * c":    "((a + b) * c)",
-		"a = b + c":      "(a = (b + c))",
-		"a and b or c":   "((a and b) or c)",
-		"a or b and c":   "(a or (b and c))",
-		"age >= 18":      "(age >= 18)",
-		"x ** 2 ** 3":    "(x ** (2 ** 3))", // right associative
-		"-2 ** 2":        "(-(2 ** 2))",     // ** binds tighter than unary minus
-		"a || b || c":    "((a || b) || c)",
-		"not a and b":    "((not a) and b)",
-		"not a = b":      "(not (a = b))", // NOT looser than comparison
+		"a + b * c":    "(a + (b * c))",
+		"a * b + c":    "((a * b) + c)",
+		"a + b + c":    "((a + b) + c)",
+		"(a + b) * c":  "((a + b) * c)",
+		"a = b + c":    "(a = (b + c))",
+		"a and b or c": "((a and b) or c)",
+		"a or b and c": "(a or (b and c))",
+		"age >= 18":    "(age >= 18)",
+		"x ** 2 ** 3":  "(x ** (2 ** 3))", // right associative
+		"-2 ** 2":      "(-(2 ** 2))",     // ** binds tighter than unary minus
+		"a || b || c":  "((a || b) || c)",
+		"not a and b":  "((not a) and b)",
+		"not a = b":    "(not (a = b))", // NOT looser than comparison
 	}
 	for src, want := range cases {
 		if got := parseExpr(t, src); got != want {
@@ -55,11 +55,11 @@ func TestMnemonicOperators(t *testing.T) {
 
 func TestFunctionCalls(t *testing.T) {
 	cases := map[string]string{
-		"upcase(name)":          "upcase(name)",
-		"substr(s, 1, 3)":       "substr(s, 1, 3)",
-		"sum(a, b, c)":          "sum(a, b, c)",
-		"round(x * 2, 0.1)":     "round((x * 2), 0.1)",
-		"max(a, min(b, c))":     "max(a, min(b, c))",
+		"upcase(name)":      "upcase(name)",
+		"substr(s, 1, 3)":   "substr(s, 1, 3)",
+		"sum(a, b, c)":      "sum(a, b, c)",
+		"round(x * 2, 0.1)": "round((x * 2), 0.1)",
+		"max(a, min(b, c))": "max(a, min(b, c))",
 	}
 	for src, want := range cases {
 		if got := parseExpr(t, src); got != want {

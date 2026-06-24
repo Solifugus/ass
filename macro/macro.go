@@ -464,7 +464,7 @@ func splitArgs(s string) []string {
 // (rs[i]=='&'), returning the replacement text and the index past the reference
 // (including a single trailing '.' terminator if present).
 func resolveAmp(rs []rune, i int, vars map[string]string) (string, int) {
-	i++ // skip first '&'
+	i++                               // skip first '&'
 	for i < len(rs) && rs[i] == '&' { // collapse &&… (basic)
 		i++
 	}

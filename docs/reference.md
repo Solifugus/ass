@@ -393,19 +393,20 @@ proc proof data=orders out=bad maxsample=20 severity=error;
 run;
 ```
 - Assertions: `require`, `type <var>=num|char`, `notnull`, `values … in (…)`,
-  `range <var> lo - hi`, `unique <vars>`, `key <col> references <parent>(<col>)`,
-  `rule "label": <expr>`.
-- Each assertion may carry `/ severity=warn|error message="…"` — except `rule`,
-  whose expression consumes `/` as division (a rule uses the step severity).
+  `range <var> lo - hi` or the relational `range <var> >=|<=|>|<|=|^= <num>`,
+  `unique <vars>`, `key <cols> references <parent>(<cols>)` (single- or
+  multi-column), `rule "label": <expr>`.
+- Each assertion may carry `/ severity=warn|error message="…"` — including `rule`
+  (whose expression captures `/` as division up to the tail).
 - `out=` receives one row per (source row × failed assertion), annotated with
   `_rule_` and `_obs_`, so violations are trivially filterable.
 - Error-level failures log `ERROR` and make the CLI exit non-zero **without**
   halting the program; warn-level failures log `WARNING` and don't affect the exit
   code.
-- A missing foreign key passes (`key`), mirroring SQL NULL-FK semantics; the
-  parent is a WORK/materialized member.
-- Deferred: the relational `range` form, composite/external `key`, and a `/` tail
-  on `rule` (see proofing.md §11).
+- A foreign key with any missing component passes (`key`), mirroring SQL NULL-FK
+  semantics; the parent is resolved through the library (WORK, base, or database
+  libref).
+- Deferred: `abort` (fail-fast) and the statistical tier (see proofing.md §11).
 
 ### PROC IMPORT / EXPORT
 
