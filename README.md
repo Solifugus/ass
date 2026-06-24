@@ -13,7 +13,7 @@ Documentation lives in [`docs/`](docs/). Start here:
 - [`reference.md`](docs/reference.md) — the complete implemented language surface (statements, functions, formats, PROCs, CLI).
 - [`cookbook.md`](docs/cookbook.md) — task-oriented recipes (ETL, joins, reshaping, file round-trips, user formats, stats).
 
-Plus: [`design.md`](docs/design.md) (design rationale), [`PLAN.md`](docs/PLAN.md) (development log), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), [`databases.md`](docs/databases.md) (external-database LIBNAME engines), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
+Plus: [`design.md`](docs/design.md) (design rationale), [`PLAN.md`](docs/PLAN.md) (development log), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), [`databases.md`](docs/databases.md) (external-database LIBNAME engines), [`proofing.md`](docs/proofing.md) (design — data-quality `PROC PROOF`, not yet implemented), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
 
 ## Status
 
