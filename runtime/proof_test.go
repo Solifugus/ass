@@ -151,6 +151,79 @@ run;`
 	}
 }
 
+func TestProofTypeMismatch(t *testing.T) {
+	// id is numeric, name is character. Declaring the opposite types fails.
+	src := `
+data t; input id name $; datalines;
+1 a
+;
+run;
+proc proof data=t;
+  type id=num name=char;
+run;`
+	_, errsOK := runProofProg(t, src)
+	if errsOK != 0 {
+		t.Errorf("correct type declarations failed: error count %d", errsOK)
+	}
+
+	bad := `
+data t; input id name $; datalines;
+1 a
+;
+run;
+proc proof data=t;
+  type id=char name=num;
+run;`
+	_, errs := runProofProg(t, bad)
+	if errs == 0 {
+		t.Error("expected type mismatch to fail (id is num, name is char)")
+	}
+}
+
+func TestProofKeyReferences(t *testing.T) {
+	src := `
+data regions; input region $; datalines;
+east
+west
+;
+run;
+data orders; input id region $; datalines;
+1 east
+2 south
+3 west
+;
+run;
+proc proof data=orders out=bad;
+  key region references regions(region);
+run;`
+	lib, errs := runProofProg(t, src)
+	if errs == 0 {
+		t.Error("expected key violation: 'south' has no parent region")
+	}
+	bad, _ := lib.Get("bad")
+	if bad.NObs() != 1 {
+		t.Fatalf("BAD nobs = %d, want 1", bad.NObs())
+	}
+	if got := bad.Get(bad.Rows[0], "region").Str; got != "south" {
+		t.Errorf("offending region = %q, want south", got)
+	}
+}
+
+func TestProofKeyMissingParentCannotRun(t *testing.T) {
+	src := `
+data orders; input id region $; datalines;
+1 east
+;
+run;
+proc proof data=orders;
+  key region references nosuchtable(region);
+run;`
+	_, errs := runProofProg(t, src)
+	if errs != 0 {
+		t.Errorf("missing parent table should be 'could not run', not a failure: %d", errs)
+	}
+}
+
 func TestProofMissingColumnCannotRun(t *testing.T) {
 	src := `
 data t; input x; datalines;

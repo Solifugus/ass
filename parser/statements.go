@@ -1132,6 +1132,53 @@ func (p *Parser) parseProofStatement() ast.Statement {
 		p.parseProofTail(s)
 		p.expectSemicolon()
 		return s
+	case "type":
+		p.next()
+		s := &ast.ProofStatement{Kind: "type"}
+		for p.curIs(lexer.IDENT) {
+			v := p.cur.Literal
+			p.next()
+			t := ""
+			if p.curIs(lexer.EQ) {
+				p.next()
+				if p.curIs(lexer.IDENT) {
+					t = strings.ToLower(p.cur.Literal)
+					p.next()
+				}
+			}
+			s.Vars = append(s.Vars, v)
+			s.Values = append(s.Values, t)
+		}
+		p.parseProofTail(s)
+		p.expectSemicolon()
+		return s
+	case "key":
+		p.next()
+		s := &ast.ProofStatement{Kind: "key"}
+		if p.curIs(lexer.IDENT) {
+			s.Vars = append(s.Vars, p.cur.Literal)
+			p.next()
+		}
+		if p.identIs("references") {
+			p.next()
+			if p.curIs(lexer.IDENT) {
+				s.RefTable = p.cur.Literal
+				p.next()
+			}
+			if p.curIs(lexer.LPAREN) {
+				p.next()
+				if p.curIs(lexer.IDENT) {
+					s.RefCol = p.cur.Literal
+					p.next()
+				}
+				if p.curIs(lexer.RPAREN) {
+					p.next()
+				}
+			}
+		}
+		p.parseProofTail(s)
+		p.expectSemicolon()
+		return s
 	case "range":
 		p.next()
 		s := &ast.ProofStatement{Kind: "range"}

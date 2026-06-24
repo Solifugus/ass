@@ -561,17 +561,19 @@ func (v *VarStatement) String() string {
 }
 
 // ProofStatement is one assertion in a PROC PROOF step body. Kind selects the
-// check ("require", "notnull", "values", "range", "rule", "unique"); the
-// remaining fields are populated as that kind requires. The optional per-
-// assertion tail (`/ severity= message=`) fills Severity and Message.
+// check ("require", "type", "notnull", "values", "range", "rule", "unique",
+// "key"); the remaining fields are populated as that kind requires. The optional
+// per-assertion tail (`/ severity= message=`) fills Severity and Message.
 type ProofStatement struct {
 	Kind     string     // assertion kind (see above)
-	Vars     []string   // columns: require/notnull/unique vars; the target column is Vars[0] for values/range
-	Values   []string   // allowed-set literals for `values <var> in (...)`
+	Vars     []string   // columns: require/notnull/unique vars; target column is Vars[0] for values/range/key; declared columns for type
+	Values   []string   // allowed-set literals for `values <var> in (...)`; declared types (parallel to Vars) for `type`
 	Low      string     // inclusive lower bound for `range <var> lo - hi` (literal text)
 	High     string     // inclusive upper bound for `range`
 	Expr     Expression // boolean expression for `rule`
 	Label    string     // label for `rule "label": ...`
+	RefTable string     // parent table for `key <col> references <table>(<col>)`
+	RefCol   string     // parent column for `key`
 	Severity string     // "warn"/"error"/"" (empty = step default)
 	Message  string     // custom violation message ("" = a generated default)
 }
@@ -591,6 +593,20 @@ func (s *ProofStatement) String() string {
 	}
 	if s.Kind == "range" {
 		b.WriteString(" " + s.Low + " - " + s.High)
+	}
+	if s.Kind == "type" {
+		b.Reset()
+		b.WriteString("type")
+		for i, v := range s.Vars {
+			t := ""
+			if i < len(s.Values) {
+				t = s.Values[i]
+			}
+			b.WriteString(" " + v + "=" + t)
+		}
+	}
+	if s.Kind == "key" {
+		b.WriteString(" references " + s.RefTable + "(" + s.RefCol + ")")
 	}
 	if s.Expr != nil {
 		b.WriteString(": " + s.Expr.String())

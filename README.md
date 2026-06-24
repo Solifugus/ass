@@ -100,7 +100,7 @@ Obs  name  age
 | PROC FREQ | one-way frequency tables, two-way cross-tabulation (`tables a*b`), n-way list tables (`/ list`), `/ options` (nocol/norow/nopercent/nofreq/nocum), and `/ chisq` (Pearson chi-square); groups by user formats |
 | PROC REG/GLM | OLS linear regression: estimates, std err, t-value, `Pr>|t|`, R²; CLASS categorical predictors (reference-cell coding) |
 | PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT and for grouping in PROC FREQ/MEANS; `invalue` user informats read by INPUT |
-| PROC PROOF | **data-quality validation** (an ASS value-add, not SAS): assert `require`/`notnull`/`values`/`range`/`rule "label": <expr>`/`unique` over a dataset; `/ severity= message=` per assertion; report + `out=` violations dataset (`_rule_`/`_obs_`); error-level failures set a non-zero exit. See [`docs/proofing.md`](docs/proofing.md) |
+| PROC PROOF | **data-quality validation** (an ASS value-add, not SAS): assert `require`/`type`/`notnull`/`values`/`range`/`unique`/`key … references` (referential integrity)/`rule "label": <expr>` over a dataset; `/ severity= message=` per assertion; report + `out=` violations dataset (`_rule_`/`_obs_`); error-level failures set a non-zero exit. See [`docs/proofing.md`](docs/proofing.md) |
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), `time`/`datetime`, date/time/datetime literals `'01JAN2020'd`/`'14:30:00't`/`'01JAN2020:14:30:00'dt` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `time`/`datetime`, `$w.` |

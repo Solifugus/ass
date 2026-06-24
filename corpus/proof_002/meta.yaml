@@ -1,0 +1,24 @@
+id: proof_002
+source: hand-written
+license: MIT
+features:
+  - proc-proof
+  - data-quality
+  - data-step
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    bad:
+      columns: [id, qty, region, _rule_, _obs_]
+      rows:
+        - [2, 20, "south", "key region references regions(region)", 2]
+priority: 1
+notes: |
+  Value-verifies PROC PROOF v2's schema and referential-integrity assertions.
+  `type id=num region=char` passes (declared kinds match the dataset). `key region
+  references regions(region)` loads the parent REGIONS key set {east, west}; obs 2
+  (region=south) has no parent, so it is the sole violation. The out= dataset
+  carries that one row annotated with _rule_ and _obs_. (A missing foreign key
+  would pass, mirroring SQL NULL FK semantics.)

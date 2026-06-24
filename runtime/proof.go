@@ -58,9 +58,11 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 	}
 
 	// Schema check: any assertion referencing a column the dataset lacks cannot
-	// run. `require` itself fails when a listed column is missing.
+	// run. `require` fails when a listed column is missing; `type` fails when a
+	// column's kind does not match the declared type. Both are dataset-level.
 	for _, r := range results {
-		if r.stmt.Kind == "require" {
+		switch r.stmt.Kind {
+		case "require":
 			for _, v := range r.stmt.Vars {
 				if !ds.HasColumn(v) {
 					r.violObs = append(r.violObs, 0) // dataset-level violation
@@ -68,13 +70,27 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 				}
 			}
 			r.checked = 1
-			continue
-		}
-		for _, v := range r.stmt.Vars {
-			if !ds.HasColumn(v) {
-				r.couldRun = false
-				r.why = "references unknown column " + v
-				break
+		case "type":
+			r.checked = len(r.stmt.Vars)
+			for i, v := range r.stmt.Vars {
+				k, ok := columnKind(ds, v)
+				if !ok {
+					r.couldRun = false
+					r.why = "references unknown column " + v
+					break
+				}
+				want, known := declaredKind(r.stmt.Values[i])
+				if known && k != want {
+					r.violObs = append(r.violObs, 0)
+				}
+			}
+		default:
+			for _, v := range r.stmt.Vars {
+				if !ds.HasColumn(v) {
+					r.couldRun = false
+					r.why = "references unknown column " + v
+					break
+				}
 			}
 		}
 	}
@@ -86,9 +102,22 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 		pdv.Declare(c.Name, c.Kind)
 	}
 	uniqueKeys := make([]map[string][]int, len(results))
+	keySets := make([]map[string]bool, len(results))
 	for i, r := range results {
-		if r.couldRun && r.stmt.Kind == "unique" {
+		if !r.couldRun {
+			continue
+		}
+		switch r.stmt.Kind {
+		case "unique":
 			uniqueKeys[i] = make(map[string][]int)
+		case "key":
+			set, err := loadKeySet(lib, r.stmt.RefTable, r.stmt.RefCol)
+			if err != nil {
+				r.couldRun = false
+				r.why = err.Error()
+				continue
+			}
+			keySets[i] = set
 		}
 	}
 
@@ -98,17 +127,24 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 			pdv.Set(c.Name, ds.Get(row, c.Name))
 		}
 		for i, r := range results {
-			if !r.couldRun || r.stmt.Kind == "require" {
+			if !r.couldRun || r.stmt.Kind == "require" || r.stmt.Kind == "type" {
 				continue
 			}
-			if r.stmt.Kind == "unique" {
+			switch r.stmt.Kind {
+			case "unique":
 				key := uniqueKey(pdv, r.stmt.Vars)
 				uniqueKeys[i][key] = append(uniqueKeys[i][key], obs)
-				continue
-			}
-			r.checked++
-			if proofRowViolates(r.stmt, pdv, logger) {
-				r.violObs = append(r.violObs, obs)
+			case "key":
+				r.checked++
+				val := pdv.Get(r.stmt.Vars[0])
+				if !val.IsMissing() && !keySets[i][scalarKey(val)] { // missing FK passes
+					r.violObs = append(r.violObs, obs)
+				}
+			default:
+				r.checked++
+				if proofRowViolates(r.stmt, pdv, logger) {
+					r.violObs = append(r.violObs, obs)
+				}
 			}
 		}
 	}
@@ -236,16 +272,69 @@ func valueInSet(v table.Value, allowed []string) bool {
 func uniqueKey(pdv *PDV, vars []string) string {
 	parts := make([]string, len(vars))
 	for i, v := range vars {
-		val := pdv.Get(v)
-		if val.IsMissing() {
-			parts[i] = "\x00" // missing distinct from any real value
-		} else if val.Kind == table.Numeric {
-			parts[i] = strconv.FormatFloat(val.Num, 'g', -1, 64)
-		} else {
-			parts[i] = val.Str
-		}
+		parts[i] = scalarKey(pdv.Get(v))
 	}
 	return strings.Join(parts, "\x01")
+}
+
+// scalarKey encodes a single value as a comparable string. A missing value maps
+// to a sentinel distinct from any real value.
+func scalarKey(v table.Value) string {
+	if v.IsMissing() {
+		return "\x00"
+	}
+	if v.Kind == table.Numeric {
+		return strconv.FormatFloat(v.Num, 'g', -1, 64)
+	}
+	return v.Str
+}
+
+// loadKeySet loads a parent table's key column into a set, for `key … references`
+// referential-integrity checks. The parent is resolved from WORK (or any already
+// materialized member); external librefs are not yet supported here.
+func loadKeySet(lib *table.Library, refTable, refCol string) (map[string]bool, error) {
+	if refTable == "" || refCol == "" {
+		return nil, fmt.Errorf("malformed key…references")
+	}
+	parent, ok := lib.Get(refTable)
+	if !ok {
+		return nil, fmt.Errorf("parent table %s not found", strings.ToUpper(refTable))
+	}
+	if !parent.HasColumn(refCol) {
+		return nil, fmt.Errorf("parent table %s has no column %s", strings.ToUpper(refTable), refCol)
+	}
+	set := make(map[string]bool, parent.NObs())
+	for _, row := range parent.Rows {
+		v := parent.Get(row, refCol)
+		if !v.IsMissing() {
+			set[scalarKey(v)] = true
+		}
+	}
+	return set, nil
+}
+
+// columnKind returns the declared kind of a dataset column.
+func columnKind(ds *table.Dataset, name string) (table.Kind, bool) {
+	ln := strings.ToLower(name)
+	for _, c := range ds.Columns {
+		if strings.ToLower(c.Name) == ln {
+			return c.Kind, true
+		}
+	}
+	return table.Numeric, false
+}
+
+// declaredKind maps a `type` declaration ("num"/"numeric", "char"/"character")
+// to a table.Kind. The second return is false for an unrecognized declaration
+// (which is then not checked).
+func declaredKind(s string) (table.Kind, bool) {
+	switch strings.ToLower(s) {
+	case "num", "numeric", "n":
+		return table.Numeric, true
+	case "char", "character", "c", "$":
+		return table.Character, true
+	}
+	return table.Numeric, false
 }
 
 func parseFloat(s string) (float64, bool) {
@@ -391,6 +480,18 @@ func proofDesc(ps *ast.ProofStatement) string {
 			return "rule " + ps.Expr.String()
 		}
 		return "rule"
+	case "type":
+		pairs := make([]string, len(ps.Vars))
+		for i, v := range ps.Vars {
+			t := ""
+			if i < len(ps.Values) {
+				t = ps.Values[i]
+			}
+			pairs[i] = v + "=" + t
+		}
+		return "type " + strings.Join(pairs, " ")
+	case "key":
+		return "key " + first(ps.Vars) + " references " + ps.RefTable + "(" + ps.RefCol + ")"
 	default: // require, notnull, unique
 		return ps.Kind + " " + strings.Join(ps.Vars, " ")
 	}
