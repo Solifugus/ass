@@ -34,39 +34,56 @@ const (
 type dataStep struct {
 	lib       *table.Library
 	pdv       *PDV
-	logger    *log.Logger             // step logger (PUT without FILE writes here)
-	outputs   []*table.Dataset        // datasets this step writes
-	outOpts   []*ast.DatasetOptions   // dataset options per output (aligned to outputs)
-	outNames  []string                // full (possibly libref-qualified) output names, aligned to outputs
-	explicit  bool                    // step contains at least one OUTPUT statement
-	n         int                     // current iteration (_N_)
-	records   []string                // data lines (datalines or infile file contents)
-	recPtr    int                     // next data record to read
-	recCursor int                     // 1-based column in the current record where the next list read resumes (line-hold)
-	holdCross bool                    // a trailing `@@` is holding the current line across iterations
-	holdLine  bool                    // a trailing `@` is holding the current line within the iteration
-	mlHold    bool                    // a trailing hold is active on a `#n` multi-line record
-	mlBase    int                     // held base record index for the multi-line hold
-	mlCursors map[int]int             // per-line-offset 1-based cursor for the held multi-line record
-	infile    *ast.InfileStatement    // external flat-file record source (nil = datalines)
-	file      *ast.FileStatement      // external flat-file PUT destination (nil = log)
-	putLines  []string                // lines accumulated by PUT for the FILE destination
-	putBuf    string                  // held partial output line (trailing `@`/`@@` on PUT)
-	putHeld   bool                    // a trailing `@`/`@@` is holding the output line
-	putHoldX  bool                    // the output hold is `@@` (persists across iterations)
-	setRows   []sourceRow             // rows from SET input datasets (concatenated)
-	setPtr    int                     // next SET row to read
-	keep      map[string]bool         // if non-nil, only these vars are output (lowercased)
-	drop      map[string]bool         // these vars are excluded from output (lowercased)
-	wheres    []ast.Expression        // WHERE conditions applied at read time
-	byVars    []string                // BY variables (DATA step BY-group processing)
-	byFlags   []ByFlags               // per-set-row first./last. flags (aligned to setRows)
-	mergeRows []table.Row             // precomputed combined rows for MERGE
-	mergePtr  int                     // next merge row to emit
-	inVars    map[string]bool         // in= flag variable names (lowercased), excluded from output
-	formats   map[string]string       // variable (lowercased) -> display format
-	labels    map[string]string       // variable (lowercased) -> descriptive label
-	srcCols   map[string]table.Column // variable (lowercased) -> source column metadata (SET/MERGE), first source wins
+	logger    *log.Logger                 // step logger (PUT without FILE writes here)
+	outputs   []*table.Dataset            // datasets this step writes
+	outOpts   []*ast.DatasetOptions       // dataset options per output (aligned to outputs)
+	outNames  []string                    // full (possibly libref-qualified) output names, aligned to outputs
+	explicit  bool                        // step contains at least one OUTPUT statement
+	n         int                         // current iteration (_N_)
+	records   []string                    // data lines (datalines or infile file contents)
+	recPtr    int                         // next data record to read
+	recCursor int                         // 1-based column in the current record where the next list read resumes (line-hold)
+	holdCross bool                        // a trailing `@@` is holding the current line across iterations
+	holdLine  bool                        // a trailing `@` is holding the current line within the iteration
+	mlHold    bool                        // a trailing hold is active on a `#n` multi-line record
+	mlBase    int                         // held base record index for the multi-line hold
+	mlCursors map[int]int                 // per-line-offset 1-based cursor for the held multi-line record
+	infile    *ast.InfileStatement        // external flat-file record source (nil = datalines)
+	file      *ast.FileStatement          // external flat-file PUT destination (nil = log)
+	putLines  []string                    // lines accumulated by PUT for the FILE destination
+	putBuf    string                      // held partial output line (trailing `@`/`@@` on PUT)
+	putHeld   bool                        // a trailing `@`/`@@` is holding the output line
+	putHoldX  bool                        // the output hold is `@@` (persists across iterations)
+	setRows   []sourceRow                 // rows from SET input datasets (concatenated)
+	setPtr    int                         // next SET row to read
+	keep      map[string]bool             // if non-nil, only these vars are output (lowercased)
+	drop      map[string]bool             // these vars are excluded from output (lowercased)
+	wheres    []ast.Expression            // WHERE conditions applied at read time
+	byVars    []string                    // BY variables (DATA step BY-group processing)
+	byFlags   []ByFlags                   // per-set-row first./last. flags (aligned to setRows)
+	mergeRows []table.Row                 // precomputed combined rows for MERGE
+	mergePtr  int                         // next merge row to emit
+	inVars    map[string]bool             // in= flag variable names (lowercased), excluded from output
+	formats   map[string]string           // variable (lowercased) -> display format
+	labels    map[string]string           // variable (lowercased) -> descriptive label
+	srcCols   map[string]table.Column     // variable (lowercased) -> source column metadata (SET/MERGE), first source wins
+	outPlans  map[*table.Dataset]*outPlan // cached output-column plan per output dataset (writeRow hot path)
+}
+
+// outColumn is one variable to emit to an output dataset, with its name
+// precomputed in both display and lowercased form so writeRow needs no per-row
+// strings.ToLower or column lookup.
+type outColumn struct {
+	display string
+	lower   string
+}
+
+// outPlan is the cached set of output columns for one dataset. It is rebuilt only
+// when the PDV's variable count grows (a new variable appeared), which is rare —
+// typically once, on the first output row.
+type outPlan struct {
+	builtAt int // pdv.NumVars() when this plan was computed
+	cols    []outColumn
 }
 
 // sourceRow is one input row from a SET dataset, paired with the dataset so the
@@ -479,7 +496,25 @@ func (d *dataStep) outputAll() {
 // writeRow appends the current PDV (minus automatic variables) as a row to ds,
 // declaring any new columns in PDV order.
 func (d *dataStep) writeRow(ds *table.Dataset) {
-	row := make(table.Row)
+	plan := d.outPlanFor(ds)
+	row := make(table.Row, len(plan.cols))
+	for i := range plan.cols {
+		row[plan.cols[i].lower] = d.pdv.GetLower(plan.cols[i].lower)
+	}
+	ds.AppendRow(row)
+}
+
+// outPlanFor returns the cached output-column plan for ds, (re)building it only
+// when the PDV variable set has grown since it was last computed. Building adds
+// the columns to ds (with their format/label/source metadata); the per-row
+// writeRow path then just copies values by precomputed lowercased key. This keeps
+// the common case off the O(vars^2) AddColumn scan and the per-row Names alloc.
+func (d *dataStep) outPlanFor(ds *table.Dataset) *outPlan {
+	nv := d.pdv.NumVars()
+	if plan, ok := d.outPlans[ds]; ok && plan.builtAt == nv {
+		return plan
+	}
+	plan := &outPlan{builtAt: nv}
 	for _, name := range d.pdv.Names() {
 		ln := strings.ToLower(name)
 		if automaticVars[ln] || isByFlagVar(ln) || d.inVars[ln] || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
@@ -501,9 +536,13 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 			col.Length = src.Length
 		}
 		ds.AddColumn(col)
-		row[ln] = v
+		plan.cols = append(plan.cols, outColumn{display: name, lower: ln})
 	}
-	ds.AppendRow(row)
+	if d.outPlans == nil {
+		d.outPlans = make(map[*table.Dataset]*outPlan)
+	}
+	d.outPlans[ds] = plan
+	return plan
 }
 
 // recordSourceCols captures a SET/MERGE source dataset's column metadata so the

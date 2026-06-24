@@ -427,7 +427,12 @@ than emitting native code. ASS matches that family by design.
   bottleneck. Cheap interpreter optimizations come first (resolve variable names
   to PDV **slot indices** at compile time, flatten the statement list, cut
   per-row allocations); these often recover most of the gap with no architecture
-  change.
+  change. **Empirical update (2026-06-24, [`perf.md`](perf.md)):** the per-row
+  loop is indeed the bottleneck, but the measured cost is *data representation*
+  (per-row `map[string]Value` allocation + PDV string-map hashing), not opcode
+  dispatch — so the VM is deferred and the **slot-indexed PDV + non-map rows** is
+  the next perf investment (it also becomes the VM's foundation if one is ever
+  built).
 - Consider **vectorized execution** only if the product pivots toward being a
   general high-performance analytical engine. Even then the answer stays inside
   the interpreter family.

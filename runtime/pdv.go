@@ -113,6 +113,26 @@ func (p *PDV) Names() []string {
 	return out
 }
 
+// NumVars returns the number of declared variables. It is monotonic within a
+// step (variables are added, never removed), so callers can cheaply detect when
+// the variable set has grown without allocating via Names.
+func (p *PDV) NumVars() int { return len(p.order) }
+
+// GetLower is Get for a key that is already lowercased, skipping the per-call
+// strings.ToLower. Hot paths that hold precomputed lowercased keys use it.
+func (p *PDV) GetLower(key string) table.Value {
+	if v, ok := p.values[key]; ok {
+		return v
+	}
+	if k, ok := p.kinds[key]; ok {
+		if k == table.Character {
+			return table.MissingChar()
+		}
+		return table.MissingNum()
+	}
+	return table.MissingNum()
+}
+
 // ResetVars sets every declared variable back to its typed missing value. SAS
 // clears the PDV at the top of each implicit-loop iteration (except retained and
 // read-in variables, handled by the loop driver). Declarations and order are
