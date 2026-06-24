@@ -373,6 +373,35 @@ run;
   character formats. Applied in PROC PRINT and for grouping in FREQ/MEANS.
 - `invalue` — user informats read by `input`.
 
+### PROC PROOF
+
+Data-quality validation — an ASS value-add (not a SAS procedure). Checks a
+dataset against declared assertions and emits a verdict: a report, an optional
+`out=` violations dataset, and a non-zero process exit when an error-level
+assertion fails. See [`proofing.md`](proofing.md).
+
+```sas
+proc proof data=orders out=bad maxsample=20 severity=error;
+  require id qty;                          /* columns must exist               */
+  notnull qty / severity=warn;            /* values present (warn, not error)  */
+  values region in ("east" "west");        /* domain / allowed set             */
+  range qty 1 - 100;                       /* inclusive numeric bound          */
+  unique id;                               /* no duplicate keys                */
+  rule "ship after order": shipdate >= orderdate;  /* arbitrary boolean       */
+run;
+```
+- Assertions: `require`, `notnull`, `values … in (…)`, `range <var> lo - hi`,
+  `rule "label": <expr>`, `unique <vars>`.
+- Each assertion may carry `/ severity=warn|error message="…"` — except `rule`,
+  whose expression consumes `/` as division (a rule uses the step severity).
+- `out=` receives one row per (source row × failed assertion), annotated with
+  `_rule_` and `_obs_`, so violations are trivially filterable.
+- Error-level failures log `ERROR` and make the CLI exit non-zero **without**
+  halting the program; warn-level failures log `WARNING` and don't affect the exit
+  code.
+- Deferred: `type`, `key … references`, the relational `range` form, and a `/`
+  tail on `rule` (see proofing.md §11).
+
 ### PROC IMPORT / EXPORT
 
 ```sas

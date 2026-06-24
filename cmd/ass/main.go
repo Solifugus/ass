@@ -88,7 +88,15 @@ func runProgram(path string) error {
 	}
 	logger := log.New(os.Stderr)
 	lib := table.NewLibrary()
-	return runtime.RunProgram(prog, lib, logger)
+	if err := runtime.RunProgram(prog, lib, logger); err != nil {
+		return err
+	}
+	// A run that logged errors without aborting (e.g. a failing PROC PROOF
+	// assertion) still exits non-zero, so CI / data-quality gates can detect it.
+	if n := logger.ErrorCount(); n > 0 {
+		return fmt.Errorf("completed with %d error(s)", n)
+	}
+	return nil
 }
 
 // runParse parses a SAS source file and prints the resulting AST, plus any

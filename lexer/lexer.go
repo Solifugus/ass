@@ -231,6 +231,9 @@ func (l *Lexer) scan() (tok Token) {
 	case ';':
 		l.advance()
 		return Token{Type: SEMICOLON, Literal: ";", Line: line, Col: col}
+	case ':':
+		l.advance()
+		return Token{Type: COLON, Literal: ":", Line: line, Col: col}
 	case '(':
 		l.advance()
 		return Token{Type: LPAREN, Literal: "(", Line: line, Col: col}
@@ -301,7 +304,7 @@ func (l *Lexer) readNumber() string {
 }
 
 // readString consumes a quoted string and returns its unquoted value. A doubled
-// quote inside the string ('' or "") is an escaped single quote character.
+// quote inside the string (” or "") is an escaped single quote character.
 func (l *Lexer) readString(quote rune) string {
 	l.advance() // opening quote
 	var out []rune

@@ -84,14 +84,14 @@ func RunProgram(prog *ast.Program, lib *table.Library, logger *log.Logger) error
 func runProcStep(s *ast.ProcStep, lib *table.Library, logger *log.Logger) error {
 	external := lib.IsExternal(s.Data)
 	if s.DataOptions.IsEmpty() && !external {
-		return proc.Run(lib, s, logger)
+		return dispatchProc(lib, s, logger)
 	}
 	src, ok, err := lib.ResolveFiltered(s.Data, pushdownSelection(s.DataOptions))
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return proc.Run(lib, s, logger) // let the proc report the missing dataset
+		return dispatchProc(lib, s, logger) // let the proc report the missing dataset
 	}
 	view := src
 	if !s.DataOptions.IsEmpty() {
@@ -108,7 +108,17 @@ func runProcStep(s *ast.ProcStep, lib *table.Library, logger *log.Logger) error 
 	clone := *s
 	clone.Data = tmp
 	clone.DataOptions = nil
-	return proc.Run(lib, &clone, logger)
+	return dispatchProc(lib, &clone, logger)
+}
+
+// dispatchProc routes a resolved PROC step. PROC PROOF is handled in the runtime
+// package (it needs the expression evaluator and PDV, which the proc package
+// cannot import without a cycle); every other PROC goes through the registry.
+func dispatchProc(lib *table.Library, s *ast.ProcStep, logger *log.Logger) error {
+	if s.Name == "proof" {
+		return runProof(lib, s, logger)
+	}
+	return proc.Run(lib, s, logger)
 }
 
 // datasetMember returns the member component of a possibly-qualified name.

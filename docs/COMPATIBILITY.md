@@ -105,6 +105,22 @@ dates like 30FEB), `year`/`month`/`day`/`qtr`/`weekday` (Sunday=1), `datepart`/
 arguments propagate. Not yet: multi-unit/shifted interval names (`month2`,
 `week.2`) and datetime intervals (`dtday`, `hour`, …).
 
+## Value-adds beyond SAS
+
+These are intentional ASS features with **no Base SAS equivalent** — clean-room
+additions, not compatibility targets.
+
+- **PROC PROOF** — declarative data-quality validation. Assert `require`,
+  `notnull`, `values … in (…)`, `range <var> lo - hi`, `rule "label": <expr>`,
+  and `unique <vars>` over a dataset; each takes an optional
+  `/ severity=warn|error message="…"` tail (except `rule`). Produces a report, an
+  optional `out=` violations dataset (one record per source-row × failed
+  assertion, annotated `_rule_`/`_obs_`), and a **non-zero process exit** when an
+  error-level assertion fails (without halting the run) so CI / regulated
+  pipelines can gate on data quality. Deferred from the v1 catalog: `type`,
+  `key … references`, the relational `range` form, and a `/` tail on `rule`. See
+  [`proofing.md`](proofing.md).
+
 ## Known unsupported / deferred constructs
 
 - PROC FREQ: one- and two-way tables, **n-way (3+) via `/ list`** (one row per distinct combination), the **`/ options`** nocol/norow/nopercent/nofreq/nocum (suppress parts of the table) and **`/ chisq`** (Pearson chi-square statistic, DF, and p-value for a two-way table) are supported. Not yet: the default (non-`list`) stratified n-way layout, and association statistics beyond Pearson chi-square (likelihood-ratio, Fisher exact, measures of association)

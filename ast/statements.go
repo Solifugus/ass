@@ -560,6 +560,47 @@ func (v *VarStatement) String() string {
 	return "var " + strings.Join(v.Vars, " ") + ";"
 }
 
+// ProofStatement is one assertion in a PROC PROOF step body. Kind selects the
+// check ("require", "notnull", "values", "range", "rule", "unique"); the
+// remaining fields are populated as that kind requires. The optional per-
+// assertion tail (`/ severity= message=`) fills Severity and Message.
+type ProofStatement struct {
+	Kind     string     // assertion kind (see above)
+	Vars     []string   // columns: require/notnull/unique vars; the target column is Vars[0] for values/range
+	Values   []string   // allowed-set literals for `values <var> in (...)`
+	Low      string     // inclusive lower bound for `range <var> lo - hi` (literal text)
+	High     string     // inclusive upper bound for `range`
+	Expr     Expression // boolean expression for `rule`
+	Label    string     // label for `rule "label": ...`
+	Severity string     // "warn"/"error"/"" (empty = step default)
+	Message  string     // custom violation message ("" = a generated default)
+}
+
+func (s *ProofStatement) statementNode() {}
+func (s *ProofStatement) String() string {
+	b := strings.Builder{}
+	b.WriteString(s.Kind)
+	if s.Label != "" {
+		b.WriteString(" \"" + s.Label + "\"")
+	}
+	if len(s.Vars) > 0 {
+		b.WriteString(" " + strings.Join(s.Vars, " "))
+	}
+	if s.Kind == "values" && len(s.Values) > 0 {
+		b.WriteString(" in (" + strings.Join(s.Values, " ") + ")")
+	}
+	if s.Kind == "range" {
+		b.WriteString(" " + s.Low + " - " + s.High)
+	}
+	if s.Expr != nil {
+		b.WriteString(": " + s.Expr.String())
+	}
+	if s.Severity != "" {
+		b.WriteString(" / severity=" + s.Severity)
+	}
+	return b.String() + ";"
+}
+
 // RawStatement is a not-yet-structured statement, holding its source tokens'
 // literals. It lets the parser keep moving over constructs that do not yet have
 // dedicated nodes, without losing them. Phase 3+ replaces these incrementally.

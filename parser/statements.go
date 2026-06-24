@@ -1082,6 +1082,134 @@ func (p *Parser) parseProcStatement() ast.Statement {
 	}
 }
 
+// parseProofStatement parses one assertion in a PROC PROOF step body. The
+// supported kinds are require/notnull/unique (name lists), values (`var in
+// (...)`), range (`var lo - hi`), and rule (`"label": <expr>`). Each may carry a
+// trailing `/ severity= message=` tail — except rule, whose expression consumes
+// `/` as division.
+func (p *Parser) parseProofStatement() ast.Statement {
+	if p.curIs(lexer.SEMICOLON) {
+		p.next()
+		return nil
+	}
+	if !p.curIs(lexer.IDENT) {
+		return p.parseRawStatement()
+	}
+	switch strings.ToLower(p.cur.Literal) {
+	case "require", "notnull", "unique":
+		kind := strings.ToLower(p.cur.Literal)
+		p.next()
+		s := &ast.ProofStatement{Kind: kind}
+		for p.curIs(lexer.IDENT) {
+			s.Vars = append(s.Vars, p.cur.Literal)
+			p.next()
+		}
+		p.parseProofTail(s)
+		p.expectSemicolon()
+		return s
+	case "values":
+		p.next()
+		s := &ast.ProofStatement{Kind: "values"}
+		if p.curIs(lexer.IDENT) {
+			s.Vars = append(s.Vars, p.cur.Literal)
+			p.next()
+		}
+		if p.identIs("in") {
+			p.next()
+		}
+		if p.curIs(lexer.LPAREN) {
+			p.next()
+			for !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+				if p.curIs(lexer.STRING) || p.curIs(lexer.NUMBER) || p.curIs(lexer.IDENT) {
+					s.Values = append(s.Values, p.cur.Literal)
+				}
+				p.next() // also steps over commas between items
+			}
+			if p.curIs(lexer.RPAREN) {
+				p.next()
+			}
+		}
+		p.parseProofTail(s)
+		p.expectSemicolon()
+		return s
+	case "range":
+		p.next()
+		s := &ast.ProofStatement{Kind: "range"}
+		if p.curIs(lexer.IDENT) {
+			s.Vars = append(s.Vars, p.cur.Literal)
+			p.next()
+		}
+		s.Low = p.parseProofNumber()
+		if p.curIs(lexer.MINUS) { // the lo - hi separator
+			p.next()
+		}
+		s.High = p.parseProofNumber()
+		p.parseProofTail(s)
+		p.expectSemicolon()
+		return s
+	case "rule":
+		p.next()
+		s := &ast.ProofStatement{Kind: "rule"}
+		if p.curIs(lexer.STRING) {
+			s.Label = p.cur.Literal
+			p.next()
+		}
+		if p.curIs(lexer.COLON) {
+			p.next()
+		}
+		s.Expr = p.parseExpression(pLOWEST)
+		p.parseProofTail(s)
+		p.expectSemicolon()
+		return s
+	default:
+		return p.parseRawStatement()
+	}
+}
+
+// parseProofNumber reads an optionally-signed numeric literal (a range endpoint)
+// and returns its source text, or "" if none is present.
+func (p *Parser) parseProofNumber() string {
+	sign := ""
+	if p.curIs(lexer.MINUS) {
+		sign = "-"
+		p.next()
+	}
+	if p.curIs(lexer.NUMBER) {
+		lit := sign + p.cur.Literal
+		p.next()
+		return lit
+	}
+	return sign
+}
+
+// parseProofTail consumes an optional `/ severity= message=` option tail on a
+// proof assertion.
+func (p *Parser) parseProofTail(s *ast.ProofStatement) {
+	if !p.curIs(lexer.SLASH) {
+		return
+	}
+	p.next() // '/'
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		name := strings.ToLower(p.cur.Literal)
+		p.next()
+		if !p.curIs(lexer.EQ) {
+			continue
+		}
+		p.next()
+		val := ""
+		if p.curIs(lexer.STRING) || p.curIs(lexer.IDENT) || p.curIs(lexer.NUMBER) {
+			val = p.cur.Literal
+			p.next()
+		}
+		switch name {
+		case "severity":
+			s.Severity = strings.ToLower(val)
+		case "message":
+			s.Message = val
+		}
+	}
+}
+
 // parseValueStmt parses a PROC FORMAT `value [$]name <range>=<label> ...;`
 // statement into a ValueStatement. Ranges may be single values, `low`/`high`
 // open-ended or exclusive (`a <- b`, `a -< b`) intervals, comma lists (each

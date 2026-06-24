@@ -11,11 +11,22 @@ import (
 // "WARNING: ", and errors with "ERROR: ". A nil Logger is usable and discards
 // everything, so callers need not guard every call.
 type Logger struct {
-	w io.Writer
+	w    io.Writer
+	errs int
 }
 
 // New creates a Logger writing to w.
 func New(w io.Writer) *Logger { return &Logger{w: w} }
+
+// ErrorCount returns the number of ERROR lines emitted. The CLI uses it to set a
+// non-zero exit status when a run logged errors (e.g. a failing PROC PROOF
+// assertion) without aborting the program. A nil Logger reports 0.
+func (l *Logger) ErrorCount() int {
+	if l == nil {
+		return 0
+	}
+	return l.errs
+}
 
 // Note writes a "NOTE: ..." line (printf-style).
 func (l *Logger) Note(format string, args ...any) { l.line("NOTE: ", format, args...) }
@@ -24,7 +35,12 @@ func (l *Logger) Note(format string, args ...any) { l.line("NOTE: ", format, arg
 func (l *Logger) Warning(format string, args ...any) { l.line("WARNING: ", format, args...) }
 
 // Error writes an "ERROR: ..." line.
-func (l *Logger) Error(format string, args ...any) { l.line("ERROR: ", format, args...) }
+func (l *Logger) Error(format string, args ...any) {
+	if l != nil {
+		l.errs++
+	}
+	l.line("ERROR: ", format, args...)
+}
 
 func (l *Logger) line(prefix, format string, args ...any) {
 	if l == nil || l.w == nil {

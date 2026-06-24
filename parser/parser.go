@@ -49,8 +49,8 @@ func (p *Parser) next() {
 	p.peek = p.l.NextToken()
 }
 
-func (p *Parser) curIs(t lexer.TokenType) bool  { return p.cur.Type == t }
-func (p *Parser) addError(msg string)           { p.errors = append(p.errors, msg) }
+func (p *Parser) curIs(t lexer.TokenType) bool { return p.cur.Type == t }
+func (p *Parser) addError(msg string)          { p.errors = append(p.errors, msg) }
 
 // ParseProgram parses the whole input into a Program. Tokens outside of a DATA
 // or PROC step (e.g. stray macro invocations not yet handled) are skipped.
@@ -174,6 +174,10 @@ func (p *Parser) parseProcStep() ast.Step {
 			p.next()
 			p.expectSemicolon()
 		}
+		return ps
+	}
+	if ps.Name == "proof" {
+		ps.Body = p.parseStepBody(p.parseProofStatement)
 		return ps
 	}
 	ps.Body = p.parseStepBody(p.parseProcStatement)

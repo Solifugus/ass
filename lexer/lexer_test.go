@@ -81,9 +81,9 @@ func TestNumbers(t *testing.T) {
 
 func TestStrings(t *testing.T) {
 	cases := map[string]string{
-		`'hello'`:    "hello",
-		`"world"`:    "world",
-		`'it''s'`:    "it's",
+		`'hello'`:      "hello",
+		`"world"`:      "world",
+		`'it''s'`:      "it's",
 		`"say ""hi"""`: `say "hi"`,
 	}
 	for in, val := range cases {

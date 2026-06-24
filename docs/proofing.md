@@ -1,8 +1,8 @@
 # Data-Quality Proofing — Design
 
-**Status:** design only — not yet implemented. **Scope:** `PROC PROOF` (the
-validation tier). Inline row-level guarding is recorded as a deferred decision in
-§9, not part of this design.
+**Status:** v1 implemented (2026-06-24) — see §11 for what shipped vs. deferred.
+**Scope:** `PROC PROOF` (the validation tier). Inline row-level guarding is
+recorded as a deferred decision in §9, not part of this design.
 
 This document locks the shape of the feature before any code, following the same
 practice as the architecture decision record in [`design.md`](design.md) §14–16.
@@ -195,3 +195,45 @@ exercising **both** a passing case and a violating case, asserting:
 
 Because a proof step's product is a verdict plus an optional dataset, the existing
 value-verification harness covers it directly through `out=`.
+
+## 11. Implementation status (v1, 2026-06-24)
+
+Implemented (`runtime/proof.go`, parsed in `parser` as `ast.ProofStatement`,
+dispatched from `runtime.dispatchProc` because it reuses the DATA-step evaluator
+and PDV):
+
+- **Assertions:** `require`, `notnull`, `values … in (…)`, `range <var> lo - hi`
+  (inclusive), `rule "label": <expr>` (any boolean expression over the row),
+  `unique <vars>` (flags every row in a duplicated key group).
+- **PROC options:** `out=`, `maxsample=` (default 20), `severity=` (step default).
+- **Per-assertion tail:** `/ severity=warn|error message="…"` — on every assertion
+  **except `rule`**, whose expression consumes `/` as division (so a rule's
+  severity comes from the step default; see below).
+- **Outcome model:** per-assertion report to stdout (PASS/FAIL/N-RUN +
+  violations/checked + sampled offending obs); `out=` dataset with one record per
+  (source row × failed assertion) annotated `_rule_`/`_obs_`, sorted by
+  `(_obs_, _rule_)`; error-level failures log `ERROR` and make the CLI exit
+  non-zero **without halting** the program (via `log.Logger.ErrorCount`), warn-level
+  failures log `WARNING` and don't affect the exit code. A reference to an unknown
+  column is reported as "could not run" rather than failing.
+- Reads any `data=` the resolver handles (WORK, dataset options, base/database
+  librefs); `out=` is routed through `table.Library.Store` (so it can target an
+  external libref too).
+
+Deferred from the v1 catalog in §8:
+
+- **`type`** (declared-type schema check) — not yet parsed/checked.
+- **`key … references parent(col)`** (referential integrity) — needs loading the
+  parent key set; the headline set-level check (`unique`) is in, this is the next
+  set-level addition.
+- **`range`'s relational form** (`range premium >= 0`) — use `rule` for relational
+  bounds; `range` currently takes the inclusive `lo - hi` form only.
+- A **`/` option tail on `rule`** — blocked by the division-operator ambiguity;
+  revisit if rule-level severity overrides are wanted (e.g. capture the rule body
+  raw and split the tail before parsing the expression).
+- **`abort`** (immediate halt) — v1 always continues to the next step and gates via
+  the exit code.
+
+Tests: `runtime/proof_test.go` (violations + out= shape + exit semantics, all
+pass, warn-only, unique duplicates, values, unknown column) and corpus
+`proof_001` (value-verifies the `out=` dataset).

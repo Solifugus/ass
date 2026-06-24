@@ -43,21 +43,21 @@ const (
 	DATALINES_DATA TokenType = "DATALINES_DATA"
 
 	// Operators
-	EQ     TokenType = "EQ"     // =  (assignment or equality; parser decides)
-	NE     TokenType = "NE"     // ^= ~= <>
-	LT     TokenType = "LT"     // <
-	LE     TokenType = "LE"     // <=
-	GT     TokenType = "GT"     // >
-	GE     TokenType = "GE"     // >=
-	PLUS   TokenType = "PLUS"   // +
-	MINUS  TokenType = "MINUS"  // -
-	STAR   TokenType = "STAR"   // *
-	SLASH  TokenType = "SLASH"  // /
-	POW    TokenType = "POW"    // **
-	CONCAT TokenType = "CONCAT" // ||
-	AMP    TokenType = "AMP"    // &  (logical AND symbol / macro var prefix)
-	PIPE   TokenType = "PIPE"   // |  (logical OR symbol)
-	NOT    TokenType = "NOT"    // ^ ~ (logical NOT symbol)
+	EQ      TokenType = "EQ"      // =  (assignment or equality; parser decides)
+	NE      TokenType = "NE"      // ^= ~= <>
+	LT      TokenType = "LT"      // <
+	LE      TokenType = "LE"      // <=
+	GT      TokenType = "GT"      // >
+	GE      TokenType = "GE"      // >=
+	PLUS    TokenType = "PLUS"    // +
+	MINUS   TokenType = "MINUS"   // -
+	STAR    TokenType = "STAR"    // *
+	SLASH   TokenType = "SLASH"   // /
+	POW     TokenType = "POW"     // **
+	CONCAT  TokenType = "CONCAT"  // ||
+	AMP     TokenType = "AMP"     // &  (logical AND symbol / macro var prefix)
+	PIPE    TokenType = "PIPE"    // |  (logical OR symbol)
+	NOT     TokenType = "NOT"     // ^ ~ (logical NOT symbol)
 	PERCENT TokenType = "PERCENT" // % (macro trigger)
 
 	// Punctuation
@@ -70,6 +70,7 @@ const (
 	RBRACE    TokenType = "RBRACE"    // }
 	COMMA     TokenType = "COMMA"     // ,
 	DOT       TokenType = "DOT"       // .
+	COLON     TokenType = "COLON"     // : (label separator in PROC PROOF; INPUT's `:` modifier is captured raw)
 	DOLLAR    TokenType = "DOLLAR"    // $ (character-variable marker in INPUT, format prefix)
 )
 

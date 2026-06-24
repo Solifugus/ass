@@ -1,0 +1,27 @@
+id: proof_001
+source: hand-written
+license: MIT
+features:
+  - proc-proof
+  - data-quality
+  - data-step
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    bad:
+      columns: [id, qty, region, _rule_, _obs_]
+      rows:
+        - [2, 0, "west", "range qty 1 - 100", 2]
+        - [2, 0, "west", "unique id", 2]
+        - [2, 50, "east", "unique id", 3]
+priority: 1
+notes: |
+  Value-verifies PROC PROOF's out= violations dataset. Of three rows, obs 2
+  (qty=0) breaks `range qty 1 - 100`, and obs 2 and 3 share id=2 so both break
+  `unique id`; notnull and values pass. The out= dataset carries one record per
+  (source row x failed assertion) annotated with _rule_ and _obs_, sorted by
+  (_obs_, _rule_): obs2/range, obs2/unique, obs3/unique. The step also logs
+  error-level failures (CLI exits non-zero), but execute=pass because a failing
+  proof reports a verdict rather than aborting the run.
