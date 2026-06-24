@@ -354,7 +354,7 @@ func betai(x, a, b float64) float64 {
 	lbeta, _ := math.Lgamma(a + b)
 	la, _ := math.Lgamma(a)
 	lb, _ := math.Lgamma(b)
-	front := math.Exp(lbeta-la-lb+a*math.Log(x)+b*math.Log(1-x))
+	front := math.Exp(lbeta - la - lb + a*math.Log(x) + b*math.Log(1-x))
 	if x < (a+1)/(a+b+2) {
 		return front * betacf(x, a, b) / a
 	}
