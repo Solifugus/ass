@@ -382,3 +382,102 @@ The project should not begin as a complete SAS clone.
 It should begin as a practical SAS-compatible ETL engine, then grow one tested feature at a time.
 
 The heart of the system is the DATA step runtime. Everything else can orbit that sun.
+
+## 14. Architecture Decision: an interpreter, not a native compiler
+
+**Decision (2026-06-23):** ASS commits to the *interpreter family* as its permanent
+execution architecture — compile each step to an internal representation, then
+execute it — and treats native machine-code generation (LLVM/Cranelift/transpile-to-C)
+as **off the roadmap**, not as an eventual destination.
+
+### The real axis is the execution model, not "interpreter vs. compiler"
+
+Performance for this class of tool lives on a spectrum, and nearly every useful
+point on it is still an interpreter:
+
+1. **Scalar tree-walk** — execute over the AST (the current runtime).
+2. **Scalar bytecode VM** — compile expressions/statements to bytecode and
+   interpret that (the planned `vm/` package). Big win over pointer-chasing the
+   AST; stays pure Go, one semantics codebase.
+3. **Vectorized / columnar execution** — process batches of columns rather than
+   rows (the model behind DuckDB, Polars, Velox). Also an interpreter.
+
+Native codegen is a separate, rarely-justified path *off* this spectrum. The
+fastest analytical engines in the world are interpreters (vectorized ones), and
+SAS itself compiles the DATA step to an internal machine and interprets it rather
+than emitting native code. ASS matches that family by design.
+
+### Why
+
+- **Portability.** A single pure-Go static binary runs on every architecture.
+  This is validated, not assumed: the engine builds and passes the full corpus
+  and test suite on big-endian **s390x/LinuxONE** (`CGO_ENABLED=0`, a fully
+  static `ELF … MSB executable`). Native codegen would forfeit this.
+- **Correctness.** One execution path means one place for SAS semantics (missing
+  values, type coercion, formats) to live. Behavioral compatibility is the whole
+  value proposition; a second compiled path would double the surface where
+  behavior can silently drift from SAS.
+- **Velocity & maintenance.** Features ship once; no LLVM/Cranelift dependency,
+  no per-platform codegen bugs, no JIT warm-up or sandboxing surface.
+
+### Conditions that would (and would not) justify moving up a rung
+
+- Build the **bytecode VM** only when profiling of a *real, large* workload shows
+  the per-row interpreter loop — not I/O, not a PROC, not the SQL engine — is the
+  bottleneck. Cheap interpreter optimizations come first (resolve variable names
+  to PDV **slot indices** at compile time, flatten the statement list, cut
+  per-row allocations); these often recover most of the gap with no architecture
+  change.
+- Consider **vectorized execution** only if the product pivots toward being a
+  general high-performance analytical engine. Even then the answer stays inside
+  the interpreter family.
+- Whatever is added, the existing engine remains the **reference oracle**: run the
+  value-verified corpus through both and assert identical results (differential
+  testing). The corpus is what makes a faster engine *safe* to add — so corpus
+  breadth is the real prerequisite for this work.
+
+## 15. Eliminating the C-compiler requirement
+
+The only hard CGo dependency is the embedded SQLite used by PROC SQL and the
+`sqlite` LIBNAME engine (`mattn/go-sqlite3`). It is already gated behind the `cgo`
+build constraint, so `CGO_ENABLED=0` yields a pure-Go static binary today — minus
+PROC SQL. Two end-states remove CGo from the *default* build:
+
+1. **Swap to `modernc.org/sqlite`** (pure-Go, transpiled SQLite, used through
+   `database/sql`). This makes the default build CGo-free while keeping PROC SQL.
+   The one risk was big-endian correctness — **verified resolved (2026-06-23):**
+   `modernc.org/sqlite v1.53.0` passes a focused big-endian test on `linux/s390x`
+   (bit-exact float round-trip, an 8-byte integer byte-order canary, SUM/AVG/MIN/
+   MAX, and `ORDER BY REAL`). This swap is independent of the VM and can be done
+   at any time.
+2. **A native ASS SQL executor on the shared execution core** (far future). Drops
+   SQLite entirely and unifies SQL semantics with the DATA step. Large; this is
+   the only piece that genuinely benefits from the bytecode VM existing first.
+
+DB2 (`-tags db2`, IBM CLI driver) is intentionally always opt-in CGo and excluded
+from the static binary by construction.
+
+## 16. Interactivity and notebooks
+
+Notebook/REPL use reinforces the interpreter decision: a Jupyter kernel needs
+incremental execution, **live session state across cells** (the WORK library,
+macro symbol table, variable definitions persisting between submissions), and
+introspection for explorer panels — all natural for a resident interpreter.
+
+The keystone is a **resident session model**: turning the batch runner
+("parse file → run → exit") into a long-lived interpreter that holds the library
+and symbol tables and accepts successive program fragments. This is *not* gated on
+the bytecode VM, and it also unlocks the interactive AI assistant described in
+`future-directions.md`. The Jupyter wire protocol is ZeroMQ, and a pure-Go
+implementation (`go-zeromq/zmq4`) exists, so an ASS kernel does **not** reintroduce
+a C compiler.
+
+### Dependency map (what needs what)
+
+- **Resident session model** — keystone; enables notebooks and interactive AI;
+  needs no performance work.
+- **`modernc.org/sqlite` swap** — independent; verified on big-endian; removes CGo
+  from the default build.
+- **Jupyter kernel** — builds on the resident session; pure-Go via `zmq4`.
+- **Bytecode VM** — performance; gated on profiling evidence.
+- **Own SQL engine** — far future; the one item that wants the VM done first.
