@@ -51,7 +51,7 @@ type Backend struct {
 func Open(engine, connection string) (*Backend, error) {
 	driver, ok := engineDriver[strings.ToLower(engine)]
 	if !ok {
-		return nil, fmt.Errorf("LIBNAME engine %q is not supported (built-in: postgres, sqlserver, oracle; sqlite when built with cgo; db2 when built with -tags db2)", engine)
+		return nil, fmt.Errorf("LIBNAME engine %q is not supported (built-in: postgres, sqlserver, oracle, sqlite; db2 when built with -tags db2)", engine)
 	}
 	db, err := gosql.Open(driver, connection)
 	if err != nil {

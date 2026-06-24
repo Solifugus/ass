@@ -41,6 +41,28 @@
   `Lexer.Slice`, surfaced as `ProcStep.RawBody`) because reconstructing it from
   SAS tokens loses string-literal quotes.
 
+## Update (2026-06-23): swapped to the pure-Go driver `modernc.org/sqlite`
+
+The SQLite **engine** choice (option 2) stands; only the **driver** changed. We
+replaced the CGo `mattn/go-sqlite3` with the pure-Go `modernc.org/sqlite`
+(transpiled SQLite, used through `database/sql`). This removes the C-toolchain
+requirement entirely: the whole engine — PROC SQL and the `sqlite` LIBNAME
+engine — now builds with `CGO_ENABLED=0` into a fully static binary, which was
+the main cost of the original decision (consequence "Build now requires CGo").
+
+Rationale and de-risking:
+- The driver swap was independent of every SAS-facing semantic above (the bridge,
+  name handling, type mapping are unchanged).
+- The one risk — big-endian correctness on s390x/LinuxONE — was verified resolved
+  (2026-06-23): `modernc.org/sqlite v1.53.0` passes a focused big-endian test on
+  `linux/s390x` (see `docs/design.md` §15).
+- The driver is registered as `"sqlite"` (modernc) rather than `"sqlite3"` (mattn);
+  `sql/engine.go` and `dbio/dbio_sqlite.go` open it by that name.
+
+Consequence: the `//go:build cgo` gating, the pure-Go PROC SQL stub
+(`proc/sql_nocgo.go`), and the corpus skip logic for SQL items were all removed —
+PROC SQL is now always available. DB2 remains the only CGo engine (`-tags db2`).
+
 ## Known limitations (future work)
 
 - `splitStatements` splits on `;` literally — a semicolon inside a SQL string

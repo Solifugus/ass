@@ -449,7 +449,10 @@ PROC SQL. Two end-states remove CGo from the *default* build:
    `modernc.org/sqlite v1.53.0` passes a focused big-endian test on `linux/s390x`
    (bit-exact float round-trip, an 8-byte integer byte-order canary, SUM/AVG/MIN/
    MAX, and `ORDER BY REAL`). This swap is independent of the VM and can be done
-   at any time.
+   at any time. **Done (2026-06-23):** `mattn/go-sqlite3` was replaced wholesale by
+   `modernc.org/sqlite`; the `cgo` build gating, the PROC SQL pure-Go stub, and the
+   corpus skip logic were removed, so PROC SQL is now always available and the
+   default `go build` (even `CGO_ENABLED=0`) is fully static. See `sql/DECISION.md`.
 2. **A native ASS SQL executor on the shared execution core** (far future). Drops
    SQLite entirely and unifies SQL semantics with the DATA step. Large; this is
    the only piece that genuinely benefits from the bytecode VM existing first.

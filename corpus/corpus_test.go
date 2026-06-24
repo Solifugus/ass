@@ -47,8 +47,8 @@ func TestRunCorpusAllPass(t *testing.T) {
 			skipped++
 		}
 	}
-	// Skipped items (e.g. PROC SQL in a pure-Go, CGO_ENABLED=0 build) are parsed
-	// and counted as passing, but not executed.
+	// Skipped items (those with expected.execute: skip) are parsed and counted
+	// as passing, but not executed.
 	if parsed != total || executed != total-skipped || passed != total {
 		t.Errorf("expected all %d to pass; parsed=%d executed=%d passed=%d skipped=%d",
 			total, parsed, executed, passed, skipped)

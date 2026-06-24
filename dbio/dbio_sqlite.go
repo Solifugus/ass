@@ -1,17 +1,13 @@
-//go:build cgo
-
 package dbio
 
 // SQLite LIBNAME engine. SQLite is a single-file (or in-memory) SQL database, so
 // `libname db sqlite "/path/to/file.db";` binds a libref to one database file
-// and its tables read/write as datasets. The driver (github.com/mattn/go-sqlite3)
-// is CGo-only, so this engine is registered only in cgo builds — matching the
-// project's existing CGo requirement for PROC SQL. CGO_ENABLED=0 builds simply
-// omit it (Open reports a clear "not supported" error).
+// and its tables read/write as datasets. The driver (modernc.org/sqlite) is
+// pure Go, so this engine is always available — no CGo or C compiler required.
 
-import _ "github.com/mattn/go-sqlite3"
+import _ "modernc.org/sqlite"
 
 func init() {
-	engineDriver["sqlite"] = "sqlite3"
-	engineDriver["sqlite3"] = "sqlite3"
+	engineDriver["sqlite"] = "sqlite"
+	engineDriver["sqlite3"] = "sqlite"
 }

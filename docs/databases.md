@@ -46,7 +46,7 @@ URL — whatever that driver accepts).
 | `postgres`, `postgresql` | `jackc/pgx` | ✅ | DSN or URL form (`postgres://…` or `host=… dbname=…`). |
 | `sqlserver`, `mssql` | `microsoft/go-mssqldb` | ✅ | URL form (`sqlserver://user:pass@host?database=db`). |
 | `oracle` | `sijms/go-ora` | ✅ | URL form (`oracle://user:pass@host:1521/service`). |
-| `sqlite`, `sqlite3` | `mattn/go-sqlite3` | ❌ CGo | A single database file (or `:memory:`): `libname db sqlite "/path/file.db";`. Registered only in CGo builds (the same builds that include PROC SQL); ideal for local files and as the write-back path that needs no server. In a pure-Go (`CGO_ENABLED=0`) build it is compiled out — use a pure-Go engine (Postgres/SQL Server/Oracle) instead. |
+| `sqlite`, `sqlite3` | `modernc.org/sqlite` | ✅ | A single database file (or `:memory:`): `libname db sqlite "/path/file.db";`. Pure Go (transpiled SQLite), so it is always available — including in `CGO_ENABLED=0` static builds; ideal for local files and as the write-back path that needs no server. This is the same engine that backs PROC SQL. |
 | `db2` | `ibmdb/go_ibm_db` | ❌ CGo + CLI driver, `-tags db2` | IBM Db2 (LUW). Connection string is the CLI form: `HOSTNAME=host;PORT=50000;DATABASE=db;UID=user;PWD=pw`. Registered only under the `db2` build tag (see below) because the driver links IBM's native CLI driver, which the default build must not require. |
 
 ### Building the DB2 engine

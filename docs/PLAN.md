@@ -46,7 +46,7 @@ are independent leaf features; the dependency chains are noted.
 - [ ] big-endian `.sas7bdat` read; `.sas7bdat` write
 
 ### Track B — Platform & build
-- [ ] **modernc.org/sqlite swap** → CGo-free *default* build (PROC SQL kept). Verified correct on big-endian s390x (2026-06-23); independent of all other work
+- [x] **modernc.org/sqlite swap** → CGo-free *default* build (PROC SQL kept). Done 2026-06-23: `mattn/go-sqlite3` replaced wholesale; `cgo` gating + PROC SQL stub + corpus skip logic removed; static `CGO_ENABLED=0` build now includes PROC SQL. Verified correct on big-endian s390x (2026-06-23)
 - [ ] Cross-platform release artifacts (Linux/Windows/macOS ~free via Go; s390x validated; AIX is the hard target)
 - [ ] ODBC LIBNAME engine (opt-in CGo, like DB2)
 
@@ -903,3 +903,11 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - `gofmt`/`go build`/`go vet`/`go test ./...` clean (cgo); `ass test corpus/` now **59/59**, value-verified **31/31**.
 - Files: `runtime/datefuncs.go` + `runtime/datefuncs_test.go` (new), `runtime/functions.go` (dispatch), `formats/formats.go` (`TimeToSASDate`/`TimeToSASDatetime`), `corpus/date_functions_001/` (new), docs (`README.md`, `CLAUDE.md`, `docs/reference.md`, `docs/COMPATIBILITY.md`, `docs/PLAN.md` roadmap+log).
 - Note: multi-unit/shifted intervals (`month2`, `week.2`) and datetime intervals (`dtday`, `hour`) remain unsupported. Next roadmap item: modernc.org/sqlite swap (Track B) or PROC PROOF slice (Track D).
+
+### 2026-06-23 — modernc.org/sqlite swap: CGo-free default build (Track B, roadmap item 2)
+- What changed: replaced the CGo SQLite driver `github.com/mattn/go-sqlite3` **wholesale** with the pure-Go `modernc.org/sqlite` (transpiled SQLite, used through `database/sql`). The whole engine — PROC SQL and the `sqlite` LIBNAME engine — now builds and runs with `CGO_ENABLED=0` as a fully static binary. ASS no longer requires a C compiler for anything except the opt-in DB2 engine (`-tags db2`). User chose "replace entirely" over keeping mattn as an opt-in fast path (PROC SQL performance is not a priority; simplest build matrix wins).
+- This reverses the prior `cgo`-gating work (2026-06-20), which is now superseded: making SQLite pure-Go means PROC SQL is *always* available rather than compiled out of static builds — strictly better. Removed: `proc/sql_nocgo.go` (the "requires a CGo build" stub), `corpus/cgo_on.go` + `corpus/cgo_off.go` (the SQL-item skip logic), the `cgoSkip`/`itemNeedsUnavailable` path in `corpus/runner.go`, and `//go:build cgo` headers from `sql/engine.go`, `dbio/dbio_sqlite.go`, `proc/sql.go`, `proc/sql_passthru.go` and their tests (9 files total). Driver is opened as `"sqlite"` (modernc) rather than `"sqlite3"` (mattn).
+- Risk already retired: big-endian correctness of `modernc.org/sqlite v1.53.0` was verified on the s390x VM (2026-06-23; see `design.md` §15).
+- Verification: `gofmt`/`go build`/`go vet`/`go test ./...` clean in **both** `CGO_ENABLED=1` and `CGO_ENABLED=0`; the `sql` package tests now run (not skipped) in pure-Go mode. Static `CGO_ENABLED=0` binary confirmed `ELF … statically linked`; ran a PROC SQL program (`create table … as select sum/avg`) and the full corpus through it — **59/59 executed** (the 9 SQL/SQLite items that pure-Go mode previously skipped now execute), value-verified **31/31**.
+- Files: `sql/engine.go`, `dbio/dbio_sqlite.go`, `dbio/dbio.go` (error text), `proc/sql.go`, `proc/sql_passthru.go`, tests (un-gated); deleted `proc/sql_nocgo.go`, `corpus/cgo_on.go`, `corpus/cgo_off.go`; `corpus/runner.go` + `corpus/corpus_test.go` (skip logic/comment); `go.mod`/`go.sum` (modernc in, mattn out); docs (`README.md`, `CLAUDE.md`, `sql/DECISION.md`, `docs/design.md` §15, `docs/databases.md`, `docs/PLAN.md`).
+- Next roadmap item: PROC PROOF vertical slice (Track D), or the DATA-step benchmark + cheap interpreter wins (Track C).

@@ -99,13 +99,8 @@ func runItem(it Item, opts Options) Result {
 			parseOK, orDefault(it.Expected.Parse, "pass"), strings.Join(p.Errors(), "; "))
 	}
 
-	// itemNeedsUnavailable is true when the item exercises a feature compiled out
-	// of this build (PROC SQL / the SQLite LIBNAME engine in a pure-Go,
-	// CGO_ENABLED=0 build). Such items are skipped — parsed but not executed —
-	// rather than failed.
-	cgoSkip := itemNeedsUnavailable(it)
-	if opts.ParseOnly || it.Expected.Execute == "skip" || cgoSkip {
-		res.Skipped = it.Expected.Execute == "skip" || cgoSkip
+	if opts.ParseOnly || it.Expected.Execute == "skip" {
+		res.Skipped = it.Expected.Execute == "skip"
 		return res
 	}
 	if !parseOK {

@@ -26,15 +26,14 @@ go build -o ass ./cmd/ass
 go test ./...
 ```
 
-PROC SQL and the SQLite LIBNAME engine embed SQLite, which needs **CGo** (a C compiler such as gcc). The default build (`CGO_ENABLED=1`) includes them. For a **fully static, maximally portable binary** — e.g. one binary that drops onto any RHEL/SLES/Debian on s390x/LinuxONE with no shared-library dependencies — build pure-Go and they are compiled out:
+**No C compiler is required.** PROC SQL and the SQLite LIBNAME engine embed SQLite via the pure-Go `modernc.org/sqlite` driver, so the entire engine — including PROC SQL — builds with `CGO_ENABLED=0` into a **fully static, maximally portable binary** that drops onto any RHEL/SLES/Debian on s390x/LinuxONE with no shared-library dependencies. The only optional CGo piece is the DB2 engine (IBM's CLI driver).
 
 | Build | Includes |
 |-------|----------|
-| `CGO_ENABLED=1 go build` (default) | Everything, incl. PROC SQL and the SQLite LIBNAME engine |
-| `CGO_ENABLED=0 go build` | Static binary: core DATA step, `.sas7bdat`, flat files, `.xlsx`, and the **pure-Go** database engines (Postgres, SQL Server, Oracle). **No PROC SQL, no SQLite.** A program that uses PROC SQL fails with a clear "requires a CGo build" message. |
+| `go build` (default, `CGO_ENABLED=0` works too) | Everything, incl. PROC SQL and the SQLite LIBNAME engine — all pure Go |
 | `CGO_ENABLED=1 go build -tags db2` | Adds the DB2 engine (needs IBM's CLI driver; see [`docs/databases.md`](docs/databases.md)) |
 
-The Postgres, SQL Server, and Oracle drivers are pure Go and work in either mode; only SQLite (PROC SQL + the SQLite libref) and DB2 require CGo.
+All built-in database drivers (Postgres, SQL Server, Oracle, SQLite) are pure Go; only DB2 requires CGo.
 
 ## Usage
 

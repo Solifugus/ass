@@ -1,5 +1,3 @@
-//go:build cgo
-
 package sql
 
 import (
@@ -7,7 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3" // CGo SQLite driver registered as "sqlite3"
+	_ "modernc.org/sqlite" // pure-Go SQLite driver registered as "sqlite"
+
 	"github.com/solifugus/ass/table"
 )
 
@@ -22,7 +21,7 @@ type Engine struct {
 // NewEngine opens an in-memory SQLite database and loads every dataset in the
 // library into a table of the same name.
 func NewEngine(lib *table.Library) (*Engine, error) {
-	db, err := gosql.Open("sqlite3", ":memory:")
+	db, err := gosql.Open("sqlite", ":memory:")
 	if err != nil {
 		return nil, err
 	}
