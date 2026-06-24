@@ -1,0 +1,24 @@
+id: date_functions_001
+source: hand-written
+license: MIT
+features:
+  - functions
+  - date-functions
+  - data-step
+  - date-literals
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    dt:
+      columns: [y, m, dd, q, wd, built, nmonths, nextmo, eom, dp, tp, t]
+      rows:
+        - [2020, 1, 15, 1, 4, 21974, 2, 21946, 21945, 21929, 3600, 5400]
+priority: 1
+notes: |
+  Value-verifies the date/time functions end to end. From d='15JAN2020'd (SAS day
+  21929): year/month/day/qtr/weekday extract calendar parts (weekday 4 = Wed);
+  mdy(2,29,2020)=21974 (leap day); intck('month',...) counts 2 month boundaries;
+  intnx('month',d,1)=21946 (01FEB2020) and intnx('month',d,0,'e')=21945 (31JAN2020);
+  dhms builds a datetime, datepart/timepart split it back (21929 / 3600); hms=5400.

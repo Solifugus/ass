@@ -23,6 +23,47 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ---
 
+## Roadmap (next phase — post-Phase 13)
+
+Phases 0–13 and the deferral backlog are complete. The work now spans four
+parallel tracks. The guiding choice is **pace between compatibility-gap-filling
+(Track A) and differentiators (Track D)** — the decision is to *interleave*, not
+pick: keep the compat core honestly advancing while landing differentiators one
+at a time. Architecture/CGo/Jupyter decisions behind this are recorded in
+[`design.md`](design.md) §14–16; the proofing design in [`proofing.md`](proofing.md).
+
+**Recommended near-term order:** (1) date/time functions → (2) modernc.org/sqlite
+swap → (3) PROC PROOF vertical slice → (4) DATA-step benchmark. Most items below
+are independent leaf features; the dependency chains are noted.
+
+### Track A — Compatibility core (the mission)
+- [x] **Date/time functions** — `today`/`date`, `datetime`, `time`, `mdy`, `year`/`month`/`day`/`qtr`/`weekday`, `datepart`/`timepart`, `hms`/`dhms`, `intck`/`intnx`. Done 2026-06-23 (see Progress log). Not yet: multi-unit/datetime interval forms.
+- [ ] PROC FREQ default (non-`list`) stratified n-way layout + association stats beyond Pearson chi-square (LR, Fisher, measures of association)
+- [ ] PROC GLM SAS-fidelity (sweep/generalized-inverse parameterization, Type I/III SS, LSMEANS/CONTRAST/ESTIMATE) — gated on a real-SAS reference
+- [ ] `proc format` PICTURE templates; user formats on PROC SQL output columns
+- [ ] Multi-line label-header wrapping (cosmetic; long-deferred)
+- [ ] `infile`/`file` options tail (`lrecl=`, `pad`, `end=`, `mod`)
+- [ ] big-endian `.sas7bdat` read; `.sas7bdat` write
+
+### Track B — Platform & build
+- [ ] **modernc.org/sqlite swap** → CGo-free *default* build (PROC SQL kept). Verified correct on big-endian s390x (2026-06-23); independent of all other work
+- [ ] Cross-platform release artifacts (Linux/Windows/macOS ~free via Go; s390x validated; AIX is the hard target)
+- [ ] ODBC LIBNAME engine (opt-in CGo, like DB2)
+
+### Track C — Architecture & performance (interpreter family; `design.md` §14)
+- [ ] **DATA-step benchmark** + cheap interpreter wins (resolve variable names to PDV slot indices, flatten statement list, cut per-row allocations). Do this early — it decides whether the VM is needed
+- [ ] **Bytecode VM** (`vm/` package) — only if the benchmark proves the per-row loop is the bottleneck; engine stays the differential-testing oracle via the corpus
+- [ ] (far) native ASS SQL executor on the shared core — the one item that wants the VM done first
+
+### Track D — Differentiators (designed / early)
+- [ ] **PROC PROOF** (data-quality validation) — designed in [`proofing.md`](proofing.md); first wedge. Natural first slice: `require`/`notnull`/`unique`/`rule` + report + `out=` + exit code
+- [ ] **SAS→ASS migration linter** — second wedge; reuses the existing SAS parser
+- [ ] **Resident session model** (keystone) — batch runner → long-lived interpreter holding library + symbol tables; unlocks both of the next two
+- [ ] **Jupyter kernel** — on the resident session; pure-Go via `go-zeromq/zmq4` (no CGo). Depends on resident session
+- [ ] Vision layer (`future-directions.md`): grounded AI assistant; industry cookbooks; Python/R bridges (Arrow); proofing tiers 2–3 (`constrain`/enhanced `error`, attached constraints, statistical checks)
+
+---
+
 ## Phase 0 — Project scaffolding
 
 - [x] **0.1 Initialize Go module.** Run `go mod init github.com/<owner>/ass` (confirm the module path with the user; default to `ass` if unknown). Create `.gitignore` for Go. Add a top-level `README.md` stub with the project description and the "not affiliated with SAS Institute" disclaimer from the design doc §11. Acceptance: `go build ./...` succeeds (no packages yet is fine).
@@ -854,3 +895,11 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Statistical tier (distribution/anomaly/historical) explicitly deferred — needs aggregation + baselines.
 - Testing plan: a corpus item per assertion kind (pass + violation cases), value-verifying the `out=` dataset via `expected.datasets` and the pass/fail outcome.
 - Files: `docs/proofing.md` (new), `README.md` (docs index), `docs/PLAN.md`.
+
+### 2026-06-23 — Date/time functions (Track A, roadmap item 1)
+- What changed: added the date/time function family — the biggest remaining compatibility gap (date/time literals, informats, and formats already existed, but no callable date arithmetic). New functions: `today`/`date`, `datetime`, `time` (current clock); `mdy(m,d,y)` (missing on invalid dates, e.g. 30FEB, via a normalize-round-trip check); `year`/`month`/`day`/`qtr`/`weekday` (Sunday=1); `datepart`/`timepart`; `hms`/`dhms`; `intck(interval,from,to)` and `intnx(interval,start,n[,align])` over base intervals day/week/month/qtr/year with alignments b/m/e/s. Operates on SAS encodings (date=days since 1960-01-01, datetime=seconds, time=seconds since midnight); missing arguments propagate.
+- Design: new `runtime/datefuncs.go` (one helper per function, dispatched from `runtime/functions.go`'s switch — no `time` import needed there). Reuses `formats.SASDateToTime` and two new exported inverses `formats.TimeToSASDate`/`TimeToSASDatetime`. `intnx` computes each interval's [begin,end] day numbers plus the start interval's beginning, then applies alignment uniformly (e=end, m=floor midpoint, s=begin+offset-from-start-interval, b=begin). Week alignment is Sunday-based (SAS day 0 = Friday, so the reference Sunday is day −5); month/qtr use a floor-correct `addMonths`.
+- Verification: `runtime/datefuncs_test.go` with hand-derived constants (01JAN2020=21915, 29FEB2020=21974, etc.) covering constructors, extractors, time parts, intck, intnx (all alignments), invalid-date→missing, and a today() sanity check. New corpus item `date_functions_001` value-verifies the family end-to-end through the parser/runtime (single-row dataset, 12 computed columns).
+- `gofmt`/`go build`/`go vet`/`go test ./...` clean (cgo); `ass test corpus/` now **59/59**, value-verified **31/31**.
+- Files: `runtime/datefuncs.go` + `runtime/datefuncs_test.go` (new), `runtime/functions.go` (dispatch), `formats/formats.go` (`TimeToSASDate`/`TimeToSASDatetime`), `corpus/date_functions_001/` (new), docs (`README.md`, `CLAUDE.md`, `docs/reference.md`, `docs/COMPATIBILITY.md`, `docs/PLAN.md` roadmap+log).
+- Note: multi-unit/shifted intervals (`month2`, `week.2`) and datetime intervals (`dtday`, `hour`) remain unsupported. Next roadmap item: modernc.org/sqlite swap (Track B) or PROC PROOF slice (Track D).

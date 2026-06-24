@@ -149,7 +149,7 @@ Example: `set big(keep=id amt where=(amt>0) firstobs=10 obs=100);`
 
 ## Functions
 
-All implemented functions (31). Aggregates ignore missing values and accept a
+All implemented functions (47). Aggregates ignore missing values and accept a
 variable number of arguments.
 
 **Aggregate / numeric reductions**
@@ -198,6 +198,25 @@ variable number of arguments.
 | Function | Result |
 |----------|--------|
 | `missing(x)` | 1 if `x` is missing, else 0. |
+
+**Date / time** — a SAS date is days since 1960-01-01, a datetime is seconds since
+1960-01-01 00:00:00, a time is seconds since midnight. Missing arguments
+propagate.
+
+| Function | Result |
+|----------|--------|
+| `today()` / `date()` | Current date as a SAS day number. |
+| `datetime()` | Current datetime value. |
+| `time()` | Current time of day (seconds since midnight). |
+| `mdy(m, d, y)` | SAS date for that calendar date (missing if invalid, e.g. 30FEB). |
+| `year(d)` / `month(d)` / `day(d)` | Calendar parts of a SAS date. |
+| `qtr(d)` | Quarter (1–4). |
+| `weekday(d)` | Day of week, Sunday=1 … Saturday=7. |
+| `datepart(dt)` / `timepart(dt)` | Date / time part of a SAS datetime. |
+| `hms(h, m, s)` | Time value from hours/minutes/seconds. |
+| `dhms(d, h, m, s)` | Datetime value from a date plus h/m/s. |
+| `intck(interval, from, to)` | Count of interval boundaries (`day`, `week`, `month`, `qtr`, `year`). |
+| `intnx(interval, start, n <,align>)` | Advance `start` by `n` intervals; align `b`(egin, default)/`m`(iddle)/`e`(nd)/`s`(ame). |
 
 ---
 
@@ -435,9 +454,9 @@ ass test --json corpus/       # machine-readable JSON report
 Selected intentional deferrals (full list and rationale in
 [`COMPATIBILITY.md`](COMPATIBILITY.md)):
 
-- Date/time **functions** (`today`, `mdy`, `year`, `intck`, `intnx`, `datepart`,
-  …) — date/time *literals, informats, and formats* are supported, but there are
-  no callable date functions yet.
+- Advanced `intck`/`intnx` interval forms (multi-unit/shifted intervals like
+  `month2` or `week.2`, and datetime intervals such as `dtday`/`hour`) — the base
+  date intervals `day`/`week`/`month`/`qtr`/`year` are supported (see Functions).
 - `PROC FORMAT PICTURE` (output-only picture formats).
 - The default stratified PROC FREQ n-way layout (only `/ list` and `/ chisq`),
   and association statistics beyond Pearson chi-square.

@@ -20,6 +20,22 @@ var monthName = []string{"January", "February", "March", "April", "May", "June",
 // SASDateToTime converts a SAS day number to a civil date (UTC).
 func SASDateToTime(day float64) time.Time { return sasEpoch.AddDate(0, 0, int(day)) }
 
+// TimeToSASDate converts a civil date to a SAS day number (whole days since
+// 1960-01-01), using the calendar date in t's location. It is the inverse of
+// SASDateToTime for integer day values.
+func TimeToSASDate(t time.Time) float64 {
+	y, m, d := t.Date()
+	civ := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	return float64(int(civ.Sub(sasEpoch).Hours()) / 24)
+}
+
+// TimeToSASDatetime converts an instant to a SAS datetime value (seconds since
+// 1960-01-01 00:00:00), using t's wall-clock calendar/clock components.
+func TimeToSASDatetime(t time.Time) float64 {
+	h, m, s := t.Clock()
+	return TimeToSASDate(t)*86400 + float64(h*3600+m*60+s)
+}
+
 // ParseDateLiteral parses a SAS date constant body like "01JAN2020" (the text
 // inside the quotes of a `'...'d` literal) into a SAS day number.
 func ParseDateLiteral(s string) (float64, bool) {

@@ -88,6 +88,36 @@ func evalCall(e *ast.CallExpression, pdv *PDV) (table.Value, error) {
 			return table.MissingNum(), fmt.Errorf("missing expects 1 argument, got %d", len(args))
 		}
 		return boolVal(args[0].IsMissing()), nil
+	case "today", "date":
+		return todayFn(args)
+	case "datetime":
+		return datetimeFn(args)
+	case "time":
+		return timeFn(args)
+	case "mdy":
+		return mdyFn(args)
+	case "year":
+		return yearFn(args)
+	case "month":
+		return monthFn(args)
+	case "day":
+		return dayFn(args)
+	case "qtr":
+		return qtrFn(args)
+	case "weekday":
+		return weekdayFn(args)
+	case "datepart":
+		return datepartFn(args)
+	case "timepart":
+		return timepartFn(args)
+	case "hms":
+		return hmsFn(args)
+	case "dhms":
+		return dhmsFn(args)
+	case "intck":
+		return intckFn(args)
+	case "intnx":
+		return intnxFn(args)
 	default:
 		return table.MissingNum(), fmt.Errorf("unknown function %q", e.Func)
 	}

@@ -92,7 +92,7 @@ Obs  name  age
 | Dataset options | `(keep= drop= rename=(o=n) where=(...) firstobs= obs=)` on `set`/`merge`/`data`/proc `data=`; numbered var-list ranges (`keep=x1-x5`) |
 | Native SAS datasets | `libname lib "/dir";` then read `lib.member` from `member.sas7bdat` — clean-room `.sas7bdat` reader (32/64-bit little-endian; RLE/RDC row compression and uncompressed; numeric, character, dates, formats, labels) |
 | Databases (LIBNAME) | `libname pg postgres "…";` then read `pg.table` as a dataset and write it back with `data pg.out; set …;`, `proc sort out=pg.x`, `proc sql; create table pg.x as …;`, or `proc append base=pg.x data=…;` (in-place INSERT) — Postgres, SQL Server, Oracle, SQLite, and DB2 (DB2 via `-tags db2`); see [`docs/databases.md`](docs/databases.md) |
-| Expressions | arithmetic, comparison, logical, concatenation, ~35 functions, SAS missing-value & type-coercion semantics |
+| Expressions | arithmetic, comparison, logical, concatenation, 47 functions (numeric, character, **date/time** — `mdy`/`year`/`intck`/`intnx`/`datepart`/…), SAS missing-value & type-coercion semantics |
 | PROC PRINT | `var`, `noobs`, `label` (renders variable labels, incl. a step `label` statement), applied formats |
 | PROC SORT | `by` (+ `descending`), `out=` (incl. a database libref), `nodupkey` |
 | PROC APPEND | `base=`/`data=` (+ `force`): append observations to a base data set, created if absent; BASE= or DATA= may be a database libref (in-place INSERT) |

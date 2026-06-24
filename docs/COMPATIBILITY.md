@@ -94,6 +94,17 @@ passing cosmetic check.
 > success; byte-level output verification against real SAS is pending (corpus
 > items are marked `output: unverified`).
 
+## Date/time functions
+
+**Date/time functions are supported** (operating on the SAS encodings — date =
+days since 1960-01-01, datetime = seconds since then, time = seconds since
+midnight): `today`/`date`, `datetime`, `time`, `mdy` (returns missing for invalid
+dates like 30FEB), `year`/`month`/`day`/`qtr`/`weekday` (Sunday=1), `datepart`/
+`timepart`, `hms`/`dhms`, `intck` and `intnx` over the base intervals
+`day`/`week`/`month`/`qtr`/`year` (`intnx` alignments `b`/`m`/`e`/`s`). Missing
+arguments propagate. Not yet: multi-unit/shifted interval names (`month2`,
+`week.2`) and datetime intervals (`dtday`, `hour`, …).
+
 ## Known unsupported / deferred constructs
 
 - PROC FREQ: one- and two-way tables, **n-way (3+) via `/ list`** (one row per distinct combination), the **`/ options`** nocol/norow/nopercent/nofreq/nocum (suppress parts of the table) and **`/ chisq`** (Pearson chi-square statistic, DF, and p-value for a two-way table) are supported. Not yet: the default (non-`list`) stratified n-way layout, and association statistics beyond Pearson chi-square (likelihood-ratio, Fisher exact, measures of association)
