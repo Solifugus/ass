@@ -29,6 +29,7 @@ Planned package layout (from the design doc):
 - `macro/` — macro preprocessor; runs **before** the parser (`%let`, `&var` expansion, `%macro`/`%mend`)
 - `parser/` + `ast/` — SAS parser producing the syntax tree
 - `runtime/` — DATA step runtime (the core of the system)
+- `session/` — resident session model: a long-lived interpreter holding the `table.Library` + `macro.Processor` across successive `Submit` calls (the keystone for the `ass repl` REPL and the future Jupyter kernel); the batch runner is just the one-submission case
 - `vm/` — optional bytecode VM
 - `table/` — dataset abstraction (library/name, columns, types, labels, formats, informats, rows, missing values, metadata)
 - `proc/` — PROC implementations

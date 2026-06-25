@@ -40,6 +40,7 @@ All built-in database drivers (Postgres, SQL Server, Oracle, SQLite) are pure Go
 ```bash
 ass file.sas            # run a SAS program (log to stderr, output to stdout)
 ass run file.sas        # same, explicit form
+ass repl                # interactive session — datasets/macros/librefs persist across entries
 ass parse file.sas      # print the parsed AST
 ass tokens file.sas     # dump the lexer token stream
 ass test corpus/        # run the compatibility corpus and report

@@ -3,16 +3,18 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/solifugus/ass/corpus"
 	"github.com/solifugus/ass/lexer"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/macro"
 	"github.com/solifugus/ass/parser"
-	"github.com/solifugus/ass/runtime"
-	"github.com/solifugus/ass/table"
+	"github.com/solifugus/ass/session"
 )
 
 const usage = `ass - Analyst's Statistical Suite
@@ -20,6 +22,7 @@ const usage = `ass - Analyst's Statistical Suite
 Usage:
   ass <file.sas>        Run a SAS program
   ass run <file.sas>    Run a SAS program (explicit form)
+  ass repl              Start an interactive session (REPL)
   ass parse <file.sas>  Parse a SAS program and print its AST
   ass tokens <file.sas> Dump the token stream (lexer debug)
   ass test <dir>        Run the compatibility corpus in <dir>
@@ -61,6 +64,8 @@ func run(args []string) error {
 			return fmt.Errorf("run: missing <file.sas>")
 		}
 		return runProgram(args[1])
+	case "repl":
+		return runREPL()
 	default:
 		return runProgram(args[0])
 	}
@@ -74,21 +79,18 @@ func runProgram(path string) error {
 	if err != nil {
 		return err
 	}
-	// The macro preprocessor runs before the lexer/parser, expanding %let/&var,
-	// %macro/%mend, and macro control flow into ordinary SAS source.
-	expanded := macro.Process(string(src))
-	p := parser.New(expanded)
-	prog := p.ParseProgram()
-	if errs := p.Errors(); len(errs) > 0 {
-		fmt.Fprintf(os.Stderr, "%d parse error(s):\n", len(errs))
-		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, "  - "+e)
-		}
-		return fmt.Errorf("aborted: %d parse error(s)", len(errs))
-	}
 	logger := log.New(os.Stderr)
-	lib := table.NewLibrary()
-	if err := runtime.RunProgram(prog, lib, logger); err != nil {
+	// A whole file is one submission to a fresh session — the resident model
+	// generalizes the batch runner: a single Submit is the degenerate case.
+	if err := session.New().Submit(string(src), logger); err != nil {
+		var pe *session.ParseError
+		if errors.As(err, &pe) {
+			fmt.Fprintf(os.Stderr, "%d parse error(s):\n", len(pe.Errors))
+			for _, e := range pe.Errors {
+				fmt.Fprintln(os.Stderr, "  - "+e)
+			}
+			return fmt.Errorf("aborted: %d parse error(s)", len(pe.Errors))
+		}
 		return err
 	}
 	// A run that logged errors without aborting (e.g. a failing PROC PROOF
@@ -97,6 +99,69 @@ func runProgram(path string) error {
 		return fmt.Errorf("completed with %d error(s)", n)
 	}
 	return nil
+}
+
+// runREPL starts an interactive session: it reads SAS source from stdin and
+// submits it to a single resident session, so datasets, librefs, and macro
+// state accumulate across entries. A fragment is submitted when the user enters
+// a line that is just `run;` or `quit;`, or a blank line (which flushes any
+// buffered global statements such as %let or libname). The SAS log and PROC
+// output interleave on stdout. Ctrl-D (EOF) or `endsas;` exits.
+func runREPL() error {
+	fmt.Println("ass interactive session. Enter SAS code; `run;`/`quit;` or a blank line submits.")
+	fmt.Println("Type `endsas;` or press Ctrl-D to exit.")
+	s := session.New()
+	in := bufio.NewScanner(os.Stdin)
+	in.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var buf []string
+	prompt := func() {
+		if len(buf) == 0 {
+			fmt.Print("ass> ")
+		} else {
+			fmt.Print(".... ")
+		}
+	}
+	flush := func() {
+		if len(buf) == 0 {
+			return
+		}
+		src := strings.Join(buf, "\n")
+		buf = buf[:0]
+		if err := s.Submit(src, log.New(os.Stdout)); err != nil {
+			var pe *session.ParseError
+			if errors.As(err, &pe) {
+				for _, e := range pe.Errors {
+					fmt.Fprintln(os.Stderr, "parse error: "+e)
+				}
+			} else {
+				fmt.Fprintln(os.Stderr, "error: "+err.Error())
+			}
+		}
+	}
+	prompt()
+	for in.Scan() {
+		line := in.Text()
+		trimmed := strings.TrimSpace(line)
+		low := strings.ToLower(trimmed)
+		if low == "endsas;" || low == "endsas" {
+			flush()
+			break
+		}
+		if trimmed == "" {
+			flush()
+			prompt()
+			continue
+		}
+		buf = append(buf, line)
+		// A step terminator submits immediately, so `data ...; run;` runs as soon
+		// as `run;` is typed without needing a trailing blank line.
+		if low == "run;" || low == "quit;" {
+			flush()
+		}
+		prompt()
+	}
+	fmt.Println()
+	return in.Err()
 }
 
 // runParse parses a SAS source file and prints the resulting AST, plus any

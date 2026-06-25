@@ -480,6 +480,14 @@ the bytecode VM, and it also unlocks the interactive AI assistant described in
 implementation (`go-zeromq/zmq4`) exists, so an ASS kernel does **not** reintroduce
 a C compiler.
 
+**Done (2026-06-24):** the resident session model is implemented as the
+`session` package — `session.New()` holds a persistent `table.Library` +
+`macro.Processor`, and `(*Session).Submit(src, logger)` macro-expands → parses →
+runs one fragment against that shared state (datasets, librefs, macro vars, and
+macro defs all carry across submissions). The batch runner (`ass file.sas`) is
+now literally one `Submit` on a fresh session, and `ass repl` is the first
+interactive consumer. The Jupyter kernel is the next consumer of the same API.
+
 ### Dependency map (what needs what)
 
 - **Resident session model** — keystone; enables notebooks and interactive AI;
