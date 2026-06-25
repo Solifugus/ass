@@ -55,6 +55,7 @@ ass test --parse-only corpus/
 ass test --feature proc-sql corpus/
 ass test -v corpus/     # show failure detail
 ass test --json corpus/ # machine-readable JSON report (CI/tooling)
+ass test --coverage corpus/ # per-feature value-verification backlog (gaps first)
 ```
 
 ### Example

@@ -3,6 +3,7 @@ package corpus
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -124,6 +125,43 @@ func TestValueVerificationCatchesMismatch(t *testing.T) {
 	r = runItem(missing, Options{})
 	if r.ValPass {
 		t.Errorf("missing dataset should fail; detail=%q", r.Detail)
+	}
+}
+
+func TestFeatureStatVerifiedAndCoverage(t *testing.T) {
+	// A value-verified item and a parse-only item sharing no features: the
+	// verified feature reports Verified>0, the unverified one Verified==0, and
+	// WriteCoverage flags the gap.
+	rep := Report{Results: []Result{
+		{Item: Item{ID: "a", Features: []string{"verified-feat"}},
+			ParsePass: true, Executed: true, ExecPass: true, ValChecked: true, ValPass: true},
+		{Item: Item{ID: "b", Features: []string{"gap-feat"}},
+			ParsePass: true, Executed: true, ExecPass: true},
+	}}
+	byFeat := map[string]FeatureStat{}
+	for _, fs := range rep.FeatureStats() {
+		byFeat[fs.Feature] = fs
+	}
+	if got := byFeat["verified-feat"].Verified; got != 1 {
+		t.Errorf("verified-feat Verified = %d, want 1", got)
+	}
+	if got := byFeat["gap-feat"].Verified; got != 0 {
+		t.Errorf("gap-feat Verified = %d, want 0", got)
+	}
+	var buf bytes.Buffer
+	rep.WriteCoverage(&buf)
+	out := buf.String()
+	if !strings.Contains(out, "1 of 2 features have NO value-verified item") {
+		t.Errorf("coverage summary wrong:\n%s", out)
+	}
+	// The gap feature must carry the !! flag; the verified one must not.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "gap-feat") && !strings.Contains(line, "!!") {
+			t.Errorf("gap-feat not flagged: %q", line)
+		}
+		if strings.Contains(line, "verified-feat") && strings.Contains(line, "!!") {
+			t.Errorf("verified-feat wrongly flagged: %q", line)
+		}
 	}
 }
 

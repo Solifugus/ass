@@ -309,27 +309,35 @@ func (rep Report) Summary() (total, parsed, executed, passed int) {
 	return
 }
 
-// FeatureStats returns per-feature pass/total counts, sorted by feature name.
+// FeatureStats returns per-feature counts, sorted by feature name. Verified is
+// the number of items carrying the feature that value-verify (declare
+// expected.datasets and match) — the metric that drives the corpus-backfill
+// backlog (a feature with Verified == 0 has no value-checked coverage).
 type FeatureStat struct {
-	Feature string `json:"feature"`
-	Pass    int    `json:"pass"`
-	Total   int    `json:"total"`
+	Feature  string `json:"feature"`
+	Pass     int    `json:"pass"`
+	Total    int    `json:"total"`
+	Verified int    `json:"verified"`
 }
 
 func (rep Report) FeatureStats() []FeatureStat {
 	totals := map[string]int{}
 	passes := map[string]int{}
+	verified := map[string]int{}
 	for _, r := range rep.Results {
 		for _, f := range r.Item.Features {
 			totals[f]++
 			if r.Pass() {
 				passes[f]++
 			}
+			if r.ValChecked && r.ValPass {
+				verified[f]++
+			}
 		}
 	}
 	var out []FeatureStat
 	for f, t := range totals {
-		out = append(out, FeatureStat{Feature: f, Pass: passes[f], Total: t})
+		out = append(out, FeatureStat{Feature: f, Pass: passes[f], Total: t, Verified: verified[f]})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Feature < out[j].Feature })
 	return out
@@ -369,6 +377,51 @@ func (rep Report) WriteReport(w io.Writer, verbose bool) {
 		total, parsed, pct(parsed, total), executed, pct(executed, total), passed, pct(passed, total))
 	fmt.Fprintf(w, "Value-verified: %d/%d items declare expected dataset values and match (%.1f%%)\n",
 		valPass, valChecked, pct(valPass, valChecked))
+}
+
+// WriteCoverage prints the corpus value-verification backlog: per feature, the
+// number of items that value-verify out of the total carrying that feature, with
+// features that have NO value-verified coverage listed first (the gaps to fill).
+// This is the Phase-13.5 backfill worklist made visible and measurable.
+func (rep Report) WriteCoverage(w io.Writer) {
+	stats := rep.FeatureStats()
+	// Gaps first (Verified == 0), then by ascending coverage ratio, then name.
+	sort.Slice(stats, func(i, j int) bool {
+		gi, gj := stats[i].Verified == 0, stats[j].Verified == 0
+		if gi != gj {
+			return gi // zero-verified features sort first
+		}
+		ri, rj := pct(stats[i].Verified, stats[i].Total), pct(stats[j].Verified, stats[j].Total)
+		if ri != rj {
+			return ri < rj
+		}
+		return stats[i].Feature < stats[j].Feature
+	})
+
+	gaps := 0
+	fmt.Fprintln(w, "Corpus value-verification coverage (verified / total items per feature):")
+	for _, fs := range stats {
+		flag := "  "
+		if fs.Verified == 0 {
+			flag = "!!" // no value-verified coverage at all
+			gaps++
+		}
+		fmt.Fprintf(w, "  %s %-22s %3d/%-3d  %5.1f%%\n",
+			flag, fs.Feature, fs.Verified, fs.Total, pct(fs.Verified, fs.Total))
+	}
+
+	valChecked, valPass := 0, 0
+	for _, r := range rep.Results {
+		if r.ValChecked {
+			valChecked++
+			if r.ValPass {
+				valPass++
+			}
+		}
+	}
+	fmt.Fprintf(w, "\n%d of %d features have NO value-verified item (marked !!) — the backfill backlog.\n",
+		gaps, len(stats))
+	fmt.Fprintf(w, "Items value-verified: %d/%d (%.1f%%).\n", valPass, len(rep.Results), pct(valPass, len(rep.Results)))
 }
 
 func pct(n, d int) float64 {

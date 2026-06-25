@@ -488,6 +488,7 @@ ass test --parse-only corpus/ # parse without executing
 ass test --feature TAG corpus/# run only items carrying a feature tag
 ass test -v corpus/           # show failure detail
 ass test --json corpus/       # machine-readable JSON report
+ass test --coverage corpus/   # per-feature value-verification backlog (gaps first)
 ```
 
 ---
