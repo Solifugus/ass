@@ -21,6 +21,31 @@ func dataBody(t *testing.T, src string) []ast.Statement {
 	return ds.Body
 }
 
+func TestParseRenameStatement(t *testing.T) {
+	body := dataBody(t, "data b; set a; rename x=alpha Y=Beta; run;")
+	var rs *ast.RenameStatement
+	for _, s := range body {
+		if r, ok := s.(*ast.RenameStatement); ok {
+			rs = r
+		}
+	}
+	if rs == nil {
+		t.Fatalf("no RenameStatement parsed; body = %v", body)
+	}
+	if rs.Map["x"] != "alpha" || rs.Map["y"] != "Beta" {
+		t.Errorf("rename map = %v, want x->alpha y->Beta (keys lowercased)", rs.Map)
+	}
+}
+
+// TestParseRenameAsVariable confirms `rename = expr;` is still an assignment to a
+// variable named rename (rename is not a reserved word in SAS).
+func TestParseRenameAsVariable(t *testing.T) {
+	body := dataBody(t, "data b; rename = 5; run;")
+	if _, ok := body[0].(*ast.AssignmentStatement); !ok {
+		t.Fatalf("stmt 0 is %T, want AssignmentStatement (rename used as a var name)", body[0])
+	}
+}
+
 func TestParseAssignmentAndInput(t *testing.T) {
 	body := dataBody(t, "data s; input item $ qty price; total = qty * price; run;")
 	if len(body) != 2 {

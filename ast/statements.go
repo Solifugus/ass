@@ -434,6 +434,23 @@ func (b *ByStatement) String() string {
 	return "by " + strings.Join(parts, " ") + ";"
 }
 
+// RenameStatement is `rename old=new old2=new2 ...;` renaming variables in the
+// step's output dataset(s). Map keys are lowercased old names; values are the new
+// names (case preserved). Within the step the original names remain in use; the
+// rename is applied when the output columns are built.
+type RenameStatement struct {
+	Map map[string]string
+}
+
+func (r *RenameStatement) statementNode() {}
+func (r *RenameStatement) String() string {
+	parts := make([]string, 0, len(r.Map))
+	for o, n := range r.Map {
+		parts = append(parts, o+"="+n)
+	}
+	return "rename " + strings.Join(parts, " ") + ";"
+}
+
 // FormatStatement is `format <var-list> <format.> ...;` associating display
 // formats with variables. Formats maps a (lowercased) variable name to its
 // format specification (e.g. "dollar10.2").

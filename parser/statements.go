@@ -52,6 +52,11 @@ func (p *Parser) parseDataStatement() ast.Statement {
 		return p.parseNameListStmt("keep")
 	case p.identIs("drop"):
 		return p.parseNameListStmt("drop")
+	case p.identIs("rename") && p.peek.Type == lexer.IDENT:
+		// `rename old=new ...;` statement; `rename = x` would assign the variable
+		// named rename (rename is not reserved), but `rename old` (IDENT peek) is
+		// the statement form.
+		return p.parseRenameStmt()
 	case p.identIs("format"):
 		return p.parseFormatStmt()
 	case p.identIs("label") && p.peek.Type != lexer.EQ:
@@ -1012,6 +1017,26 @@ func (p *Parser) parseNameListStmt(kw string) ast.Statement {
 		return &ast.KeepStatement{Vars: vars}
 	}
 	return &ast.DropStatement{Vars: vars}
+}
+
+// parseRenameStmt parses `rename old=new old2=new2 ...;` (no parentheses, unlike
+// the rename= dataset option). Keys are lowercased; new names preserve case.
+func (p *Parser) parseRenameStmt() ast.Statement {
+	p.next() // 'rename'
+	m := map[string]string{}
+	for p.curIs(lexer.IDENT) {
+		old := p.cur.Literal
+		p.next()
+		if p.curIs(lexer.EQ) {
+			p.next()
+			if p.curIs(lexer.IDENT) {
+				m[strings.ToLower(old)] = p.cur.Literal
+				p.next()
+			}
+		}
+	}
+	p.expectSemicolon()
+	return &ast.RenameStatement{Map: m}
 }
 
 // parseBy parses `by [descending] <var> ...;`.

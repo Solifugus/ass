@@ -66,6 +66,7 @@ type dataStep struct {
 	inVars    map[string]bool             // in= flag variable names (lowercased), excluded from output
 	formats   map[string]string           // variable (lowercased) -> display format
 	labels    map[string]string           // variable (lowercased) -> descriptive label
+	rename    map[string]string           // variable (lowercased old) -> new output name
 	srcCols   map[string]table.Column     // variable (lowercased) -> source column metadata (SET/MERGE), first source wins
 	outPlans  map[*table.Dataset]*outPlan // cached output-column plan per output dataset (writeRow hot path)
 }
@@ -74,8 +75,9 @@ type dataStep struct {
 // precomputed in both display and lowercased form so writeRow needs no per-row
 // strings.ToLower or column lookup.
 type outColumn struct {
-	display string
-	lower   string
+	display string // output column name (post-rename)
+	lower   string // output row key (lowercased display name)
+	src     string // PDV read key (lowercased original name; == lower unless renamed)
 }
 
 // outPlan is the cached set of output columns for one dataset. It is rebuilt only
@@ -136,6 +138,7 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 	d.keep, d.drop = collectKeepDrop(ds.Body)
 	d.formats = collectFormats(ds.Body)
 	d.labels = collectLabels(ds.Body)
+	d.rename = collectRename(ds.Body)
 	d.wheres = collectWheres(ds.Body)
 	d.defineArrays(ds.Body)
 	if err := d.initRetained(ds.Body); err != nil {
@@ -499,7 +502,7 @@ func (d *dataStep) writeRow(ds *table.Dataset) {
 	plan := d.outPlanFor(ds)
 	row := make(table.Row, len(plan.cols))
 	for i := range plan.cols {
-		row[plan.cols[i].lower] = d.pdv.GetLower(plan.cols[i].lower)
+		row[plan.cols[i].lower] = d.pdv.GetLower(plan.cols[i].src)
 	}
 	ds.AppendRow(row)
 }
@@ -520,8 +523,14 @@ func (d *dataStep) outPlanFor(ds *table.Dataset) *outPlan {
 		if automaticVars[ln] || isByFlagVar(ln) || d.inVars[ln] || d.drop[ln] || (d.keep != nil && !d.keep[ln]) {
 			continue
 		}
+		// A RENAME statement changes the output column name; the PDV is still read
+		// by the original name (ln), and FORMAT/LABEL/source attributes keyed by ln.
+		outName, outLower := name, ln
+		if nn, ok := d.rename[ln]; ok {
+			outName, outLower = nn, strings.ToLower(nn)
+		}
 		v := d.pdv.Get(name)
-		col := table.Column{Name: name, Kind: v.Kind, Format: d.formats[ln], Label: d.labels[ln]}
+		col := table.Column{Name: outName, Kind: v.Kind, Format: d.formats[ln], Label: d.labels[ln]}
 		// Carry attributes from the SET/MERGE source variable. An explicit FORMAT or
 		// LABEL statement in this step wins; otherwise the variable keeps the
 		// source's. Informat/length always carry through (no per-step override yet).
@@ -536,7 +545,7 @@ func (d *dataStep) outPlanFor(ds *table.Dataset) *outPlan {
 			col.Length = src.Length
 		}
 		ds.AddColumn(col)
-		plan.cols = append(plan.cols, outColumn{display: name, lower: ln})
+		plan.cols = append(plan.cols, outColumn{display: outName, lower: outLower, src: ln})
 	}
 	if d.outPlans == nil {
 		d.outPlans = make(map[*table.Dataset]*outPlan)
@@ -1192,6 +1201,19 @@ func collectLabels(stmts []ast.Statement) map[string]string {
 	for _, s := range stmts {
 		if l, ok := s.(*ast.LabelStatement); ok {
 			for k, v := range l.Labels {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+// collectRename merges all RENAME statements into a (lowercased old)→new map.
+func collectRename(stmts []ast.Statement) map[string]string {
+	out := map[string]string{}
+	for _, s := range stmts {
+		if r, ok := s.(*ast.RenameStatement); ok {
+			for k, v := range r.Map {
 				out[k] = v
 			}
 		}

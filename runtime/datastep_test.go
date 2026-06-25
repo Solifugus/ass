@@ -98,6 +98,35 @@ func TestDataStepNoExplicitOutputImplicitOnce(t *testing.T) {
 	}
 }
 
+func TestDataStepRenameStatement(t *testing.T) {
+	// The RENAME statement (not the rename= option) renames output variables;
+	// the value carries over, KEEP uses the original name, and a FORMAT on the
+	// original name still attaches to the renamed column.
+	lib := runStep(t, `data out; x = 7; y = 3; z = 9; keep x y; rename x=alpha y=beta; format y 5.2; run;`)
+	ds, _ := lib.Get("out")
+	if got := ds.ColumnNames(); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+		t.Fatalf("columns = %v, want [alpha beta]", got)
+	}
+	if ds.HasColumn("x") || ds.HasColumn("y") || ds.HasColumn("z") {
+		t.Errorf("original names should not survive; columns = %v", ds.ColumnNames())
+	}
+	if got := ds.Get(ds.Rows[0], "alpha"); got.Num != 7 {
+		t.Errorf("alpha = %v, want 7", got.Display())
+	}
+	if got := ds.Get(ds.Rows[0], "beta"); got.Num != 3 {
+		t.Errorf("beta = %v, want 3", got.Display())
+	}
+	var betaFmt string
+	for _, c := range ds.Columns {
+		if c.Name == "beta" {
+			betaFmt = c.Format
+		}
+	}
+	if betaFmt != "5.2" {
+		t.Errorf("beta format = %q, want 5.2 (format by original name carries to renamed col)", betaFmt)
+	}
+}
+
 // runProgram runs every DATA step in the program against one library.
 func runProgram(t *testing.T, src string) *table.Library {
 	t.Helper()

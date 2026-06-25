@@ -53,7 +53,7 @@ func TestRenderCrossTabHTML(t *testing.T) {
 		ds.AppendRow(table.Row{"r": table.Char(p[0]), "c": table.Char(p[1])})
 	}
 	f := func(v table.Value) string { return v.Display() }
-	got := renderCrossTabHTML(ds, "r", "c", f, f)
+	got := renderCrossTabHTML(ds, "r", "c", f, f, true, true, true, true)
 	for _, want := range []string{
 		"<table", "Table of r by c", "r \\ c", // caption + corner stub
 		">X</th>", ">Y</th>", ">Total</th>", // column headers + total

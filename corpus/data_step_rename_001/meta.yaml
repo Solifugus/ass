@@ -1,0 +1,24 @@
+id: data_step_rename_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - set
+  - rename
+  - keep
+  - proc-print
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    renamed:
+      columns: [alpha, beta]
+      rows:
+        - [1, 2]
+        - [4, 5]
+priority: 1
+notes: |
+  RENAME statement (not the rename= dataset option) renames variables in the
+  output dataset; columns must appear as alpha/beta, and KEEP (by original name)
+  drops z. Regression for the rename-statement-silently-ignored bug.

@@ -1,8 +1,10 @@
 package proc
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
@@ -15,11 +17,51 @@ func init() {
 	Register("summary", meansProc{})
 }
 
-// meansProc implements PROC MEANS / PROC SUMMARY: descriptive statistics
-// (N, Mean, StdDev, Min, Max) for the analysis variables, optionally grouped by
-// CLASS (or BY) variables. Output is a listing in the ASS format: one row per
-// (group, analysis variable).
+// meansProc implements PROC MEANS / PROC SUMMARY: descriptive statistics for the
+// analysis variables, optionally grouped by CLASS (or BY) variables. Output is a
+// listing in the ASS format: one row per (group, analysis variable). The
+// requested statistics (and their order) come from the PROC statement keywords
+// (n, mean, std/stddev, min, max, sum); with none given, SAS's default set
+// N Mean StdDev Min Max is used. `maxdec=k` fixes the displayed decimal places.
 type meansProc struct{}
+
+// meanStat is one selectable statistic: a canonical id (also the lowercased row
+// key), a display header, and how to compute its value from a stats accumulator.
+type meanStat struct {
+	id    string
+	head  string
+	value func(stats) table.Value
+}
+
+// meansStat maps a PROC MEANS keyword to its statistic, or reports ok=false if
+// the keyword is not a recognized (implemented) statistic.
+func meansStat(kw string) (meanStat, bool) {
+	switch kw {
+	case "n":
+		return meanStat{"n", "N", func(s stats) table.Value { return table.Num(float64(s.n)) }}, true
+	case "mean":
+		return meanStat{"mean", "Mean", func(s stats) table.Value { return s.meanVal() }}, true
+	case "std", "stddev":
+		return meanStat{"stddev", "StdDev", func(s stats) table.Value { return s.stdVal() }}, true
+	case "min":
+		return meanStat{"min", "Min", func(s stats) table.Value { return s.minVal() }}, true
+	case "max":
+		return meanStat{"max", "Max", func(s stats) table.Value { return s.maxVal() }}, true
+	case "sum":
+		return meanStat{"sum", "Sum", func(s stats) table.Value { return s.sumVal() }}, true
+	}
+	return meanStat{}, false
+}
+
+// defaultMeanStats is SAS's default statistic set when none are requested.
+func defaultMeanStats() []meanStat {
+	var out []meanStat
+	for _, kw := range []string{"n", "mean", "stddev", "min", "max"} {
+		st, _ := meansStat(kw)
+		out = append(out, st)
+	}
+	return out
+}
 
 func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error {
 	src, ok := lib.Get(step.Data)
@@ -48,7 +90,27 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 		analysisVars = numericColumns(src)
 	}
 
-	result := buildMeansResult(src, analysisVars, classVars, lib.Formats, procFormats)
+	// Statistic keywords (and their order) and maxdec= come from the PROC options.
+	var selected []meanStat
+	seen := map[string]bool{}
+	maxdec := -1
+	for _, o := range step.Options {
+		if o.Name == "maxdec" {
+			if k, err := strconv.Atoi(o.Value); err == nil && k >= 0 {
+				maxdec = k
+			}
+			continue
+		}
+		if st, ok := meansStat(o.Name); ok && !seen[st.id] {
+			selected = append(selected, st)
+			seen[st.id] = true
+		}
+	}
+	if len(selected) == 0 {
+		selected = defaultMeanStats()
+	}
+
+	result := buildMeansResult(src, analysisVars, classVars, selected, maxdec, lib.Formats, procFormats)
 	emitTitles(logger, lib.TitleLines())
 	emitListing(logger, result, printOptions{}, "Summary Statistics")
 	emitFootnotes(logger, lib.FootnoteLines())
@@ -59,12 +121,19 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 // (and displayed) by their user/built-in formatted value when a format applies,
 // matching SAS — so a user VALUE format collapses underlying values into one
 // class level.
-func buildMeansResult(src *table.Dataset, analysisVars, classVars []string, cat *table.FormatCatalog, procFormats map[string]string) *table.Dataset {
+func buildMeansResult(src *table.Dataset, analysisVars, classVars []string, selected []meanStat, maxdec int, cat *table.FormatCatalog, procFormats map[string]string) *table.Dataset {
 	fmts := make([]func(table.Value) string, len(classVars))
 	formatted := make([]bool, len(classVars))
 	for i, cv := range classVars {
 		fmts[i] = freqFormatter(src, cat, procFormats, cv)
 		formatted[i] = varFormatSpec(src, procFormats, cv) != ""
+	}
+
+	// maxdec= attaches a w.d display format to the float statistics (N stays an
+	// integer count). A generous width avoids best-fallback; the listing trims it.
+	statFmt := ""
+	if maxdec >= 0 {
+		statFmt = fmt.Sprintf("%d.%d", maxdec+12, maxdec)
 	}
 
 	out := table.NewDataset("", "_means_")
@@ -81,11 +150,13 @@ func buildMeansResult(src *table.Dataset, analysisVars, classVars []string, cat 
 		out.AddColumn(table.Column{Name: cv, Kind: kind})
 	}
 	out.AddColumn(table.Column{Name: "Variable", Kind: table.Character})
-	out.AddColumn(table.Column{Name: "N", Kind: table.Numeric})
-	out.AddColumn(table.Column{Name: "Mean", Kind: table.Numeric})
-	out.AddColumn(table.Column{Name: "StdDev", Kind: table.Numeric})
-	out.AddColumn(table.Column{Name: "Min", Kind: table.Numeric})
-	out.AddColumn(table.Column{Name: "Max", Kind: table.Numeric})
+	for _, ms := range selected {
+		col := table.Column{Name: ms.head, Kind: table.Numeric}
+		if statFmt != "" && ms.id != "n" {
+			col.Format = statFmt
+		}
+		out.AddColumn(col)
+	}
 
 	groups, order := groupRows(src, classVars, fmts)
 	for _, key := range order {
@@ -101,11 +172,9 @@ func buildMeansResult(src *table.Dataset, analysisVars, classVars []string, cat 
 				}
 			}
 			row["variable"] = table.Char(v)
-			row["n"] = table.Num(float64(st.n))
-			row["mean"] = st.meanVal()
-			row["stddev"] = st.stdVal()
-			row["min"] = st.minVal()
-			row["max"] = st.maxVal()
+			for _, ms := range selected {
+				row[ms.id] = ms.value(st)
+			}
 			out.AppendRow(row)
 		}
 	}
@@ -171,6 +240,13 @@ func (s stats) maxVal() table.Value {
 		return table.MissingNum()
 	}
 	return table.Num(s.max)
+}
+
+func (s stats) sumVal() table.Value {
+	if s.n == 0 {
+		return table.MissingNum()
+	}
+	return table.Num(s.sum)
 }
 
 // groupRows groups a dataset's rows by the class variables, returning the groups

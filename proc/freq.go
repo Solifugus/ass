@@ -71,13 +71,19 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			emitListing(logger, res, printOptions{}, "Frequencies")
 			fmt.Fprintln(logger.Listing())
 		default:
-			// Two (or more) variables: cross-tabulate the first two.
+			// Two (or more) variables: cross-tabulate the first two. The
+			// `/ nofreq nopercent norow nocol` options suppress the matching cell
+			// statistic (frequency / cell percent / row percent / column percent).
 			rf, cf := fmtFor(req.vars[0]), fmtFor(req.vars[1])
+			showFreq := !has(req.opts, "nofreq")
+			showPct := !has(req.opts, "nopercent")
+			showRow := !has(req.opts, "norow")
+			showCol := !has(req.opts, "nocol")
 			ctHTML := ""
 			if logger.Rich() {
-				ctHTML = renderCrossTabHTML(src, req.vars[0], req.vars[1], rf, cf)
+				ctHTML = renderCrossTabHTML(src, req.vars[0], req.vars[1], rf, cf, showFreq, showPct, showRow, showCol)
 			}
-			logger.EmitTable(renderCrossTab(src, req.vars[0], req.vars[1], rf, cf), ctHTML)
+			logger.EmitTable(renderCrossTab(src, req.vars[0], req.vars[1], rf, cf, showFreq, showPct, showRow, showCol), ctHTML)
 			if has(req.opts, "chisq") {
 				csHTML := ""
 				if logger.Rich() {
@@ -196,7 +202,7 @@ type freqCat struct {
 // total), Row Pct, and Col Pct; the right and bottom margins carry row/column
 // totals (Frequency and Percent). Missing values in either variable are
 // excluded.
-func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) string {
+func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string, showFreq, showPct, showRow, showCol bool) string {
 	rowVals := sortedDistinct(src, rowVar, rowFmt)
 	colVals := sortedDistinct(src, colVar, colFmt)
 
@@ -226,6 +232,43 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 		return fmt.Sprintf("%.2f", 100*float64(n)/float64(d))
 	}
 
+	// Active interior-cell statistics in SAS stacking order, after applying the
+	// `/ nofreq nopercent norow nocol` suppression options. At least one is always
+	// shown (if all four are suppressed, fall back to Frequency). cell() gives the
+	// interior value for (rk,ck); rmar() the right-margin (row-total) value, "" if
+	// that statistic has no row-total margin.
+	type ctStat struct {
+		label string
+		cell  func(rk, ck string) string
+		rmar  func(rk string) string
+	}
+	var stats []ctStat
+	if showFreq {
+		stats = append(stats, ctStat{"Frequency",
+			func(rk, ck string) string { return fmt.Sprintf("%d", count[rk][ck]) },
+			func(rk string) string { return fmt.Sprintf("%d", rowTot[rk]) }})
+	}
+	if showPct {
+		stats = append(stats, ctStat{"Percent",
+			func(rk, ck string) string { return pct(count[rk][ck], grand) },
+			func(rk string) string { return pct(rowTot[rk], grand) }})
+	}
+	if showRow {
+		stats = append(stats, ctStat{"Row Pct",
+			func(rk, ck string) string { return pct(count[rk][ck], rowTot[rk]) },
+			func(string) string { return "" }})
+	}
+	if showCol {
+		stats = append(stats, ctStat{"Col Pct",
+			func(rk, ck string) string { return pct(count[rk][ck], colTot[ck]) },
+			func(string) string { return "" }})
+	}
+	if len(stats) == 0 {
+		stats = append(stats, ctStat{"Frequency",
+			func(rk, ck string) string { return fmt.Sprintf("%d", count[rk][ck]) },
+			func(rk string) string { return fmt.Sprintf("%d", rowTot[rk]) }})
+	}
+
 	// Column headers: each colVal, then "Total". The left stub holds the legend
 	// labels and the row-variable values.
 	headers := make([]string, 0, len(colVals)+1)
@@ -234,11 +277,10 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 	}
 	headers = append(headers, "Total")
 
-	legend := []string{"Frequency", "Percent", "Row Pct", "Col Pct"}
 	stubW := len(rowVar)
-	for _, l := range legend {
-		if len(l) > stubW {
-			stubW = len(l)
+	for _, s := range stats {
+		if len(s.label) > stubW {
+			stubW = len(s.label)
 		}
 	}
 	for _, rv := range rowVals {
@@ -250,7 +292,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 		stubW = len("Total")
 	}
 
-	// Pre-compute every data column's content width.
+	// Pre-compute every data column's content width from the active stats only.
 	colW := make([]int, len(headers))
 	for i, h := range headers {
 		colW[i] = len(h)
@@ -260,26 +302,33 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 			colW[i] = len(s)
 		}
 	}
+	last := len(headers) - 1
 	for _, rv := range rowVals {
 		rk := rv.label
 		for j, cv := range colVals {
-			ck := cv.label
-			n := count[rk][ck]
-			widen(j, fmt.Sprintf("%d", n))
-			widen(j, pct(n, grand))
-			widen(j, pct(n, rowTot[rk]))
-			widen(j, pct(n, colTot[ck]))
+			for _, s := range stats {
+				widen(j, s.cell(rk, cv.label))
+			}
 		}
-		last := len(headers) - 1
-		widen(last, fmt.Sprintf("%d", rowTot[rk]))
-		widen(last, pct(rowTot[rk], grand))
+		for _, s := range stats {
+			widen(last, s.rmar(rk))
+		}
 	}
 	for j, cv := range colVals {
 		ck := cv.label
-		widen(j, fmt.Sprintf("%d", colTot[ck]))
-		widen(j, pct(colTot[ck], grand))
+		if showFreq {
+			widen(j, fmt.Sprintf("%d", colTot[ck]))
+		}
+		if showPct {
+			widen(j, pct(colTot[ck], grand))
+		}
 	}
-	widen(len(headers)-1, fmt.Sprintf("%d", grand))
+	if showFreq {
+		widen(last, fmt.Sprintf("%d", grand))
+	}
+	if showPct {
+		widen(last, pct(grand, grand))
+	}
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Table of %s by %s\n\n", rowVar, colVar))
@@ -292,53 +341,59 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 		b.WriteString(strings.TrimRight(parts, " ") + "\n")
 	}
 
-	// Header band: the column-variable name, then a corner legend (each stat once)
-	// with "Col Pct" sharing the line that carries the column value headers.
+	// Header band: the column-variable name, the row-variable name, then the active
+	// stat legend labels — all but the last on their own line, the last sharing the
+	// line that carries the column value headers.
 	b.WriteString(strings.Repeat(" ", stubW) + "  " + colVar + "\n")
 	b.WriteString(rowVar + "\n")
-	b.WriteString(legend[0] + "\n")
-	b.WriteString(legend[1] + "\n")
-	b.WriteString(legend[2] + "\n")
-	line(legend[3], headers)
+	for i := 0; i < len(stats)-1; i++ {
+		b.WriteString(stats[i].label + "\n")
+	}
+	line(stats[len(stats)-1].label, headers)
 	b.WriteString("\n")
 
-	// Body: one band of four lines per row value (freq, pct, row pct, col pct),
-	// with the row value labeling the first line and the rest left blank.
+	// Body: one band of (#active stats) lines per row value, with the row value
+	// labeling the first line and the rest left blank.
 	for _, rv := range rowVals {
 		rk := rv.label
-		var fr, pc, rp, cp []string
-		for _, cv := range colVals {
-			ck := cv.label
-			n := count[rk][ck]
-			fr = append(fr, fmt.Sprintf("%d", n))
-			pc = append(pc, pct(n, grand))
-			rp = append(rp, pct(n, rowTot[rk]))
-			cp = append(cp, pct(n, colTot[ck]))
+		for si, s := range stats {
+			cells := make([]string, 0, len(colVals)+1)
+			for _, cv := range colVals {
+				cells = append(cells, s.cell(rk, cv.label))
+			}
+			cells = append(cells, s.rmar(rk))
+			stub := ""
+			if si == 0 {
+				stub = rk
+			}
+			line(stub, cells)
 		}
-		// Row-total margin (Frequency and Percent only).
-		fr = append(fr, fmt.Sprintf("%d", rowTot[rk]))
-		pc = append(pc, pct(rowTot[rk], grand))
-		rp = append(rp, "")
-		cp = append(cp, "")
-
-		line(rk, fr)
-		line("", pc)
-		line("", rp)
-		line("", cp)
 		b.WriteString("\n")
 	}
 
-	// Bottom margin: column totals and the grand total.
-	var ct, cpc []string
-	for _, cv := range colVals {
-		ck := cv.label
-		ct = append(ct, fmt.Sprintf("%d", colTot[ck]))
-		cpc = append(cpc, pct(colTot[ck], grand))
+	// Bottom margin: column totals (Frequency and/or Percent only).
+	firstBottom := true
+	if showFreq {
+		ct := make([]string, 0, len(colVals)+1)
+		for _, cv := range colVals {
+			ct = append(ct, fmt.Sprintf("%d", colTot[cv.label]))
+		}
+		ct = append(ct, fmt.Sprintf("%d", grand))
+		line("Total", ct)
+		firstBottom = false
 	}
-	ct = append(ct, fmt.Sprintf("%d", grand))
-	cpc = append(cpc, pct(grand, grand))
-	line("Total", ct)
-	line(legend[1], cpc)
+	if showPct {
+		cpc := make([]string, 0, len(colVals)+1)
+		for _, cv := range colVals {
+			cpc = append(cpc, pct(colTot[cv.label], grand))
+		}
+		cpc = append(cpc, pct(grand, grand))
+		lbl := "Percent"
+		if firstBottom {
+			lbl = "Total"
+		}
+		line(lbl, cpc)
+	}
 
 	return b.String()
 }
@@ -347,7 +402,7 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 // a styled HTML table for rich frontends. Each body cell stacks the four SAS
 // stats — frequency (bold), then cell/row/column percent (dimmed) — and the
 // margins carry the row, column, and grand totals.
-func renderCrossTabHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) string {
+func renderCrossTabHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string, showFreq, showPct, showRow, showCol bool) string {
 	rowVals := sortedDistinct(src, rowVar, rowFmt)
 	colVals := sortedDistinct(src, colVar, colFmt)
 
@@ -369,6 +424,9 @@ func renderCrossTabHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFm
 		colTot[ck]++
 		grand++
 	}
+	if !showFreq && !showPct && !showRow && !showCol {
+		showFreq = true
+	}
 	pct := func(n, d int) string {
 		if d == 0 {
 			return "."
@@ -376,15 +434,53 @@ func renderCrossTabHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFm
 		return fmt.Sprintf("%.2f", 100*float64(n)/float64(d))
 	}
 	dim := `<div style="opacity:.6;font-size:11px">`
+	// An interior cell stacks only the active statistics.
 	cell := func(n, rowT, colT int) string {
-		return fmt.Sprintf(`<div style="font-weight:600">%d</div>%s%s</div>%s%s</div>%s%s</div>`,
-			n, dim, pct(n, grand), dim, pct(n, rowT), dim, pct(n, colT))
+		var s strings.Builder
+		if showFreq {
+			fmt.Fprintf(&s, `<div style="font-weight:600">%d</div>`, n)
+		}
+		if showPct {
+			s.WriteString(dim + pct(n, grand) + `</div>`)
+		}
+		if showRow {
+			s.WriteString(dim + pct(n, rowT) + `</div>`)
+		}
+		if showCol {
+			s.WriteString(dim + pct(n, colT) + `</div>`)
+		}
+		return s.String()
+	}
+	// A margin cell carries the total's frequency and/or grand-percent only.
+	marginFreqPct := func(n int) string {
+		var s strings.Builder
+		if showFreq {
+			fmt.Fprintf(&s, `<div style="font-weight:600">%d</div>`, n)
+		}
+		if showPct {
+			s.WriteString(dim + pct(n, grand) + `%</div>`)
+		}
+		return s.String()
+	}
+
+	legendParts := []string{}
+	if showFreq {
+		legendParts = append(legendParts, "freq")
+	}
+	if showPct {
+		legendParts = append(legendParts, "cell %")
+	}
+	if showRow {
+		legendParts = append(legendParts, "row %")
+	}
+	if showCol {
+		legendParts = append(legendParts, "col %")
 	}
 
 	var b strings.Builder
 	b.WriteString(`<table style="` + htmlTableStyle + `">`)
-	fmt.Fprintf(&b, `<caption style="%s">Table of %s by %s<span style="font-weight:400;opacity:.6;margin-left:.55em">freq / cell %% / row %% / col %%</span></caption>`,
-		htmlCaptionStyle, html.EscapeString(rowVar), html.EscapeString(colVar))
+	fmt.Fprintf(&b, `<caption style="%s">Table of %s by %s<span style="font-weight:400;opacity:.6;margin-left:.55em">%s</span></caption>`,
+		htmlCaptionStyle, html.EscapeString(rowVar), html.EscapeString(colVar), html.EscapeString(strings.Join(legendParts, " / ")))
 
 	b.WriteString(`<thead><tr><th style="` + htmlThStyle + htmlTextStyle + `">` + html.EscapeString(rowVar) + " \\ " + html.EscapeString(colVar) + `</th>`)
 	for _, cv := range colVals {
@@ -404,18 +500,19 @@ func renderCrossTabHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFm
 			n := count[rk][cv.label]
 			b.WriteString(`<td style="` + htmlTdStyle + htmlNumStyle + `">` + cell(n, rowTot[rk], colTot[cv.label]) + `</td>`)
 		}
-		fmt.Fprintf(&b, `<td style="%s%s"><div style="font-weight:600">%d</div>%s%s%%</div></td>`,
-			htmlTdStyle, htmlNumStyle, rowTot[rk], dim, pct(rowTot[rk], grand))
+		b.WriteString(`<td style="` + htmlTdStyle + htmlNumStyle + `">` + marginFreqPct(rowTot[rk]) + `</td>`)
 		b.WriteString("</tr>")
 	}
 
 	b.WriteString(`<tr><th scope="row" style="` + htmlThStyle + htmlTextStyle + `">Total</th>`)
 	for _, cv := range colVals {
-		fmt.Fprintf(&b, `<td style="%s%s"><div style="font-weight:600">%d</div>%s%s%%</div></td>`,
-			htmlThStyle, htmlNumStyle, colTot[cv.label], dim, pct(colTot[cv.label], grand))
+		b.WriteString(`<td style="` + htmlThStyle + htmlNumStyle + `">` + marginFreqPct(colTot[cv.label]) + `</td>`)
 	}
-	fmt.Fprintf(&b, `<td style="%s%s"><div style="font-weight:600">%d</div></td></tr></tbody></table>`,
-		htmlThStyle, htmlNumStyle, grand)
+	grandCell := ""
+	if showFreq {
+		grandCell = fmt.Sprintf(`<div style="font-weight:600">%d</div>`, grand)
+	}
+	b.WriteString(`<td style="` + htmlThStyle + htmlNumStyle + `">` + grandCell + `</td></tr></tbody></table>`)
 	return b.String()
 }
 

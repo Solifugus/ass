@@ -64,6 +64,7 @@ Comments: `/* ... */` and `* ... ;`.
 | `array A{n} v1 ... ;` | Define an array over variables; index `A{i}`. |
 | `output <DS>;` | Write the current PDV as a row (to `DS` if named). |
 | `keep VAR ...;` / `drop VAR ...;` | Restrict output variables (range form `x1-x5` allowed). |
+| `rename old=new ...;` | Rename variables in the output dataset(s). Within the step the original names are used; the rename applies when the output is written (the `rename=` dataset option is the other form). |
 | `format VAR fmt. ...;` | Attach output formats. |
 | `label VAR="text" ...;` | Attach variable labels. |
 | `file "path" <opts>;` | Direct `put` output to a file. Options: `dlm=`, `dsd`. |
@@ -302,13 +303,16 @@ run;
 ### PROC MEANS / SUMMARY
 
 ```sas
-proc means data=DS n mean stddev min max;
+proc means data=DS n mean stddev min max sum maxdec=2;
   class g;        /* or: by g; */
   var x y;
 run;
 ```
-Statistics: `n`, `mean`, `stddev` (`std`), `min`, `max`. `class`/`by` group the
-output; CLASS groups respect user formats.
+Statistics: `n`, `mean`, `stddev` (`std`), `min`, `max`, `sum`. The keywords you
+list select which statistics appear and in what order; with none given, the SAS
+default set `N Mean StdDev Min Max` is used. `maxdec=k` fixes the displayed
+decimal places of the statistic columns (the `N` count stays an integer).
+`class`/`by` group the output; CLASS groups respect user formats.
 
 ### PROC FREQ
 
@@ -322,9 +326,11 @@ run;
 ```
 - One-way, two-way cross-tabulation, and n-way `/ list` tables.
 - `/ chisq` — Pearson chi-square (with p-value).
-- Display options: `nofreq`, `nopercent`, `nocum`, `norow`, `nocol` — applied to
-  the one-way and `/ list` layouts (the dense two-way cross-tab always shows the
-  full frequency/percent/row-pct/col-pct cell).
+- Display options: `nofreq`, `nopercent`, `nocum`, `norow`, `nocol`. On one-way
+  and `/ list` layouts these drop the matching column; on the two-way cross-tab
+  `nofreq`/`nopercent`/`norow`/`nocol` drop the matching cell statistic
+  (frequency / cell percent / row percent / column percent). Suppressing all four
+  falls back to showing the frequency.
 - Counts respect user formats for grouping.
 
 ### PROC SQL

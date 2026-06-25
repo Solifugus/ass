@@ -71,7 +71,7 @@ func salesDS() *table.Dataset {
 }
 
 func TestFreqTwoWayCrossTab(t *testing.T) {
-	out := renderCrossTab(salesDS(), "region", "product", dispFmt, dispFmt)
+	out := renderCrossTab(salesDS(), "region", "product", dispFmt, dispFmt, true, true, true, true)
 	// Header and structure.
 	for _, want := range []string{
 		"Table of region by product",
@@ -92,6 +92,38 @@ func TestFreqTwoWayCrossTab(t *testing.T) {
 	// Grand total line: column totals 4, 6 and grand 10.
 	if !contains(out, "100.00") {
 		t.Errorf("crosstab missing grand-total percent 100.00\n%s", out)
+	}
+}
+
+// TestFreqCrossTabSuppression verifies the `/ nofreq nopercent norow nocol`
+// options drop the matching cell statistic from the two-way cross-tab.
+func TestFreqCrossTabSuppression(t *testing.T) {
+	// nofreq: Frequency legend and the cell counts vanish; percents remain.
+	out := renderCrossTab(salesDS(), "region", "product", dispFmt, dispFmt, false, true, true, true)
+	if contains(out, "Frequency") {
+		t.Errorf("nofreq should remove the Frequency legend\n%s", out)
+	}
+	for _, want := range []string{"Percent", "Row Pct", "Col Pct", "60.00"} {
+		if !contains(out, want) {
+			t.Errorf("nofreq dropped too much: missing %q\n%s", want, out)
+		}
+	}
+
+	// nopercent norow nocol: only Frequency survives — no percent values at all.
+	out = renderCrossTab(salesDS(), "region", "product", dispFmt, dispFmt, true, false, false, false)
+	if !contains(out, "Frequency") {
+		t.Errorf("Frequency should survive\n%s", out)
+	}
+	for _, gone := range []string{"Percent", "Row Pct", "Col Pct", ".00"} {
+		if contains(out, gone) {
+			t.Errorf("freq-only crosstab should not contain %q\n%s", gone, out)
+		}
+	}
+
+	// All four suppressed → fall back to Frequency (never an empty table).
+	out = renderCrossTab(salesDS(), "region", "product", dispFmt, dispFmt, false, false, false, false)
+	if !contains(out, "Frequency") {
+		t.Errorf("all-suppressed should fall back to Frequency\n%s", out)
 	}
 }
 

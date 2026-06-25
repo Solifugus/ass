@@ -125,22 +125,23 @@ and they pass.
 Surfaced by running real industry programs through the engine. These are the
 first concrete backlog items for Track 1/Track 3.
 
-- [ ] **`rename` as a DATA-step statement is silently ignored.** `data b; set a;
-  rename x=xx; run;` keeps the old name with no error. The dataset-option form
-  (`set a(rename=(x=xx))`) works correctly. Fix: honor the statement, or at
-  minimum emit a clear error. (Not currently claimed in reference.md, but silent
-  no-op is the worst outcome.)
-- [ ] **Two-way PROC FREQ ignores `nofreq`/`nopercent`/`norow`/`nocol`.** The
-  dense cross-tab always prints all four cell components; the options only affect
-  one-way / `/ list` layouts. reference.md is now qualified to match reality —
-  implementing suppression on the cross-tab would remove the qualifier.
-- [ ] **PROC MEANS has no `maxdec=` and no `sum` keyword.** Output is full
-  machine precision and limited to n/mean/stddev/min/max. Cookbooks route sums
-  through PROC SQL as a workaround. Adding `sum` and `maxdec=` would close a
-  common ETL gap.
+- [x] **`rename` as a DATA-step statement was silently ignored.** Fixed — `data
+  b; set a; rename x=xx; run;` now renames the output variable (the original name
+  is used within the step; FORMAT/LABEL/KEEP by the original name still apply).
+  Regression: corpus `data_step_rename_001` (value-verified) plus parser/runtime
+  unit tests.
+- [x] **Two-way PROC FREQ ignored `nofreq`/`nopercent`/`norow`/`nocol`.** Fixed —
+  the cross-tab now drops the matching cell statistic (frequency / cell % / row %
+  / col %); suppressing all four falls back to frequency. Cross-tab output is
+  listing text (not a dataset), so the guard is a `proc` unit test rather than
+  `expected.datasets`.
+- [x] **PROC MEANS had no `maxdec=` and no `sum` keyword.** Fixed — the statistic
+  keywords (`n`/`mean`/`std`/`stddev`/`min`/`max`/`sum`) now select which stats
+  appear and in what order (default `N Mean StdDev Min Max`), and `maxdec=k` fixes
+  the displayed decimals (N stays integer). Guard: `proc` unit tests.
 - [ ] **No PROC TRANSPOSE.** Wide↔long reshaping is done with DATA-step arrays
   (documented in the general cookbook). TRANSPOSE is a frequent SAS idiom worth
-  considering for a future phase.
+  considering for a future phase. (Still open — larger feature, deferred.)
 
 Verified **not** broken (initially suspected, then disproven):
 

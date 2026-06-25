@@ -92,7 +92,7 @@ Obs  name  age
 
 | Area | Highlights |
 |------|------------|
-| DATA step | `input`/`datalines` (incl. trailing `@`/`@@` line-hold), `infile` (external flat files), `file`/`put` (write flat files, incl. trailing `@`/`@@` output hold, `put _all_`, named `var=` output), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`, `format`, `label`, `output`, `data _null_` |
+| DATA step | `input`/`datalines` (incl. trailing `@`/`@@` line-hold), `infile` (external flat files), `file`/`put` (write flat files, incl. trailing `@`/`@@` output hold, `put _all_`, named `var=` output), `set`, `merge`/`in=`, assignment, `if/then/else`, subsetting `if`, `where`, `do` loops, `retain`, sum statement, arrays, BY-group `first.`/`last.`, `keep`/`drop`/`rename`, `format`, `label`, `output`, `data _null_` |
 | Flat-file input | `infile "path"` with `dlm=`/`delimiter=`, `dsd` (CSV: quoted fields, embedded delimiters, missing), `firstobs=`, `obs=`; list, column (`1-10`), formatted, `@n`/`+n` pointer, and `#n` multi-line input |
 | Flat-file output | `file "path"` with `dlm=`/`dsd` (CSV: quotes values containing the delimiter); `put` of variables, string literals, formatted values, column/pointer placement (`name $ 1-10`, `@n`/`+n`), `#n` multi-line output, trailing `@`/`@@` output hold, `put _all_`, and named `var=` output |
 | PROC IMPORT/EXPORT | CSV/TAB/DLM delimited files **and `.xlsx` workbooks**: `dbms=csv/tab/dlm/xlsx`, `getnames=`, `datarow=`, `putnames=`, `delimiter=`/`dlm=`; IMPORT sniffs column types, EXPORT writes a header row (the `.xlsx` reader/writer is dependency-free) |
@@ -104,8 +104,8 @@ Obs  name  age
 | PROC SORT | `by` (+ `descending`), `out=` (incl. a database libref), `nodupkey` |
 | PROC APPEND | `base=`/`data=` (+ `force`): append observations to a base data set, created if absent; BASE= or DATA= may be a database libref (in-place INSERT) |
 | PROC SQL | `select`/`where`/`order by`/joins/`group by`, `create table as` (WORK or a database libref; via embedded SQLite) |
-| PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max with `class`/`by` (CLASS groups by user formats) |
-| PROC FREQ | one-way frequency tables, two-way cross-tabulation (`tables a*b`), n-way list tables (`/ list`), `/ options` (nocol/norow/nopercent/nofreq/nocum), and `/ chisq` (Pearson chi-square); groups by user formats |
+| PROC MEANS/SUMMARY | N, Mean, StdDev, Min, Max, Sum (keywords select which/what order; default N Mean StdDev Min Max), `maxdec=`, with `class`/`by` (CLASS groups by user formats) |
+| PROC FREQ | one-way frequency tables, two-way cross-tabulation (`tables a*b`), n-way list tables (`/ list`), `/ options` (nocol/norow/nopercent/nofreq/nocum — including on the two-way cross-tab), and `/ chisq` (Pearson chi-square); groups by user formats |
 | PROC REG/GLM | OLS linear regression: estimates, std err, t-value, `Pr>|t|`, R²; CLASS categorical predictors (reference-cell coding) |
 | PROC FORMAT | user-defined `value` formats (ranges, `low`/`high`, `other`, char), applied in PROC PRINT and for grouping in PROC FREQ/MEANS; `invalue` user informats read by INPUT |
 | PROC PROOF | **data-quality validation** (an ASS value-add, not SAS): assert `require`/`type`/`notnull`/`values`/`range`/`unique`/`key … references` (referential integrity)/`rule "label": <expr>` over a dataset; `/ severity= message=` per assertion; report + `out=` violations dataset (`_rule_`/`_obs_`); error-level failures set a non-zero exit. See [`docs/proofing.md`](docs/proofing.md) |

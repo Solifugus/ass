@@ -20,7 +20,7 @@ func scoresDS() *table.Dataset {
 }
 
 func TestMeansNoClass(t *testing.T) {
-	res := buildMeansResult(scoresDS(), []string{"score"}, nil, nil, nil)
+	res := buildMeansResult(scoresDS(), []string{"score"}, nil, defaultMeanStats(), -1, nil, nil)
 	if res.NObs() != 1 {
 		t.Fatalf("NObs = %d, want 1", res.NObs())
 	}
@@ -40,7 +40,7 @@ func TestMeansNoClass(t *testing.T) {
 }
 
 func TestMeansWithClass(t *testing.T) {
-	res := buildMeansResult(scoresDS(), []string{"score"}, []string{"grp"}, nil, nil)
+	res := buildMeansResult(scoresDS(), []string{"score"}, []string{"grp"}, defaultMeanStats(), -1, nil, nil)
 	if res.NObs() != 2 {
 		t.Fatalf("NObs = %d, want 2 (one per group)", res.NObs())
 	}
@@ -69,6 +69,49 @@ func TestStatsStdDevSingleValueMissing(t *testing.T) {
 	}
 }
 
+func TestMeansSumStat(t *testing.T) {
+	// Selecting `sum` adds a Sum column with the group totals; selection order is
+	// honored and only requested stats appear.
+	sum, _ := meansStat("sum")
+	n, _ := meansStat("n")
+	res := buildMeansResult(scoresDS(), []string{"score"}, []string{"grp"}, []meanStat{sum, n}, -1, nil, nil)
+	if names := res.ColumnNames(); len(names) != 4 || names[2] != "Sum" || names[3] != "N" {
+		t.Fatalf("columns = %v, want [grp Variable Sum N] (selection order)", names)
+	}
+	byGrp := map[string]table.Row{}
+	for _, r := range res.Rows {
+		byGrp[res.Get(r, "grp").Str] = r
+	}
+	if got := res.Get(byGrp["a"], "Sum"); got.Num != 60 { // 10+20+30
+		t.Errorf("group a Sum = %v, want 60", got.Display())
+	}
+	if got := res.Get(byGrp["b"], "Sum"); got.Num != 300 { // 100+200
+		t.Errorf("group b Sum = %v, want 300", got.Display())
+	}
+}
+
+func TestMeansMaxdecFormat(t *testing.T) {
+	// maxdec=2 attaches a w.2 format to the float stats but leaves N integer.
+	mean, _ := meansStat("mean")
+	n, _ := meansStat("n")
+	res := buildMeansResult(scoresDS(), []string{"score"}, nil, []meanStat{n, mean}, 2, nil, nil)
+	var nFmt, meanFmt string
+	for _, c := range res.Columns {
+		switch c.Name {
+		case "N":
+			nFmt = c.Format
+		case "Mean":
+			meanFmt = c.Format
+		}
+	}
+	if nFmt != "" {
+		t.Errorf("N format = %q, want empty (counts stay integer)", nFmt)
+	}
+	if meanFmt != "14.2" {
+		t.Errorf("Mean format = %q, want 14.2 (maxdec=2)", meanFmt)
+	}
+}
+
 // TestMeansUserFormatClass verifies CLASS grouping by a user VALUE format:
 // ages <30 -> "Young" (n=2), >=30 -> "Older" (n=3).
 func TestMeansUserFormatClass(t *testing.T) {
@@ -89,7 +132,7 @@ func TestMeansUserFormatClass(t *testing.T) {
 	add(40, 70)
 	add(55, 60)
 	add(33, 100)
-	res := buildMeansResult(ds, []string{"score"}, []string{"age"}, cat, map[string]string{})
+	res := buildMeansResult(ds, []string{"score"}, []string{"age"}, defaultMeanStats(), -1, cat, map[string]string{})
 	if res.NObs() != 2 {
 		t.Fatalf("NObs = %d, want 2 (Young, Older)", res.NObs())
 	}
