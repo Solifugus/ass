@@ -33,7 +33,7 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 	opts := parsePrintOptions(step)
 	opts.catalog = lib.Formats
-	fmt.Print(renderListing(ds, opts))
+	fmt.Fprint(logger.Listing(), renderListing(ds, opts))
 	logger.Note("There were %d observations read from the data set %s.%s.",
 		ds.NObs(), strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name))
 	return nil

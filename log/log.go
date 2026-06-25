@@ -3,6 +3,7 @@ package log
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
@@ -10,13 +11,39 @@ import (
 // writer. SAS prefixes informational lines with "NOTE: ", warnings with
 // "WARNING: ", and errors with "ERROR: ". A nil Logger is usable and discards
 // everything, so callers need not guard every call.
+//
+// SAS keeps two output streams: the LOG (NOTE/WARNING/ERROR/PUT, written here)
+// and the procedure listing (LST, the PROC output). The Logger carries both —
+// w is the LOG; lst is the listing, reachable via Listing(). The batch CLI sends
+// the LOG to stderr and the listing to stdout; the Jupyter kernel captures both.
 type Logger struct {
 	w    io.Writer
+	lst  io.Writer
 	errs int
 }
 
-// New creates a Logger writing to w.
+// New creates a Logger writing the LOG to w and the procedure listing to stdout
+// (the batch default).
 func New(w io.Writer) *Logger { return &Logger{w: w} }
+
+// NewWith creates a Logger with separate LOG (logw) and listing (lstw) writers,
+// for callers that capture the procedure output rather than letting it reach
+// stdout — e.g. the Jupyter kernel. New(w) is equivalent to NewWith(w, stdout).
+func NewWith(logw, lstw io.Writer) *Logger { return &Logger{w: logw, lst: lstw} }
+
+// Listing returns the writer for procedure output (the LST stream). It defaults
+// to os.Stdout when unset; a nil Logger discards output. PROC implementations
+// write their listings here instead of to os.Stdout directly, so the output is
+// redirectable (kernel, tests, future web UI).
+func (l *Logger) Listing() io.Writer {
+	if l == nil {
+		return io.Discard
+	}
+	if l.lst == nil {
+		return os.Stdout
+	}
+	return l.lst
+}
 
 // ErrorCount returns the number of ERROR lines emitted. The CLI uses it to set a
 // non-zero exit status when a run logged errors (e.g. a failing PROC PROOF

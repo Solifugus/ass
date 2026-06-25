@@ -3,6 +3,7 @@ module github.com/solifugus/ass
 go 1.25.7
 
 require (
+	github.com/go-zeromq/zmq4 v0.17.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microsoft/go-mssqldb v1.10.0
 	github.com/sijms/go-ora/v2 v2.9.0
@@ -18,6 +19,7 @@ require github.com/ibmdb/go_ibm_db v0.5.4
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-zeromq/goczmq/v4 v4.2.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

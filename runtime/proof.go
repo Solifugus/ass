@@ -164,7 +164,7 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 		r.violObs = dup
 	}
 
-	writeProofReport(ds, results, maxSample)
+	writeProofReport(ds, results, maxSample, logger)
 	if outName != "" {
 		if err := writeProofViolations(lib, ds, results, outName, logger); err != nil {
 			return err
@@ -399,7 +399,7 @@ func parseFloat(s string) (float64, bool) {
 }
 
 // writeProofReport prints the per-assertion listing to stdout.
-func writeProofReport(ds *table.Dataset, results []*proofResult, maxSample int) {
+func writeProofReport(ds *table.Dataset, results []*proofResult, maxSample int, logger *log.Logger) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\nPROC PROOF — %s.%s (%d obs)\n\n",
 		strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name), ds.NObs())
@@ -425,7 +425,7 @@ func writeProofReport(ds *table.Dataset, results []*proofResult, maxSample int) 
 			fmt.Fprintf(&b, "      offending obs: %s\n", joinInts(sample))
 		}
 	}
-	fmt.Print(b.String())
+	fmt.Fprint(logger.Listing(), b.String())
 }
 
 // writeProofViolations builds and stores the out= dataset: one row per

@@ -50,7 +50,7 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 
 	result := buildMeansResult(src, analysisVars, classVars, lib.Formats, procFormats)
-	fmt.Print(renderListing(result, printOptions{}))
+	fmt.Fprint(logger.Listing(), renderListing(result, printOptions{}))
 	return nil
 }
 

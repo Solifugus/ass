@@ -494,6 +494,13 @@ interactive consumer. The Jupyter kernel is the next consumer of the same API.
   needs no performance work.
 - **`modernc.org/sqlite` swap** — independent; verified on big-endian; removes CGo
   from the default build.
-- **Jupyter kernel** — builds on the resident session; pure-Go via `zmq4`.
+- **Jupyter kernel** — **done 2026-06-24**: the `kernel` package implements the
+  Jupyter wire protocol (v5.3, HMAC-signed) over pure-Go `zmq4`, feeding each
+  cell to a `session.Session`. `ass kernel --install` registers the kernelspec;
+  `ass kernel <conn>` is the launch form. Builds CGo-free. See
+  [`jupyter.md`](jupyter.md). A real in-process ZeroMQ wire test
+  (`kernel/kernel_test.go`) drives kernel_info → execute (with streamed output)
+  → shutdown. Forward-looking: rich `display_data`, completion/inspection,
+  cooperative interrupt.
 - **Bytecode VM** — performance; gated on profiling evidence.
 - **Own SQL engine** — far future; the one item that wants the VM done first.

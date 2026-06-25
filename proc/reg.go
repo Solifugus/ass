@@ -94,12 +94,13 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 		})
 	}
 
-	fmt.Printf("Dependent Variable: %s\n", model.Response)
-	fmt.Printf("R-Square: %.5f   Observations: %d\n\n", fit.rSquare, fit.n)
-	fmt.Print(renderListing(result, printOptions{}))
+	out := logger.Listing()
+	fmt.Fprintf(out, "Dependent Variable: %s\n", model.Response)
+	fmt.Fprintf(out, "R-Square: %.5f   Observations: %d\n\n", fit.rSquare, fit.n)
+	fmt.Fprint(out, renderListing(result, printOptions{}))
 	if hasRef {
-		fmt.Println("\nNOTE: (ref) marks a class variable's reference level (estimate fixed at 0;")
-		fmt.Println("      reference-cell coding, not SAS GLM's generalized-inverse parameterization).")
+		fmt.Fprintln(out, "\nNOTE: (ref) marks a class variable's reference level (estimate fixed at 0;")
+		fmt.Fprintln(out, "      reference-cell coding, not SAS GLM's generalized-inverse parameterization).")
 	}
 	return nil
 }

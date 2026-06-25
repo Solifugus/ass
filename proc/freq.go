@@ -65,15 +65,15 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			// One-way, or an n-way list-format table (all distinct combinations).
 			res := buildFreqResultN(src, req.vars, fmtFor, fmtdFor)
 			res = applyFreqOptions(res, req.opts)
-			fmt.Print(renderListing(res, printOptions{}))
-			fmt.Println()
+			fmt.Fprint(logger.Listing(), renderListing(res, printOptions{}))
+			fmt.Fprintln(logger.Listing())
 		default:
 			// Two (or more) variables: cross-tabulate the first two.
-			fmt.Print(renderCrossTab(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
+			fmt.Fprint(logger.Listing(), renderCrossTab(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
 			if has(req.opts, "chisq") {
-				fmt.Print(renderChiSquare(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
+				fmt.Fprint(logger.Listing(), renderChiSquare(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
 			}
-			fmt.Println()
+			fmt.Fprintln(logger.Listing())
 		}
 	}
 	return nil

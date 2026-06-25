@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/solifugus/ass/corpus"
+	"github.com/solifugus/ass/kernel"
 	"github.com/solifugus/ass/lexer"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/macro"
@@ -23,6 +24,8 @@ Usage:
   ass <file.sas>        Run a SAS program
   ass run <file.sas>    Run a SAS program (explicit form)
   ass repl              Start an interactive session (REPL)
+  ass kernel --install  Register the ASS Jupyter kernel for the current user
+  ass kernel <conn>     Run as a Jupyter kernel (invoked by Jupyter)
   ass parse <file.sas>  Parse a SAS program and print its AST
   ass tokens <file.sas> Dump the token stream (lexer debug)
   ass test <dir>        Run the compatibility corpus in <dir>
@@ -66,6 +69,8 @@ func run(args []string) error {
 		return runProgram(args[1])
 	case "repl":
 		return runREPL()
+	case "kernel":
+		return runKernel(args[1:])
 	default:
 		return runProgram(args[0])
 	}
@@ -162,6 +167,25 @@ func runREPL() error {
 	}
 	fmt.Println()
 	return in.Err()
+}
+
+// runKernel implements the `kernel` subcommand: `--install` registers the
+// kernelspec with Jupyter, while a connection-file path runs the kernel itself
+// (this is the form Jupyter invokes via the installed kernelspec).
+func runKernel(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("kernel: need --install or a connection file path")
+	}
+	if args[0] == "--install" {
+		dir, err := kernel.InstallSpec()
+		if err != nil {
+			return err
+		}
+		fmt.Println("Installed ASS Jupyter kernel at " + dir)
+		fmt.Println("Start Jupyter and choose the \"ASS (SAS)\" kernel.")
+		return nil
+	}
+	return kernel.Run(args[0])
 }
 
 // runParse parses a SAS source file and prints the resulting AST, plus any
