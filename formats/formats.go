@@ -257,7 +257,15 @@ func atoi3(a, b, c string) (x, y, z int, err error) {
 // ".".
 func Apply(v table.Value, format string) string {
 	if format == "" {
-		return v.Display()
+		// No format: characters as-is, numerics via SAS's default BEST12. so
+		// values like 47.74934554525329 read as 47.749345545, not full precision.
+		if v.Kind == table.Character {
+			return v.Str
+		}
+		if v.IsMissing() {
+			return "."
+		}
+		return bestNum(v.Num, 12)
 	}
 	name, width, dec, hasDec := parseSpec(format)
 
@@ -314,12 +322,86 @@ func Apply(v table.Value, format string) string {
 		t := SASDateToTime(float64(days))
 		h, m, s := splitTime(rem)
 		return fmt.Sprintf("%02d%s%04d:%02d:%02d:%02d", t.Day(), monthAbbr[t.Month()-1], t.Year(), h, m, s)
-	default: // "", "best", "f" → fixed-point if decimals given, else default
+	default: // "", "best", "f" → fixed-point if decimals given, else BEST.
 		if hasDec {
 			return fixed(v.Num, dec)
 		}
-		return v.Display()
+		return bestNum(v.Num, bestWidth(width))
 	}
+}
+
+// bestWidth returns the column width for a BEST. render: the spec's width if one
+// was given (e.g. best8.), else SAS's default of 12.
+func bestWidth(width int) int {
+	if width > 0 {
+		return width
+	}
+	return 12
+}
+
+// bestNum renders n the way SAS's default BESTw. numeric format does: the value
+// with as many significant digits as fit in w columns, trailing zeros trimmed,
+// integers shown without a decimal point, and scientific notation only when a
+// fixed-point form will not fit. This replaces Go's shortest-exact float text
+// (e.g. 47.74934554525329) with a clean, bounded rendering (47.749345545) so
+// PROC output and PUT statements read like SAS.
+func bestNum(n float64, w int) string {
+	if w < 1 {
+		w = 12
+	}
+	switch {
+	case n != n: // NaN
+		return "."
+	case n > maxFloat:
+		return "Inf"
+	case n < -maxFloat:
+		return "-Inf"
+	case n == 0:
+		return "0"
+	}
+
+	// Integer values: show without a decimal point when they fit the width.
+	if n == float64(int64(n)) {
+		if s := strconv.FormatInt(int64(n), 10); len(s) <= w {
+			return s
+		}
+	}
+
+	// Fixed-point: use the most decimal places that still fit in w columns.
+	abs := n
+	sign := 0
+	if abs < 0 {
+		abs, sign = -abs, 1
+	}
+	intLen := 1
+	for t := abs; t >= 10; t /= 10 {
+		intLen++
+	}
+	dec := w - sign - intLen - 1 // 1 column for the decimal point
+	if dec > 0 {
+		if dec > 15 {
+			dec = 15
+		}
+		if s := trimTrailingZeros(strconv.FormatFloat(n, 'f', dec, 64)); len(s) <= w {
+			return s
+		}
+	}
+
+	// Magnitude too large or small for fixed-point in w columns: compact
+	// scientific form (e.g. 1.23457e+14), bounded rather than full precision.
+	return strconv.FormatFloat(n, 'g', 6, 64)
+}
+
+const maxFloat = 1.7976931348623157e308
+
+// trimTrailingZeros removes trailing fractional zeros (and a bare trailing dot)
+// from a fixed-point string, so "925.50000000" becomes "925.5".
+func trimTrailingZeros(s string) string {
+	if !strings.Contains(s, ".") {
+		return s
+	}
+	s = strings.TrimRight(s, "0")
+	return strings.TrimRight(s, ".")
 }
 
 // splitTime converts a SAS time value (seconds since midnight) into whole
