@@ -322,7 +322,9 @@ run;
 ```
 - One-way, two-way cross-tabulation, and n-way `/ list` tables.
 - `/ chisq` — Pearson chi-square (with p-value).
-- Display options: `nofreq`, `nopercent`, `nocum`, `norow`, `nocol`.
+- Display options: `nofreq`, `nopercent`, `nocum`, `norow`, `nocol` — applied to
+  the one-way and `/ list` layouts (the dense two-way cross-tab always shows the
+  full frequency/percent/row-pct/col-pct cell).
 - Counts respect user formats for grouping.
 
 ### PROC SQL
@@ -334,9 +336,9 @@ proc sql;
 quit;
 ```
 - `select`/`where`/`group by`/`having`/`order by`/joins; `create table ... as`.
-- Backed by embedded SQLite; ends with `quit;`. Requires a **CGo build**
-  (`CGO_ENABLED=1`); in a pure-Go build PROC SQL is compiled out and reports a
-  clear "requires a CGo build" message. See the README's build matrix.
+- Backed by embedded SQLite via the **pure-Go** `modernc.org/sqlite` driver, so
+  PROC SQL builds and runs with `CGO_ENABLED=0` (no C compiler) like the rest of
+  the engine; ends with `quit;`. See the README's build matrix.
 - Sources may be WORK datasets or a database libref; `create table` may target a
   database libref.
 - **Pass-through:** `select ... from connection to LIB (native-sql)` runs SQL on

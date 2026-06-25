@@ -13,7 +13,14 @@ Documentation lives in [`docs/`](docs/). Start here:
 - [`reference.md`](docs/reference.md) — the complete implemented language surface (statements, functions, formats, PROCs, CLI).
 - [`cookbook.md`](docs/cookbook.md) — task-oriented recipes (ETL, joins, reshaping, file round-trips, user formats, stats).
 
-Plus: [`design.md`](docs/design.md) (design rationale), [`future-directions.md`](docs/future-directions.md) (strategic vision and roadmap), [`PLAN.md`](docs/PLAN.md) (development log), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), [`databases.md`](docs/databases.md) (external-database LIBNAME engines), [`proofing.md`](docs/proofing.md) (data-quality `PROC PROOF` — design + v1 status), [`perf.md`](docs/perf.md) (DATA-step benchmark + the bytecode-VM decision), [`jupyter.md`](docs/jupyter.md) (the Jupyter kernel — install + how it works), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
+Industry cookbooks — recipes for the traditional heavy-SAS verticals, every program runnable as-is:
+
+- [`cookbook-pharma.md`](docs/cookbook-pharma.md) — pharma / clinical trials (demographics, lab normal-range flags, adverse-event tables, study-day math, change-from-baseline, submission data quality).
+- [`cookbook-banking.md`](docs/cookbook-banking.md) — banking / financial services (delinquency buckets, transaction ETL, scorecards, vintage analysis, portfolio rollups, reconciliation).
+- [`cookbook-insurance.md`](docs/cookbook-insurance.md) — insurance / actuarial (earned premium, loss ratios, loss-development triangles, policy-claim merges, rate-table lookups, reserve rollups).
+- [`cookbook-government.md`](docs/cookbook-government.md) — government / public health (demographic cross-tabs, surveillance counts, incidence rates, eligibility ETL, survey tabulation, submission gating).
+
+Plus: [`design.md`](docs/design.md) (design rationale), [`future-directions.md`](docs/future-directions.md) (strategic vision and roadmap), [`PLAN.md`](docs/PLAN.md) (development log), [`testing-plan.md`](docs/testing-plan.md) (the confidence-building test strategy), [`COMPATIBILITY.md`](docs/COMPATIBILITY.md) (compatibility matrix and what "compatible" means here), [`databases.md`](docs/databases.md) (external-database LIBNAME engines), [`proofing.md`](docs/proofing.md) (data-quality `PROC PROOF` — design + v1 status), [`perf.md`](docs/perf.md) (DATA-step benchmark + the bytecode-VM decision), [`jupyter.md`](docs/jupyter.md) (the Jupyter kernel — install + how it works), and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) (how to extend).
 
 ## Status
 
