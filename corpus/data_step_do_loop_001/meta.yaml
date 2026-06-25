@@ -11,6 +11,15 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    squares:
+      columns: [i, sq]
+      rows:
+        - [1, 1]
+        - [2, 4]
+        - [3, 9]
+        - [4, 16]
+        - [5, 25]
 priority: 1
 notes: |
   Iterative DO loop with explicit OUTPUT, producing 5 rows (i, sq). Exercises

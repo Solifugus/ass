@@ -9,6 +9,12 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    doubled:
+      columns: [s1, s2, s3]
+      rows:
+        - [2, 4, 6]
+        - [20, 40, 60]
 priority: 1
 notes: |
   array s{3} over s1-s3, iterated with a DO loop to double each element. Expected:

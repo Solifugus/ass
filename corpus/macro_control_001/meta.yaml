@@ -11,6 +11,13 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    nums:
+      columns: [x]
+      rows:
+        - [1]
+        - [2]
+        - [3]
 priority: 2
 notes: |
   Macro %do loop generating repeated DATA step statements at expansion time.

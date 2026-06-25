@@ -11,6 +11,12 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    adults:
+      columns: [name, age]
+      rows:
+        - ["John", 25]
+        - ["Mary", 30]
 priority: 2
 notes: |
   CREATE TABLE AS SELECT materializing a filtered result, then PROC PRINT of it.

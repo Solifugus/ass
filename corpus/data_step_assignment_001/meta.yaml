@@ -12,6 +12,13 @@ expected:
   parse: pass
   execute: pass
   output: unverified
+  datasets:
+    sales:
+      columns: [item, qty, price, total]
+      rows:
+        - ["apple", 3, 2, 6]
+        - ["bread", 2, 4, 8]
+        - ["milk", 1, 5, 5]
 priority: 1
 notes: |
   Computed column via assignment (total = qty * price) exercising arithmetic
