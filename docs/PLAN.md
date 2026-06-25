@@ -135,7 +135,7 @@ are independent leaf features; the dependency chains are noted.
 - [x] **8.2 SQL lexer/parser (or bridge).** Per 8.1: either a focused SQL parser for `select`/`from`/`where`/`group by`/`order by`/`create table as`, or a translation layer to the chosen embedded engine. Acceptance: parses the SQL corpus items.
 - [x] **8.3 SELECT execution.** Implement projection, `where`, calculated columns, table aliases over in-memory datasets. Acceptance: simple select items produce expected results.
 - [x] **8.4 Joins & grouping.** Implement inner/left/right joins, `group by` with aggregates (count/sum/avg/min/max), `order by`. Acceptance: join and group-by items pass.
-- [ ] **8.5 `create table as`.** Materialize query results into the library. Acceptance: `create table x as select ...` then PROC PRINT of x works end-to-end.
+- [x] **8.5 `create table as`.** Materialize query results into the library. Acceptance: `create table x as select ...` then PROC PRINT of x works end-to-end. (Done — works for WORK and external librefs; the SQL corpus items and `create table b as select … from a` verify it.)
 
 ## Phase 9 — Macro basics (Level 4)
 
