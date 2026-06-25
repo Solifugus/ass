@@ -9,6 +9,9 @@
 /dist/
 coverage.*
 
+# Artifacts written by cookbook example programs when run from the repo root
+/txns.csv
+
 # Editor / OS
 .idea/
 .vscode/
