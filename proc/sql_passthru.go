@@ -186,7 +186,7 @@ func (p *passthru) fromConnection(stmt string, logger *log.Logger) error {
 			strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name), ds.NObs(), len(ds.Columns))
 		return nil
 	}
-	fmt.Fprint(logger.Listing(), renderListing(ds, printOptions{}))
+	emitListing(logger, ds, printOptions{})
 	return nil
 }
 

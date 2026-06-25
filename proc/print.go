@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
@@ -33,7 +34,7 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 	opts := parsePrintOptions(step)
 	opts.catalog = lib.Formats
-	fmt.Fprint(logger.Listing(), renderListing(ds, opts))
+	emitListing(logger, ds, opts)
 	logger.Note("There were %d observations read from the data set %s.%s.",
 		ds.NObs(), strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name))
 	return nil
@@ -151,6 +152,69 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 		b.WriteString(strings.TrimRight(strings.Join(cells, "  "), " "))
 		b.WriteString("\n")
 	}
+	return b.String()
+}
+
+// emitListing outputs a dataset's PROC listing: always the plain-text table, and
+// — only when the logger has a rich sink (the Jupyter kernel) — an HTML table
+// too. Outside a rich frontend this is identical to writing renderListing to the
+// listing stream, so batch and REPL output is unchanged.
+func emitListing(logger *log.Logger, ds *table.Dataset, opts printOptions) {
+	text := renderListing(ds, opts)
+	htmlOut := ""
+	if logger.Rich() {
+		htmlOut = renderHTMLListing(ds, opts)
+	}
+	logger.EmitTable(text, htmlOut)
+}
+
+// renderHTMLListing renders the same listing as renderListing but as an HTML
+// table, for rich frontends. It reuses the identical column selection, header/
+// label resolution, and value formatting, so the cells match the text form.
+func renderHTMLListing(ds *table.Dataset, opts printOptions) string {
+	cols := selectColumns(ds, opts.vars)
+	colFormat := func(c table.Column) string {
+		if f, ok := opts.formats[strings.ToLower(c.Name)]; ok {
+			return f
+		}
+		return c.Format
+	}
+
+	var b strings.Builder
+	b.WriteString(`<table class="ass-table" style="border-collapse:collapse" border="1" cellpadding="4">`)
+	b.WriteString("<thead><tr>")
+	if !opts.noobs {
+		b.WriteString("<th>Obs</th>")
+	}
+	for _, c := range cols {
+		header := c.Name
+		if opts.label {
+			if lbl, ok := opts.labels[strings.ToLower(c.Name)]; ok && lbl != "" {
+				header = lbl
+			} else if c.Label != "" {
+				header = c.Label
+			}
+		}
+		b.WriteString("<th>" + html.EscapeString(header) + "</th>")
+	}
+	b.WriteString("</tr></thead><tbody>")
+
+	for i, r := range ds.Rows {
+		b.WriteString("<tr>")
+		if !opts.noobs {
+			fmt.Fprintf(&b, "<td>%d</td>", i+1)
+		}
+		for _, c := range cols {
+			cell := html.EscapeString(applyFmt(opts.catalog, ds.Get(r, c.Name), colFormat(c)))
+			if c.Kind == table.Numeric {
+				b.WriteString(`<td style="text-align:right">` + cell + "</td>")
+			} else {
+				b.WriteString("<td>" + cell + "</td>")
+			}
+		}
+		b.WriteString("</tr>")
+	}
+	b.WriteString("</tbody></table>")
 	return b.String()
 }
 

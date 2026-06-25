@@ -7,7 +7,6 @@
 package kernel
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -191,19 +190,54 @@ func (k *Kernel) handleExecute(sock zmq4.Socket, m *message) {
 		"execution_count": count,
 	})
 
-	// LOG and listing share one buffer so multi-step output stays in execution
-	// order (NOTE, then the PROC table, then the next NOTE), as a SAS user reads
-	// a .log/.lst pair merged.
-	var buf bytes.Buffer
-	logger := log.NewWith(&buf, &buf)
-	err := k.sess.Submit(req.Code, logger)
-
-	if text := buf.String(); text != "" && !req.Silent {
-		k.publishStream(m, "stdout", text)
+	// A rich sink keeps output in execution order: log lines and plain listings
+	// accumulate into a text run streamed as stdout, while a tabular PROC result
+	// (with an HTML rendering) flushes the pending text and is sent as
+	// display_data so the notebook renders it as an HTML table. Outside a rich
+	// frontend none of this path runs — see log.Logger.
+	var pending strings.Builder
+	flush := func() {
+		if pending.Len() > 0 {
+			if !req.Silent {
+				k.publishStream(m, "stdout", pending.String())
+			}
+			pending.Reset()
+		}
 	}
+	logger := log.NewSink(func(ev log.Event) {
+		switch ev.Kind {
+		case "table":
+			if ev.HTML != "" {
+				flush()
+				if !req.Silent {
+					k.publishDisplayData(m, ev.Text, ev.HTML)
+				}
+				return
+			}
+			pending.WriteString(ev.Text) // no HTML form: treat as plain text
+		default: // "log", "listing"
+			pending.WriteString(ev.Text)
+		}
+	})
+	err := k.sess.Submit(req.Code, logger)
+	flush()
 
 	reply := k.executeReply(m, count, err, logger.ErrorCount())
 	k.sendReply(sock, m, "execute_reply", reply)
+}
+
+// publishDisplayData emits a rich result on iopub with both an HTML rendering and
+// a plain-text fallback, so notebooks show a table and plain frontends still get
+// readable text.
+func (k *Kernel) publishDisplayData(parent *message, text, html string) {
+	k.publishIOPub("display_data", parent, map[string]any{
+		"data": map[string]any{
+			"text/plain": text,
+			"text/html":  html,
+		},
+		"metadata":  map[string]any{},
+		"transient": map[string]any{},
+	})
 }
 
 // executeReply builds the execute_reply content and, on failure, also publishes

@@ -56,7 +56,7 @@ func (sqlProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 				logger.Error("PROC SQL: %v", err)
 				continue
 			}
-			fmt.Fprint(logger.Listing(), renderListing(ds, printOptions{}))
+			emitListing(logger, ds, printOptions{})
 
 		case strings.HasPrefix(low, "create table"):
 			name := createdTableName(stmt)

@@ -65,7 +65,7 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			// One-way, or an n-way list-format table (all distinct combinations).
 			res := buildFreqResultN(src, req.vars, fmtFor, fmtdFor)
 			res = applyFreqOptions(res, req.opts)
-			fmt.Fprint(logger.Listing(), renderListing(res, printOptions{}))
+			emitListing(logger, res, printOptions{})
 			fmt.Fprintln(logger.Listing())
 		default:
 			// Two (or more) variables: cross-tabulate the first two.

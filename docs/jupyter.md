@@ -31,7 +31,9 @@ jupyter lab          # or: jupyter notebook
 ## Using it
 
 Type SAS into a cell and run it. The cell output is the merged SAS LOG + listing
-(NOTEs, then PROC tables, in execution order). State carries across cells:
+in execution order: log lines (NOTE/WARNING/ERROR) and plain-text PROC output are
+streamed as text, while tabular results — **PROC PRINT / MEANS / FREQ (one-way) /
+SQL / REG** — render as **HTML tables**. State carries across cells:
 
 ```sas
 /* cell 1 */
@@ -71,11 +73,20 @@ Jupyter frontend  ──ZeroMQ (shell/iopub/stdin/control/hb)──►  ass kern
 - **Sockets** (`kernel/kernel.go`): shell/control/stdin are ROUTER, iopub is PUB,
   heartbeat is REP — all bound by the kernel. Each request is wrapped in the
   protocol's `busy`/`idle` status pair on iopub.
-- **Output capture:** the runtime's two streams — the LOG (`log.Logger`) and the
-  procedure listing (`Logger.Listing()`, formerly hard-wired to stdout) — are
-  pointed at one buffer per cell via `log.NewWith`, so PROC output is captured
-  instead of escaping to the kernel process's stdout, and the two streams stay in
-  execution order.
+- **Output capture & rich tables:** the kernel attaches a *rich sink*
+  (`log.NewSink`) to the logger, so all output is delivered as ordered `Event`s
+  (`log`, `listing`, `table`) instead of to the stdout streams. The kernel
+  batches `log`/`listing` text into iopub `stream` messages and emits each
+  tabular PROC result (an `Event` of kind `table`, carrying both a plain-text and
+  an HTML rendering) as an iopub `display_data` with `text/html` + a `text/plain`
+  fallback. Events arrive in execution order, so a NOTE, then a table, then the
+  next NOTE interleave correctly. **Outside a rich frontend the sink is never
+  attached** — `log.New(w)` keeps the listing on stdout as before, and
+  `Logger.EmitTable` falls through to writing plain text — so batch (`ass
+  file.sas`) and REPL output is byte-identical to before this feature. The HTML
+  is produced by `proc.renderHTMLListing`, which reuses the exact column
+  selection / label / format logic of the text `renderListing` (and HTML-escapes
+  all cell values).
 
 ## No C compiler
 
@@ -88,8 +99,9 @@ which ASS never sets). This matches the project's CGo-free default
 
 ## Limitations (v1)
 
-- Output is streamed as plain text (`text/plain`). Rich `display_data` (HTML
-  tables for PROC PRINT, etc.) is a forward-looking enhancement.
+- Tabular PROCs (PRINT/MEANS/FREQ one-way/SQL/REG) render as HTML tables; other
+  output (PROC FREQ cross-tabs, the PROC PROOF report, REG's header lines) is
+  plain streamed text. Extending the HTML rendering to those is forward-looking.
 - No `stdin`/`input_request` round-trip — SAS programs are non-interactive, so
   the stdin socket is bound but unused.
 - `interrupt_request` is acknowledged but does not yet abort a running step

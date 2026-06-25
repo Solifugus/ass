@@ -118,32 +118,44 @@ func TestKernelEndToEnd(t *testing.T) {
 		"allow_stdin": false, "stop_on_error": true,
 	})
 
-	// Drain iopub until we see the stdout stream carrying the PROC PRINT output.
-	streamText := ""
+	// Drain iopub until we've seen both the NOTE (stdout stream) and the PROC
+	// PRINT table rendered as display_data (text/html + text/plain fallback).
+	streamText, htmlText, plainText := "", "", ""
 	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && streamText == "" {
+	for time.Now().Before(deadline) && (streamText == "" || htmlText == "") {
 		m, ok := recvWithin(t, iopub, key, 500*time.Millisecond)
 		if !ok {
 			continue
 		}
-		if m.Header.MsgType == "stream" {
+		switch m.Header.MsgType {
+		case "stream":
 			var c struct {
 				Name string `json:"name"`
 				Text string `json:"text"`
 			}
 			_ = json.Unmarshal(m.Content, &c)
 			if c.Name == "stdout" {
-				streamText = c.Text
+				streamText += c.Text
 			}
+		case "display_data":
+			var c struct {
+				Data map[string]string `json:"data"`
+			}
+			_ = json.Unmarshal(m.Content, &c)
+			htmlText += c.Data["text/html"]
+			plainText += c.Data["text/plain"]
 		}
 	}
-	if streamText == "" {
-		t.Fatal("no stdout stream from execute_request")
+	// The dataset-creation NOTE is log output and stays in the stream.
+	if !contains(streamText, "WORK.T has 3 observations") {
+		t.Errorf("stream output missing the NOTE; got:\n%s", streamText)
 	}
-	for _, want := range []string{"WORK.T has 3 observations", "Obs"} {
-		if !contains(streamText, want) {
-			t.Errorf("stream output missing %q; got:\n%s", want, streamText)
-		}
+	// The PROC PRINT table is rich: an HTML table plus a plain-text fallback.
+	if !contains(htmlText, "<table") || !contains(htmlText, "<td") {
+		t.Errorf("display_data text/html is not an HTML table; got:\n%s", htmlText)
+	}
+	if !contains(plainText, "Obs") {
+		t.Errorf("display_data text/plain fallback missing the listing; got:\n%s", plainText)
 	}
 
 	// execute_reply with status ok and execution_count 1.
