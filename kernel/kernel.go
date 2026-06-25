@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"strings"
 	"sync"
 
@@ -199,7 +200,11 @@ func (k *Kernel) handleExecute(sock zmq4.Socket, m *message) {
 	flush := func() {
 		if pending.Len() > 0 {
 			if !req.Silent {
-				k.publishStream(m, "stdout", pending.String())
+				text := pending.String()
+				// Render the log/listing run as a styled, SAS-colored monospace
+				// block (NOTE/WARNING/ERROR highlighted), with the raw text as the
+				// text/plain fallback for non-HTML frontends.
+				k.publishDisplayData(m, text, renderLogHTML(text))
 			}
 			pending.Reset()
 		}
@@ -224,6 +229,35 @@ func (k *Kernel) handleExecute(sock zmq4.Socket, m *message) {
 
 	reply := k.executeReply(m, count, err, logger.ErrorCount())
 	k.sendReply(sock, m, "execute_reply", reply)
+}
+
+// renderLogHTML wraps a run of log/listing text in a monospace block, coloring
+// SAS log lines by severity (NOTE blue, WARNING green, ERROR red) the way the
+// SAS log window does. Non-prefixed lines (PROC text, PUT output) are left in the
+// theme's foreground color. Colors are chosen to read on both light and dark
+// notebook themes.
+func renderLogHTML(text string) string {
+	var b strings.Builder
+	b.WriteString(`<pre style="white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.4;margin:4px 0;color:inherit">`)
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for i, line := range lines {
+		esc := html.EscapeString(line)
+		switch {
+		case strings.HasPrefix(line, "ERROR"):
+			b.WriteString(`<span style="color:#e0524a;font-weight:600">` + esc + `</span>`)
+		case strings.HasPrefix(line, "WARNING"):
+			b.WriteString(`<span style="color:#2f9e44;font-weight:600">` + esc + `</span>`)
+		case strings.HasPrefix(line, "NOTE"):
+			b.WriteString(`<span style="color:#4a8bf0">` + esc + `</span>`)
+		default:
+			b.WriteString(esc)
+		}
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteString("</pre>")
+	return b.String()
 }
 
 // publishDisplayData emits a rich result on iopub with both an HTML rendering and

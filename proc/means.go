@@ -49,7 +49,7 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 
 	result := buildMeansResult(src, analysisVars, classVars, lib.Formats, procFormats)
-	emitListing(logger, result, printOptions{})
+	emitListing(logger, result, printOptions{}, "Summary Statistics")
 	return nil
 }
 

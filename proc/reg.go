@@ -97,7 +97,7 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 	out := logger.Listing()
 	fmt.Fprintf(out, "Dependent Variable: %s\n", model.Response)
 	fmt.Fprintf(out, "R-Square: %.5f   Observations: %d\n\n", fit.rSquare, fit.n)
-	emitListing(logger, result, printOptions{})
+	emitListing(logger, result, printOptions{}, "Parameter Estimates")
 	if hasRef {
 		fmt.Fprintln(out, "\nNOTE: (ref) marks a class variable's reference level (estimate fixed at 0;")
 		fmt.Fprintln(out, "      reference-cell coding, not SAS GLM's generalized-inverse parameterization).")

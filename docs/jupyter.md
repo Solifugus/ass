@@ -31,9 +31,17 @@ jupyter lab          # or: jupyter notebook
 ## Using it
 
 Type SAS into a cell and run it. The cell output is the merged SAS LOG + listing
-in execution order: log lines (NOTE/WARNING/ERROR) and plain-text PROC output are
-streamed as text, while tabular results — **PROC PRINT / MEANS / FREQ (one-way) /
-SQL / REG** — render as **HTML tables**. State carries across cells:
+in execution order:
+
+- The **log** renders as a SAS-style colored monospace block — `NOTE` in blue,
+  `WARNING` in green, `ERROR` in red — so the familiar SAS log reads at a glance.
+- Tabular results — **PROC PRINT / MEANS / FREQ (one-way) / SQL / REG** — render
+  as **styled HTML tables**: a caption with the name and `rows × cols`, a shaded
+  header, zebra-striped rows, and right-aligned tabular-figure numbers.
+
+The styling uses grayscale overlay tints and inherits the theme's text color, so
+tables and the log look right on **both light and dark** notebook themes without
+any configuration. State carries across cells:
 
 ```sas
 /* cell 1 */
@@ -73,20 +81,29 @@ Jupyter frontend  ──ZeroMQ (shell/iopub/stdin/control/hb)──►  ass kern
 - **Sockets** (`kernel/kernel.go`): shell/control/stdin are ROUTER, iopub is PUB,
   heartbeat is REP — all bound by the kernel. Each request is wrapped in the
   protocol's `busy`/`idle` status pair on iopub.
-- **Output capture & rich tables:** the kernel attaches a *rich sink*
+- **Output capture & rich rendering:** the kernel attaches a *rich sink*
   (`log.NewSink`) to the logger, so all output is delivered as ordered `Event`s
   (`log`, `listing`, `table`) instead of to the stdout streams. The kernel
-  batches `log`/`listing` text into iopub `stream` messages and emits each
-  tabular PROC result (an `Event` of kind `table`, carrying both a plain-text and
-  an HTML rendering) as an iopub `display_data` with `text/html` + a `text/plain`
-  fallback. Events arrive in execution order, so a NOTE, then a table, then the
-  next NOTE interleave correctly. **Outside a rich frontend the sink is never
-  attached** — `log.New(w)` keeps the listing on stdout as before, and
-  `Logger.EmitTable` falls through to writing plain text — so batch (`ass
-  file.sas`) and REPL output is byte-identical to before this feature. The HTML
-  is produced by `proc.renderHTMLListing`, which reuses the exact column
+  batches `log`/`listing` text into a colored monospace block (`renderLogHTML`)
+  and emits each tabular PROC result (an `Event` of kind `table`, carrying both a
+  plain-text and a styled-HTML rendering) as `display_data` with `text/html` + a
+  `text/plain` fallback. Events arrive in execution order, so a NOTE, then a
+  table, then the next NOTE interleave correctly. **Outside a rich frontend the
+  sink is never attached** — `log.New(w)` keeps the listing on stdout as before,
+  and `Logger.EmitTable` falls through to writing plain text — so batch (`ass
+  file.sas`) and REPL output is byte-identical to before this feature. The table
+  HTML is produced by `proc.renderHTMLListing`, which reuses the exact column
   selection / label / format logic of the text `renderListing` (and HTML-escapes
   all cell values).
+
+## Previewing the look without Jupyter
+
+The kernel test can dump a representative cell rendering (colored log + styled
+tables) to an HTML file you can open in any browser:
+
+```bash
+ASS_WRITE_SAMPLE=/tmp/ass-sample.html go test ./kernel/ -run SampleHTML
+```
 
 ## No C compiler
 

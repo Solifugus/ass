@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-zeromq/zmq4"
+	"github.com/solifugus/ass/log"
+	"github.com/solifugus/ass/session"
 )
 
 // freePort grabs an available localhost TCP port. Racy in principle, fine for a
@@ -118,11 +122,13 @@ func TestKernelEndToEnd(t *testing.T) {
 		"allow_stdin": false, "stop_on_error": true,
 	})
 
-	// Drain iopub until we've seen both the NOTE (stdout stream) and the PROC
-	// PRINT table rendered as display_data (text/html + text/plain fallback).
-	streamText, htmlText, plainText := "", "", ""
+	// Drain iopub, accumulating all rich output. The colored log (with the
+	// dataset NOTE) and the PROC PRINT table arrive as separate display_data
+	// messages, each with an HTML rendering and a text/plain fallback.
+	htmlAll, plainAll := "", ""
+	sawTable := false
 	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && (streamText == "" || htmlText == "") {
+	for time.Now().Before(deadline) && !sawTable {
 		m, ok := recvWithin(t, iopub, key, 500*time.Millisecond)
 		if !ok {
 			continue
@@ -130,32 +136,39 @@ func TestKernelEndToEnd(t *testing.T) {
 		switch m.Header.MsgType {
 		case "stream":
 			var c struct {
-				Name string `json:"name"`
 				Text string `json:"text"`
 			}
 			_ = json.Unmarshal(m.Content, &c)
-			if c.Name == "stdout" {
-				streamText += c.Text
-			}
+			plainAll += c.Text
 		case "display_data":
 			var c struct {
 				Data map[string]string `json:"data"`
 			}
 			_ = json.Unmarshal(m.Content, &c)
-			htmlText += c.Data["text/html"]
-			plainText += c.Data["text/plain"]
+			htmlAll += c.Data["text/html"]
+			plainAll += c.Data["text/plain"]
+			if contains(c.Data["text/html"], "<table") {
+				sawTable = true
+			}
 		}
 	}
-	// The dataset-creation NOTE is log output and stays in the stream.
-	if !contains(streamText, "WORK.T has 3 observations") {
-		t.Errorf("stream output missing the NOTE; got:\n%s", streamText)
+	// The colored log carries the dataset-creation NOTE (as a colored span and in
+	// the text/plain fallback).
+	if !contains(plainAll, "WORK.T has 3 observations") {
+		t.Errorf("rich output missing the NOTE; got:\n%s", plainAll)
 	}
-	// The PROC PRINT table is rich: an HTML table plus a plain-text fallback.
-	if !contains(htmlText, "<table") || !contains(htmlText, "<td") {
-		t.Errorf("display_data text/html is not an HTML table; got:\n%s", htmlText)
+	if !contains(htmlAll, "<pre") || !contains(htmlAll, "color:") {
+		t.Errorf("expected a styled (colored) log <pre>; got:\n%s", htmlAll)
 	}
-	if !contains(plainText, "Obs") {
-		t.Errorf("display_data text/plain fallback missing the listing; got:\n%s", plainText)
+	// The PROC PRINT table is a styled HTML table with a plain-text fallback.
+	if !contains(htmlAll, "<table") || !contains(htmlAll, "<td") {
+		t.Errorf("display_data text/html is not an HTML table; got:\n%s", htmlAll)
+	}
+	if !contains(htmlAll, "WORK.T") {
+		t.Errorf("table caption (WORK.T) missing; got:\n%s", htmlAll)
+	}
+	if !contains(plainAll, "Obs") {
+		t.Errorf("text/plain fallback missing the listing; got:\n%s", plainAll)
 	}
 
 	// execute_reply with status ok and execution_count 1.
@@ -198,6 +211,63 @@ func readReply(t *testing.T, sock zmq4.Socket, key []byte, msgType string, d tim
 		}
 	}
 	return nil
+}
+
+// TestWriteSampleHTML assembles a realistic notebook-cell rendering (colored log
+// + styled tables) into an HTML file, so the visual design can be eyeballed in a
+// browser. Gated behind ASS_WRITE_SAMPLE so it is inert in normal test runs:
+//
+//	ASS_WRITE_SAMPLE=/tmp/ass-sample.html go test ./kernel/ -run SampleHTML
+func TestWriteSampleHTML(t *testing.T) {
+	out := os.Getenv("ASS_WRITE_SAMPLE")
+	if out == "" {
+		t.Skip("set ASS_WRITE_SAMPLE=<path> to write the sample page")
+	}
+	program := `
+data sales;
+  input region $ product $ units price;
+  revenue = units * price;
+  datalines;
+East Widget 120 4.50
+East Gadget 80 12.00
+West Widget 200 4.50
+West Gadget 150 12.00
+South Widget 95 4.50
+;
+run;
+proc print data=sales; run;
+proc means data=sales; var units revenue; run;
+proc freq data=sales; tables region; run;
+`
+	// Drive a session with the same rich sink the kernel uses.
+	var page strings.Builder
+	page.WriteString(`<html><body style="background:#fff;padding:24px;max-width:900px;margin:auto">`)
+	page.WriteString(`<h2 style="font-family:sans-serif">ASS — sample notebook cell output</h2>`)
+	var pending strings.Builder
+	flush := func() {
+		if pending.Len() > 0 {
+			page.WriteString(renderLogHTML(pending.String()))
+			pending.Reset()
+		}
+	}
+	logger := log.NewSink(func(ev log.Event) {
+		if ev.Kind == "table" && ev.HTML != "" {
+			flush()
+			page.WriteString(ev.HTML)
+			return
+		}
+		pending.WriteString(ev.Text)
+	})
+	if err := session.New().Submit(program, logger); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	flush()
+	// Also show the same page on a dark background to check theme-robustness.
+	page.WriteString(`</body></html>`)
+	if err := os.WriteFile(out, []byte(page.String()), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Logf("wrote sample HTML to %s", out)
 }
 
 func contains(s, sub string) bool {

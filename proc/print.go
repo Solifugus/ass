@@ -34,7 +34,11 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 	opts := parsePrintOptions(step)
 	opts.catalog = lib.Formats
-	emitListing(logger, ds, opts)
+	libName := ds.Lib
+	if libName == "" {
+		libName = "WORK"
+	}
+	emitListing(logger, ds, opts, strings.ToUpper(libName+"."+ds.Name))
 	logger.Note("There were %d observations read from the data set %s.%s.",
 		ds.NObs(), strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name))
 	return nil
@@ -156,22 +160,51 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 }
 
 // emitListing outputs a dataset's PROC listing: always the plain-text table, and
-// — only when the logger has a rich sink (the Jupyter kernel) — an HTML table
-// too. Outside a rich frontend this is identical to writing renderListing to the
-// listing stream, so batch and REPL output is unchanged.
-func emitListing(logger *log.Logger, ds *table.Dataset, opts printOptions) {
+// — only when the logger has a rich sink (the Jupyter kernel) — a styled HTML
+// table too. Outside a rich frontend this is identical to writing renderListing
+// to the listing stream, so batch and REPL output is unchanged. caption is an
+// optional title shown above the HTML table (ignored in the text form).
+func emitListing(logger *log.Logger, ds *table.Dataset, opts printOptions, caption string) {
 	text := renderListing(ds, opts)
 	htmlOut := ""
 	if logger.Rich() {
-		htmlOut = renderHTMLListing(ds, opts)
+		htmlOut = renderHTMLListing(ds, opts, caption)
 	}
 	logger.EmitTable(text, htmlOut)
 }
 
-// renderHTMLListing renders the same listing as renderListing but as an HTML
-// table, for rich frontends. It reuses the identical column selection, header/
-// label resolution, and value formatting, so the cells match the text form.
-func renderHTMLListing(ds *table.Dataset, opts printOptions) string {
+// HTML styling for rich (notebook) output. Colors are grayscale rgba overlays
+// over the theme background and text inherits the theme foreground, so tables
+// look right on both light and dark notebook themes without detecting which.
+const (
+	htmlTableStyle   = "border-collapse:collapse;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.45;margin:6px 0;color:inherit"
+	htmlCaptionStyle = "caption-side:top;text-align:left;font-weight:600;padding:0 2px 7px;font-size:13px"
+	htmlThStyle      = "padding:4px 11px;background:rgba(127,127,127,.16);border-bottom:2px solid rgba(127,127,127,.5);white-space:nowrap;"
+	htmlTdStyle      = "padding:3px 11px;border-bottom:1px solid rgba(127,127,127,.16);white-space:nowrap;"
+	htmlZebraStyle   = "background:rgba(127,127,127,.06)"
+	htmlNumStyle     = "text-align:right;font-variant-numeric:tabular-nums"
+	htmlTextStyle    = "text-align:left"
+)
+
+// headerFor resolves a column's display header (label vs name), shared by the
+// text and HTML renderers.
+func headerFor(c table.Column, opts printOptions) string {
+	if opts.label {
+		if lbl, ok := opts.labels[strings.ToLower(c.Name)]; ok && lbl != "" {
+			return lbl
+		}
+		if c.Label != "" {
+			return c.Label
+		}
+	}
+	return c.Name
+}
+
+// renderHTMLListing renders the same listing as renderListing but as a styled
+// HTML table for rich frontends. It reuses the identical column selection,
+// header/label resolution, and value formatting, so the cells match the text
+// form, and HTML-escapes every value.
+func renderHTMLListing(ds *table.Dataset, opts printOptions, caption string) string {
 	cols := selectColumns(ds, opts.vars)
 	colFormat := func(c table.Column) string {
 		if f, ok := opts.formats[strings.ToLower(c.Name)]; ok {
@@ -179,43 +212,55 @@ func renderHTMLListing(ds *table.Dataset, opts printOptions) string {
 		}
 		return c.Format
 	}
+	align := func(c table.Column) string {
+		if c.Kind == table.Numeric {
+			return htmlNumStyle
+		}
+		return htmlTextStyle
+	}
 
 	var b strings.Builder
-	b.WriteString(`<table class="ass-table" style="border-collapse:collapse" border="1" cellpadding="4">`)
+	b.WriteString(`<table style="` + htmlTableStyle + `">`)
+	if caption != "" {
+		fmt.Fprintf(&b, `<caption style="%s">%s<span style="font-weight:400;opacity:.6;margin-left:.55em">%d row%s &times; %d col%s</span></caption>`,
+			htmlCaptionStyle, html.EscapeString(caption),
+			len(ds.Rows), plural(len(ds.Rows)), len(cols), plural(len(cols)))
+	}
+
 	b.WriteString("<thead><tr>")
 	if !opts.noobs {
-		b.WriteString("<th>Obs</th>")
+		b.WriteString(`<th style="` + htmlThStyle + htmlNumStyle + `">Obs</th>`)
 	}
 	for _, c := range cols {
-		header := c.Name
-		if opts.label {
-			if lbl, ok := opts.labels[strings.ToLower(c.Name)]; ok && lbl != "" {
-				header = lbl
-			} else if c.Label != "" {
-				header = c.Label
-			}
-		}
-		b.WriteString("<th>" + html.EscapeString(header) + "</th>")
+		b.WriteString(`<th style="` + htmlThStyle + align(c) + `">` + html.EscapeString(headerFor(c, opts)) + `</th>`)
 	}
 	b.WriteString("</tr></thead><tbody>")
 
 	for i, r := range ds.Rows {
-		b.WriteString("<tr>")
+		if i%2 == 1 {
+			b.WriteString(`<tr style="` + htmlZebraStyle + `">`)
+		} else {
+			b.WriteString("<tr>")
+		}
 		if !opts.noobs {
-			fmt.Fprintf(&b, "<td>%d</td>", i+1)
+			fmt.Fprintf(&b, `<td style="%s%s;opacity:.55">%d</td>`, htmlTdStyle, htmlNumStyle, i+1)
 		}
 		for _, c := range cols {
 			cell := html.EscapeString(applyFmt(opts.catalog, ds.Get(r, c.Name), colFormat(c)))
-			if c.Kind == table.Numeric {
-				b.WriteString(`<td style="text-align:right">` + cell + "</td>")
-			} else {
-				b.WriteString("<td>" + cell + "</td>")
-			}
+			b.WriteString(`<td style="` + htmlTdStyle + align(c) + `">` + cell + `</td>`)
 		}
 		b.WriteString("</tr>")
 	}
 	b.WriteString("</tbody></table>")
 	return b.String()
+}
+
+// plural returns "s" unless n is 1, for caption row/col counts.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // applyFmt renders v through a format spec, consulting the user-format catalog
