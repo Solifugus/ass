@@ -165,13 +165,22 @@ Verified **not** broken (initially suspected, then disproven):
 
 ## Sequencing
 
-1. Land the **known-issue** fixes above (small, high-value, each with a corpus
-   item that would have caught it).
-2. Track 2 (industry end-to-end items) — converts work already done into
-   regression protection.
-3. Track 1 (systematic surface coverage) — the bulk, done feature-by-feature.
-4. Track 3 (robustness/fuzz) and Track 4 (differential) in parallel as depth
-   passes.
+This work is **elevated to PLAN.md Phase 13.5 — done before Phase 14** (decided
+2026-06-25), because it de-risks and cheapens every later phase, and the Track-4
+differential harness is what makes the Phase-17 statistical tier tractable.
+
+1. ✅ The **known-issue** fixes (rename statement, two-way FREQ options, MEANS
+   sum/maxdec) — landed 2026-06-25, each with a regression guard.
+2. **Track 1 (corpus coverage)** + a coverage report (extend `ass test --json` to
+   flag reference-surface items lacking a value-verified corpus item) — the
+   prioritized near-term bulk, done feature-by-feature.
+3. **Track 4 (differential harness)** — automate cross-checking against R /
+   Python statsmodels and published values, ahead of the stats tier so it exists
+   when Phase 17 starts.
+4. **Track 2 (industry end-to-end items)** — promote the cookbook pipelines into
+   asserted regression items.
+5. **Track 3 (robustness/fuzz)** — start the edge-case suites + a lexer/parser
+   fuzz target; continue alongside later phases.
 
 Each landed item follows the standard gate: gofmt/build/vet/test (both CGO
 modes), corpus green, then docs + PLAN.md progress entry.

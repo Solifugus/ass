@@ -31,11 +31,16 @@ PROOF validation tier**, the **four industry cookbooks**, and the **testing plan
 (see the Progress log and [`testing-plan.md`](testing-plan.md)). What remains is
 the set of known deferrals — every one of them is captured below.
 
-The sequencing principle is **foundational-first** (decided 2026-06-25): language
-and format *primitives* and I/O *completeness* land before the higher-level
-reshaping, reporting, and statistics that build on them. The four testing-plan
-tracks (corpus value-verified backfill, edge/robustness, fuzz, differential) run
-**continuously alongside every phase**, not as a separate phase.
+The sequencing principle is **foundational-first** (decided 2026-06-25): the goal
+is to complete *every* item, so order to make finishing the whole set least
+painful — dependency order, so each layer is built once on solid ground, not on
+workarounds that later need rework. Language/format *primitives* and I/O
+*completeness* land before the higher-level reshaping, reporting, and statistics
+that build on them. **The single most leveraged foundation is the testing &
+verification base (Phase 13.5) — established first**, because every phase after it
+is cheaper and safer to verify; the testing tracks then keep running alongside
+Phases 14–18. Note: ordering changes *when* things land, not the total timeline —
+the timeline is set by *scope*, almost all of it in Phase 17 (stats).
 Architecture/CGo/Jupyter rationale is in [`design.md`](design.md) §14–16.
 
 **Statistics validation (clean-room — no licensed SAS).** Expected values for the
@@ -44,6 +49,15 @@ textbook** worked examples and public datasets with known answers; (2) **cross-c
 against other engines** (R, Python statsmodels) for the same model; (3)
 **common-sense / first-principles hand-derivation**. Never proprietary SAS docs,
 source, or internals.
+
+### Phase 13.5 — Testing & verification foundation (do this first)
+Establish before Phase 14; the testing tracks then keep running alongside every
+later phase. This is the most leveraged investment — it de-risks and cheapens
+everything after it, and the differential harness in particular is what makes the
+Phase-17 stats tier tractable.
+- [ ] **Corpus value-verified backfill** — raise `expected.datasets` coverage from 35/63 toward full reference-surface coverage; add a coverage report (extend `ass test --json`) that flags any reference.md surface item lacking a value-verified corpus item, so the backlog is visible and shrinks measurably
+- [ ] **Cross-engine differential harness** — automate checking ASS output against R / Python statsmodels (and published values) for the same program, per the validation precedence; cite source/engine+version per item
+- [ ] **Edge-case / robustness + fuzz (start)** — missing-value / type-coercion / format-boundary suites and a lexer/parser fuzz target; the rest of this track continues alongside later phases
 
 ### Phase 14 — Language & format primitives (foundation for reporting)
 - [ ] **`PUT()` / `INPUT()` functions** — apply a (in)format inside an expression (`band = put(score, scoreband.);`, `n = input(text, comma8.);`); unblocks format-based banding used throughout the cookbooks
@@ -66,10 +80,13 @@ source, or internals.
 - [ ] **PROC FREQ** — default (non-`list`) stratified n-way layout + association stats beyond Pearson chi-square (likelihood-ratio, Fisher exact, measures of association)
 
 ### Phase 17 — Statistical tier (validated per the precedence above)
+Committed scope: GLM-fidelity + logistic + survival. Mixed models is **demand-gated**
+(below) so it doesn't silently pad the schedule. This phase is the multi-month bulk
+of the whole roadmap.
 - [ ] **PROC GLM SAS-fidelity** — sweep/generalized-inverse parameterization, Type I/III SS, F-tests, LSMEANS/CONTRAST/ESTIMATE (CLASS via reference-cell coding already fits correctly)
 - [ ] **Logistic regression** (PROC LOGISTIC / GENMOD-style)
 - [ ] **Survival** — PROC LIFETEST (Kaplan–Meier) and PROC PHREG (Cox PH)
-- [ ] **Mixed models** (PROC MIXED) — largest lift; gate on demand
+- [ ] **Mixed models** (PROC MIXED) — **demand-gated, not auto-scheduled**: the worst cost/benefit in the tier; build only when a concrete user requires it
 - [ ] **PROC PROOF statistical tier** + `abort` (fail-fast) — see [`proofing.md`](proofing.md) §11
 
 ### Phase 18 — Interactive / Jupyter polish
@@ -79,7 +96,7 @@ source, or internals.
 - [ ] **`stdin` / `input_request` round-trip**
 
 ### Independent / continuous (not blocking the phases)
-- [ ] **Testing tracks (continuous)** — corpus value-verified backfill to full reference-surface coverage (35/63 items declare `expected.datasets` today); industry end-to-end items; edge/robustness + fuzz; differential vs published/cross-engine results. See [`testing-plan.md`](testing-plan.md)
+- [ ] **Testing tracks (continuous, after Phase 13.5)** — once the testing foundation lands (Phase 13.5), keep backfilling the corpus toward full reference-surface coverage and adding industry end-to-end items, edge/robustness + fuzz, and differential checks as each later phase adds surface. See [`testing-plan.md`](testing-plan.md)
 - [ ] **Slot-indexed PDV + non-map rows** (perf foundation; `perf.md`) — resolve vars to slice slots, drop the per-row `map[string]Value`; foundation for any future VM/vectorized executor. Gate on a ≫100k-row workload
 - [ ] **Bytecode VM** (`vm/`) — **deferred (evidence-based)**: the 2026-06-24 profile shows dispatch isn't the cost; revisit only after the slot-indexed PDV, if profiling then warrants it
 - [ ] (far) native ASS SQL executor on the shared core — wants the VM done first
