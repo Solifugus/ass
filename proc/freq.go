@@ -58,6 +58,7 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 	fmtdFor := func(v string) bool { return varFormatSpec(src, procFormats, v) != "" }
 	has := func(o *ast.TablesStatement, opt string) bool { return o != nil && o.HasOption(opt) }
 
+	emitTitles(logger, lib.TitleLines())
 	for _, req := range requests {
 		switch {
 		case len(req.vars) == 0:
@@ -77,7 +78,11 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			}
 			logger.EmitTable(renderCrossTab(src, req.vars[0], req.vars[1], rf, cf), ctHTML)
 			if has(req.opts, "chisq") {
-				fmt.Fprint(logger.Listing(), renderChiSquare(src, req.vars[0], req.vars[1], rf, cf))
+				csHTML := ""
+				if logger.Rich() {
+					csHTML = renderChiSquareHTML(src, req.vars[0], req.vars[1], rf, cf)
+				}
+				logger.EmitTable(renderChiSquare(src, req.vars[0], req.vars[1], rf, cf), csHTML)
 			}
 			fmt.Fprintln(logger.Listing())
 		}
@@ -640,6 +645,27 @@ func renderChiSquare(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt f
 	stat, df, p := chiSquareStat(src, rowVar, colVar, rowFmt, colFmt)
 	return fmt.Sprintf("Statistics for Table of %s by %s\n\nChi-Square  DF=%d  Value=%.4f  Prob=%.4f\n",
 		rowVar, colVar, df, stat, p)
+}
+
+// renderChiSquareHTML renders the chi-square statistic as a small styled table.
+func renderChiSquareHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) string {
+	stat, df, p := chiSquareStat(src, rowVar, colVar, rowFmt, colFmt)
+	var b strings.Builder
+	b.WriteString(`<table style="` + htmlTableStyle + `">`)
+	fmt.Fprintf(&b, `<caption style="%s">Statistics for Table of %s by %s</caption>`,
+		htmlCaptionStyle, html.EscapeString(rowVar), html.EscapeString(colVar))
+	b.WriteString(`<thead><tr>`)
+	b.WriteString(`<th style="` + htmlThStyle + htmlTextStyle + `">Statistic</th>`)
+	b.WriteString(`<th style="` + htmlThStyle + htmlNumStyle + `">DF</th>`)
+	b.WriteString(`<th style="` + htmlThStyle + htmlNumStyle + `">Value</th>`)
+	b.WriteString(`<th style="` + htmlThStyle + htmlNumStyle + `">Prob</th>`)
+	b.WriteString(`</tr></thead><tbody><tr>`)
+	b.WriteString(`<td style="` + htmlTdStyle + htmlTextStyle + `">Chi-Square</td>`)
+	fmt.Fprintf(&b, `<td style="%s%s">%d</td>`, htmlTdStyle, htmlNumStyle, df)
+	fmt.Fprintf(&b, `<td style="%s%s">%.4f</td>`, htmlTdStyle, htmlNumStyle, stat)
+	fmt.Fprintf(&b, `<td style="%s%s">%.4f</td>`, htmlTdStyle, htmlNumStyle, p)
+	b.WriteString(`</tr></tbody></table>`)
+	return b.String()
 }
 
 // chiSquareSF returns the right-tail probability Pr(X > x) for a chi-square

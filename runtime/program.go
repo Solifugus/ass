@@ -71,6 +71,8 @@ func RunProgram(prog *ast.Program, lib *table.Library, logger *log.Logger) error
 			if err := runLibname(s, lib, logger); err != nil {
 				return err
 			}
+		case *ast.TitleStatement:
+			lib.SetTitle(s.Level, s.Text)
 		}
 	}
 	return nil

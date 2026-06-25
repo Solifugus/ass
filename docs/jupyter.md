@@ -44,6 +44,11 @@ in execution order:
 - **PROC PROOF** renders as a pass/fail panel — a header with the passed/failed
   tally and a status dot, then one row per assertion with a colored PASS / FAIL /
   N-RUN pill, the violations-over-checked count, and the offending observations.
+- **PROC REG** shows a model-summary line (dependent variable, R², N) above the
+  parameter-estimates table, and the **chi-square** statistic (PROC FREQ
+  `/ chisq`) renders as its own small table.
+- **TITLE** statements (`title`, `title2`…`title10`, and `title;` to clear) are
+  shown as headings above procedure output and persist across cells.
 
 The styling uses grayscale overlay tints and inherits the theme's text color, so
 tables and the log look right on **both light and dark** notebook themes without
@@ -122,11 +127,13 @@ which ASS never sets). This matches the project's CGo-free default
 
 ## Limitations (v1)
 
-- PROC PRINT/MEANS/FREQ (one-way and cross-tab)/SQL/REG and PROC PROOF render as
-  HTML; remaining text output (REG's header lines, the chi-square block) is plain
-  streamed text in the colored log block.
+- PROC PRINT/MEANS/FREQ (one-way, cross-tab, chi-square)/SQL/REG and PROC PROOF
+  render as HTML, with TITLE headings. Anything else a PROC writes falls back to
+  plain text in the colored log block.
 - No `stdin`/`input_request` round-trip — SAS programs are non-interactive, so
   the stdin socket is bound but unused.
+- FOOTNOTE is not yet implemented (TITLE is); titles render left-aligned (SAS
+  centers them).
 - `interrupt_request` is acknowledged but does not yet abort a running step
   (steps are typically short); cooperative cancellation is future work.
 - Tab-completion (`complete_request`) and introspection (`inspect_request`) are

@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"sort"
 	"strings"
@@ -94,15 +95,31 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 		})
 	}
 
-	out := logger.Listing()
-	fmt.Fprintf(out, "Dependent Variable: %s\n", model.Response)
-	fmt.Fprintf(out, "R-Square: %.5f   Observations: %d\n\n", fit.rSquare, fit.n)
-	emitListing(logger, result, printOptions{}, "Parameter Estimates")
+	emitTitles(logger, lib.TitleLines())
+	headerText := fmt.Sprintf("Dependent Variable: %s\nR-Square: %.5f   Observations: %d\n\n", model.Response, fit.rSquare, fit.n)
+	tableText := renderListing(result, printOptions{})
+	if logger.Rich() {
+		// Fold the model summary and the estimates table into one rich block.
+		h := regHeaderHTML(model.Response, fit.rSquare, fit.n) + renderHTMLListing(result, printOptions{}, "Parameter Estimates")
+		logger.EmitTable(headerText+tableText, h)
+	} else {
+		fmt.Fprint(logger.Listing(), headerText)
+		logger.EmitTable(tableText, "")
+	}
 	if hasRef {
+		out := logger.Listing()
 		fmt.Fprintln(out, "\nNOTE: (ref) marks a class variable's reference level (estimate fixed at 0;")
 		fmt.Fprintln(out, "      reference-cell coding, not SAS GLM's generalized-inverse parameterization).")
 	}
 	return nil
+}
+
+// regHeaderHTML renders the model summary (dependent variable, R², observations)
+// as a small styled block shown above the estimates table in rich output.
+func regHeaderHTML(response string, rSquare float64, n int) string {
+	return fmt.Sprintf(`<div style="font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;margin:6px 0 2px">`+
+		`<b>Dependent variable:</b> %s &nbsp;&middot;&nbsp; <b>R&sup2;:</b> %.5f &nbsp;&middot;&nbsp; <b>Observations:</b> %d</div>`,
+		html.EscapeString(response), rSquare, n)
 }
 
 // olsFit holds a fitted model's solved coefficients and diagnostics. beta and

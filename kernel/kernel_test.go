@@ -235,10 +235,12 @@ West Gadget 150 12.00
 South Widget 95 4.50
 ;
 run;
+title "Quarterly Sales Report";
+title2 "by Region and Product";
 proc print data=sales; run;
 proc means data=sales; var units revenue; run;
 proc freq data=sales; tables region; run;
-proc freq data=sales; tables region*product; run;
+proc freq data=sales; tables region*product / chisq; run;
 proc proof data=sales;
   notnull region product;
   values region in ("East" "West" "South");

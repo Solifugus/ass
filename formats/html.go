@@ -1,5 +1,50 @@
 package formats
 
+import (
+	"fmt"
+	"html"
+	"strings"
+)
+
+// TitleText renders the active TITLE lines as plain text (each on its own line,
+// followed by a blank separator), shown above procedure output in batch/REPL.
+// Returns "" when there are no titles, so callers emit nothing.
+func TitleText(titles []string) string {
+	if len(titles) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, t := range titles {
+		b.WriteString(t)
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')
+	return b.String()
+}
+
+// TitleHTML renders the active TITLE lines as a centered heading block for rich
+// (notebook) output: the first line largest, the rest progressively smaller, all
+// HTML-escaped. Returns "" when there are no titles.
+func TitleHTML(titles []string) string {
+	if len(titles) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<div style="text-align:left;margin:8px 0 2px;color:inherit;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif">`)
+	for i, t := range titles {
+		size, weight := "13px", "600"
+		switch i {
+		case 0:
+			size, weight = "16px", "700"
+		case 1:
+			size = "14px"
+		}
+		fmt.Fprintf(&b, `<div style="font-size:%s;font-weight:%s">%s</div>`, size, weight, html.EscapeString(t))
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
 // Shared CSS for rich (notebook) HTML output. These styles are used by the PROC
 // table renderers (package proc) and the PROC PROOF panel (package runtime), so
 // every ASS table in a notebook looks consistent. Colors are grayscale rgba

@@ -33,6 +33,7 @@ func (sqlProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 	// loaded once.
 	loaded := map[string]bool{}
 
+	emitTitles(logger, lib.TitleLines())
 	for _, stmt := range splitStatements(step.RawBody) {
 		// Pass-through statements (connect/disconnect/execute-by, a select drawing
 		// `from connection to`, or a drop targeting an external libref) are routed

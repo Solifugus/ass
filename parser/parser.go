@@ -4,6 +4,7 @@
 package parser
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
@@ -66,6 +67,8 @@ func (p *Parser) ParseProgram() *ast.Program {
 			if st := p.parseLibname(); st != nil {
 				prog.Steps = append(prog.Steps, st)
 			}
+		case p.curIs(lexer.IDENT) && titleLevel(p.cur.Literal) > 0:
+			prog.Steps = append(prog.Steps, p.parseTitle())
 		default:
 			p.next() // skip anything not starting a step
 		}
@@ -107,6 +110,37 @@ func (p *Parser) parseLibname() ast.Step {
 	if st.Libref == "" {
 		return nil
 	}
+	return st
+}
+
+// titleLevel returns the title line number for a `title`/`title<n>` keyword
+// (1-10; a bare `title` is 1), or 0 if the identifier is not a title statement.
+func titleLevel(ident string) int {
+	s := strings.ToLower(ident)
+	if s == "title" {
+		return 1
+	}
+	if strings.HasPrefix(s, "title") {
+		if n, err := strconv.Atoi(s[len("title"):]); err == nil && n >= 1 && n <= 10 {
+			return n
+		}
+	}
+	return 0
+}
+
+// parseTitle parses a global `title<n> "text";` (sets a title line) or a bare
+// `title<n>;` (clears that line and all higher-numbered ones). The first quoted
+// string is the text; any title options (j=, color=, ...) are skipped.
+func (p *Parser) parseTitle() ast.Step {
+	st := &ast.TitleStatement{Level: titleLevel(p.cur.Literal)}
+	p.next() // consume the title keyword
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+		if p.curIs(lexer.STRING) && st.Text == "" {
+			st.Text = p.cur.Literal
+		}
+		p.next()
+	}
+	p.expectSemicolon()
 	return st
 }
 

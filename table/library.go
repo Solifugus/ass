@@ -113,6 +113,12 @@ type Library struct {
 	Formats *FormatCatalog
 	// Informats holds user-defined informats created by PROC FORMAT INVALUE.
 	Informats *InformatCatalog
+
+	// titles holds the current TITLE lines (1-based level -> text). Like the rest
+	// of the library this is session state: titles set by a TITLE statement
+	// persist across steps (and, in the resident session, across submissions)
+	// until changed, and procedures show them above their output.
+	titles map[int]string
 }
 
 // NewLibrary creates an empty library (WORK only).
@@ -122,7 +128,38 @@ func NewLibrary() *Library {
 		backends:  make(map[string]Backend),
 		Formats:   NewFormatCatalog(),
 		Informats: NewInformatCatalog(),
+		titles:    make(map[int]string),
 	}
+}
+
+// SetTitle sets TITLE line `level` to text. An empty text clears that line and
+// every higher-numbered one, matching SAS's `title<n>;` semantics (a bare
+// `title;` is level 1, so it clears all titles).
+func (l *Library) SetTitle(level int, text string) {
+	if level < 1 {
+		return
+	}
+	if text == "" {
+		for k := range l.titles {
+			if k >= level {
+				delete(l.titles, k)
+			}
+		}
+		return
+	}
+	l.titles[level] = text
+}
+
+// TitleLines returns the active TITLE lines in level order (1..10), skipping
+// unset levels. Procedures show these above their output.
+func (l *Library) TitleLines() []string {
+	var out []string
+	for i := 1; i <= 10; i++ {
+		if t, ok := l.titles[i]; ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Assign binds a libref to an external Backend (the LIBNAME statement).

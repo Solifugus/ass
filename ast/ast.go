@@ -3,7 +3,10 @@
 // expression nodes.
 package ast
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Node is the interface implemented by every AST node. String renders the node
 // back to a SAS-like textual form, primarily for debugging and tests.
@@ -56,6 +59,23 @@ func (l *LibnameStatement) String() string {
 		return "libname " + l.Libref + " clear;"
 	}
 	return "libname " + l.Libref + " " + l.Engine + " \"" + l.Connection + "\";"
+}
+
+// TitleStatement is a global `title<n> "text";` (or a bare `title<n>;` that
+// clears that line and all higher-numbered ones). Level is 1-10 (a bare `title`
+// is level 1); Text is the title string (empty means clear). Titles persist
+// across steps and are shown above procedure output.
+type TitleStatement struct {
+	Level int
+	Text  string
+}
+
+func (t *TitleStatement) stepNode() {}
+func (t *TitleStatement) String() string {
+	if t.Text == "" {
+		return fmt.Sprintf("title%d;", t.Level)
+	}
+	return fmt.Sprintf("title%d %q;", t.Level, t.Text)
 }
 
 // Program is a whole SAS source file: an ordered list of steps.

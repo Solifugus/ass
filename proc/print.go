@@ -38,6 +38,7 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	if libName == "" {
 		libName = "WORK"
 	}
+	emitTitles(logger, lib.TitleLines())
 	emitListing(logger, ds, opts, strings.ToUpper(libName+"."+ds.Name))
 	logger.Note("There were %d observations read from the data set %s.%s.",
 		ds.NObs(), strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name))
@@ -157,6 +158,20 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// emitTitles outputs the active TITLE lines above a procedure's output: plain
+// text always, and a centered HTML heading under a rich sink. It is a no-op when
+// no titles are set, so output is unchanged for programs without TITLE.
+func emitTitles(logger *log.Logger, titles []string) {
+	if len(titles) == 0 {
+		return
+	}
+	h := ""
+	if logger.Rich() {
+		h = formats.TitleHTML(titles)
+	}
+	logger.EmitTable(formats.TitleText(titles), h)
 }
 
 // emitListing outputs a dataset's PROC listing: always the plain-text table, and

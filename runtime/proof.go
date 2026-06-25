@@ -166,6 +166,13 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 		r.violObs = dup
 	}
 
+	if titles := lib.TitleLines(); len(titles) > 0 {
+		h := ""
+		if logger.Rich() {
+			h = formats.TitleHTML(titles)
+		}
+		logger.EmitTable(formats.TitleText(titles), h)
+	}
 	writeProofReport(ds, results, maxSample, logger)
 	if outName != "" {
 		if err := writeProofViolations(lib, ds, results, outName, logger); err != nil {
