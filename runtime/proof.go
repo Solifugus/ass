@@ -166,14 +166,9 @@ func runProof(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error 
 		r.violObs = dup
 	}
 
-	if titles := lib.TitleLines(); len(titles) > 0 {
-		h := ""
-		if logger.Rich() {
-			h = formats.TitleHTML(titles)
-		}
-		logger.EmitTable(formats.TitleText(titles), h)
-	}
+	emitProofLines(logger, lib.TitleLines(), false)
 	writeProofReport(ds, results, maxSample, logger)
+	emitProofLines(logger, lib.FootnoteLines(), true)
 	if outName != "" {
 		if err := writeProofViolations(lib, ds, results, outName, logger); err != nil {
 			return err
@@ -405,6 +400,27 @@ func parseFloat(s string) (float64, bool) {
 	}
 	f, err := strconv.ParseFloat(s, 64)
 	return f, err == nil
+}
+
+// emitProofLines outputs TITLE lines (footer=false) above or FOOTNOTE lines
+// (footer=true) below the PROOF panel: plain text always, styled HTML under a
+// rich sink. No-op when there are none.
+func emitProofLines(logger *log.Logger, lines []string, footer bool) {
+	if len(lines) == 0 {
+		return
+	}
+	text, h := formats.TitleText(lines), ""
+	if footer {
+		text = formats.FootnoteText(lines)
+	}
+	if logger.Rich() {
+		if footer {
+			h = formats.FootnoteHTML(lines)
+		} else {
+			h = formats.TitleHTML(lines)
+		}
+	}
+	logger.EmitTable(text, h)
 }
 
 // proofVerdict classifies an assertion result for display.

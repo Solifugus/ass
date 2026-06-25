@@ -40,6 +40,7 @@ func (printProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 	emitTitles(logger, lib.TitleLines())
 	emitListing(logger, ds, opts, strings.ToUpper(libName+"."+ds.Name))
+	emitFootnotes(logger, lib.FootnoteLines())
 	logger.Note("There were %d observations read from the data set %s.%s.",
 		ds.NObs(), strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name))
 	return nil
@@ -172,6 +173,20 @@ func emitTitles(logger *log.Logger, titles []string) {
 		h = formats.TitleHTML(titles)
 	}
 	logger.EmitTable(formats.TitleText(titles), h)
+}
+
+// emitFootnotes outputs the active FOOTNOTE lines below a procedure's output:
+// plain text always, and a small dimmed HTML block under a rich sink. No-op when
+// none are set.
+func emitFootnotes(logger *log.Logger, footnotes []string) {
+	if len(footnotes) == 0 {
+		return
+	}
+	h := ""
+	if logger.Rich() {
+		h = formats.FootnoteHTML(footnotes)
+	}
+	logger.EmitTable(formats.FootnoteText(footnotes), h)
 }
 
 // emitListing outputs a dataset's PROC listing: always the plain-text table, and

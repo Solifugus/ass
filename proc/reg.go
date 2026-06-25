@@ -106,6 +106,7 @@ func (regProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 		fmt.Fprint(logger.Listing(), headerText)
 		logger.EmitTable(tableText, "")
 	}
+	emitFootnotes(logger, lib.FootnoteLines())
 	if hasRef {
 		out := logger.Listing()
 		fmt.Fprintln(out, "\nNOTE: (ref) marks a class variable's reference level (estimate fixed at 0;")

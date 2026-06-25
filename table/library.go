@@ -114,11 +114,13 @@ type Library struct {
 	// Informats holds user-defined informats created by PROC FORMAT INVALUE.
 	Informats *InformatCatalog
 
-	// titles holds the current TITLE lines (1-based level -> text). Like the rest
-	// of the library this is session state: titles set by a TITLE statement
-	// persist across steps (and, in the resident session, across submissions)
-	// until changed, and procedures show them above their output.
-	titles map[int]string
+	// titles and footnotes hold the current TITLE/FOOTNOTE lines (1-based level ->
+	// text). Like the rest of the library these are session state: lines set by a
+	// TITLE/FOOTNOTE statement persist across steps (and, in the resident session,
+	// across submissions) until changed. Procedures show titles above and
+	// footnotes below their output.
+	titles    map[int]string
+	footnotes map[int]string
 }
 
 // NewLibrary creates an empty library (WORK only).
@@ -129,38 +131,50 @@ func NewLibrary() *Library {
 		Formats:   NewFormatCatalog(),
 		Informats: NewInformatCatalog(),
 		titles:    make(map[int]string),
+		footnotes: make(map[int]string),
 	}
 }
 
-// SetTitle sets TITLE line `level` to text. An empty text clears that line and
-// every higher-numbered one, matching SAS's `title<n>;` semantics (a bare
-// `title;` is level 1, so it clears all titles).
-func (l *Library) SetTitle(level int, text string) {
+// setLine sets line `level` in m to text, or (empty text) clears that line and
+// every higher-numbered one — the shared TITLE/FOOTNOTE semantics (a bare
+// `title;`/`footnote;` is level 1, so it clears all of them).
+func setLine(m map[int]string, level int, text string) {
 	if level < 1 {
 		return
 	}
 	if text == "" {
-		for k := range l.titles {
+		for k := range m {
 			if k >= level {
-				delete(l.titles, k)
+				delete(m, k)
 			}
 		}
 		return
 	}
-	l.titles[level] = text
+	m[level] = text
 }
 
-// TitleLines returns the active TITLE lines in level order (1..10), skipping
-// unset levels. Procedures show these above their output.
-func (l *Library) TitleLines() []string {
+// lines returns m's entries in level order (1..10), skipping unset levels.
+func lines(m map[int]string) []string {
 	var out []string
 	for i := 1; i <= 10; i++ {
-		if t, ok := l.titles[i]; ok {
+		if t, ok := m[i]; ok {
 			out = append(out, t)
 		}
 	}
 	return out
 }
+
+// SetTitle sets TITLE line `level` to text (empty clears that line and higher).
+func (l *Library) SetTitle(level int, text string) { setLine(l.titles, level, text) }
+
+// TitleLines returns the active TITLE lines in level order, shown above output.
+func (l *Library) TitleLines() []string { return lines(l.titles) }
+
+// SetFootnote sets FOOTNOTE line `level` (empty clears that line and higher).
+func (l *Library) SetFootnote(level int, text string) { setLine(l.footnotes, level, text) }
+
+// FootnoteLines returns the active FOOTNOTE lines in level order, shown below output.
+func (l *Library) FootnoteLines() []string { return lines(l.footnotes) }
 
 // Assign binds a libref to an external Backend (the LIBNAME statement).
 func (l *Library) Assign(libref string, b Backend) {

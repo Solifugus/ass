@@ -78,6 +78,23 @@ func (t *TitleStatement) String() string {
 	return fmt.Sprintf("title%d %q;", t.Level, t.Text)
 }
 
+// FootnoteStatement is a global `footnote<n> "text";` (or a bare `footnote<n>;`
+// that clears that line and all higher-numbered ones), the bottom-of-output twin
+// of TitleStatement. Footnotes persist across steps and are shown below
+// procedure output.
+type FootnoteStatement struct {
+	Level int
+	Text  string
+}
+
+func (f *FootnoteStatement) stepNode() {}
+func (f *FootnoteStatement) String() string {
+	if f.Text == "" {
+		return fmt.Sprintf("footnote%d;", f.Level)
+	}
+	return fmt.Sprintf("footnote%d %q;", f.Level, f.Text)
+}
+
 // Program is a whole SAS source file: an ordered list of steps.
 type Program struct {
 	Steps []Step

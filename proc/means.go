@@ -51,6 +51,7 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	result := buildMeansResult(src, analysisVars, classVars, lib.Formats, procFormats)
 	emitTitles(logger, lib.TitleLines())
 	emitListing(logger, result, printOptions{}, "Summary Statistics")
+	emitFootnotes(logger, lib.FootnoteLines())
 	return nil
 }
 

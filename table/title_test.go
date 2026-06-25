@@ -30,3 +30,21 @@ func TestLibraryTitles(t *testing.T) {
 		t.Errorf("after bare clear, titles = %v, want none", l.TitleLines())
 	}
 }
+
+func TestLibraryFootnotes(t *testing.T) {
+	l := NewLibrary()
+	l.SetFootnote(1, "Source")
+	l.SetFootnote(2, "Confidential")
+	if got := strings.Join(l.FootnoteLines(), "|"); got != "Source|Confidential" {
+		t.Errorf("FootnoteLines = %q", got)
+	}
+	// Footnotes and titles are independent stores.
+	l.SetTitle(1, "Report")
+	l.SetFootnote(2, "") // clears footnote 2 only
+	if got := strings.Join(l.FootnoteLines(), "|"); got != "Source" {
+		t.Errorf("after clear-from-2 FootnoteLines = %q, want Source", got)
+	}
+	if got := strings.Join(l.TitleLines(), "|"); got != "Report" {
+		t.Errorf("titles should be unaffected by footnote changes, got %q", got)
+	}
+}

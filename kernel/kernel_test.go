@@ -237,6 +237,8 @@ South Widget 95 4.50
 run;
 title "Quarterly Sales Report";
 title2 "by Region and Product";
+footnote "Source: internal ledger";
+footnote2 "Confidential — do not distribute";
 proc print data=sales; run;
 proc means data=sales; var units revenue; run;
 proc freq data=sales; tables region; run;

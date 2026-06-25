@@ -22,6 +22,37 @@ func TitleText(titles []string) string {
 	return b.String()
 }
 
+// FootnoteText renders the active FOOTNOTE lines as plain text, shown below
+// procedure output (a blank separator line, then the footnotes). Returns "" when
+// there are none.
+func FootnoteText(footnotes []string) string {
+	if len(footnotes) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteByte('\n')
+	for _, f := range footnotes {
+		b.WriteString(f)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// FootnoteHTML renders the active FOOTNOTE lines as a small, dimmed left-aligned
+// block for rich output, shown below the table. Returns "" when there are none.
+func FootnoteHTML(footnotes []string) string {
+	if len(footnotes) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<div style="text-align:left;margin:2px 0 8px;opacity:.7;font-size:12px;color:inherit;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif">`)
+	for _, f := range footnotes {
+		b.WriteString(`<div>` + html.EscapeString(f) + `</div>`)
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
 // TitleHTML renders the active TITLE lines as a centered heading block for rich
 // (notebook) output: the first line largest, the rest progressively smaller, all
 // HTML-escaped. Returns "" when there are no titles.

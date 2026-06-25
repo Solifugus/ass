@@ -105,7 +105,7 @@ Obs  name  age
 | Macros | `%let`/`&var`, `%macro`/`%mend` (positional + keyword params), `%do`, `%if/%then/%else` |
 | Formats | `w.d`, `dollar`, `comma`, `percent`, `$w.`, date (`date9`/`mmddyy`/`worddate`), `time`/`datetime`, date/time/datetime literals `'01JAN2020'd`/`'14:30:00't`/`'01JAN2020:14:30:00'dt` |
 | Informats | list input via `:` modifier: `comma`, `dollar`, `date9`, `mmddyy`/`ddmmyy`/`yymmdd`, `time`/`datetime`, `$w.` |
-| Titles | `title`/`title2`…`title10` (and `title;` to clear) shown above procedure output; persist across steps and notebook cells |
+| Titles / footnotes | `title`/`title2`…`title10` shown above and `footnote`…`footnote10` below procedure output (bare `title;`/`footnote;` clears); persist across steps and notebook cells |
 
 Not yet supported (selected): big-endian `.sas7bdat` files (32/64-bit little-endian — uncompressed and RLE/RDC row-compressed — are read; delimited CSV/TAB/DLM, `.xlsx` import/export, and native `.sas7bdat` read are supported), the default stratified PROC FREQ n-way layout (`/ list` n-way and `/ chisq` are supported) and association statistics beyond Pearson chi-square, and SAS GLM's generalized-inverse parameterization / Type I-III SS / LSMEANS (CLASS effects work via reference-cell coding, which differs from SAS's per-level estimates by convention). See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`corpus/FEATURES.md`](corpus/FEATURES.md).
 

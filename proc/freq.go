@@ -59,6 +59,7 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 	has := func(o *ast.TablesStatement, opt string) bool { return o != nil && o.HasOption(opt) }
 
 	emitTitles(logger, lib.TitleLines())
+	defer emitFootnotes(logger, lib.FootnoteLines())
 	for _, req := range requests {
 		switch {
 		case len(req.vars) == 0:

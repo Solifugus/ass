@@ -73,6 +73,8 @@ func RunProgram(prog *ast.Program, lib *table.Library, logger *log.Logger) error
 			}
 		case *ast.TitleStatement:
 			lib.SetTitle(s.Level, s.Text)
+		case *ast.FootnoteStatement:
+			lib.SetFootnote(s.Level, s.Text)
 		}
 	}
 	return nil

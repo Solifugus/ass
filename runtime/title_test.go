@@ -55,6 +55,27 @@ proc print data=t; run;`)
 	}
 }
 
+func TestFootnoteAppearsBelowOutput(t *testing.T) {
+	// The footnote should appear after the table rows, not before the header.
+	out := runListing(t, `
+footnote "Source: ledger";
+data t; input x; datalines;
+1
+2
+;
+run;
+proc print data=t; run;`)
+
+	tableIdx := strings.Index(out, "Obs")
+	footIdx := strings.Index(out, "Source: ledger")
+	if footIdx < 0 || tableIdx < 0 {
+		t.Fatalf("missing table or footnote in output:\n%s", out)
+	}
+	if footIdx < tableIdx {
+		t.Errorf("footnote appeared before the table; output:\n%s", out)
+	}
+}
+
 // TestRegHeaderHTMLRich confirms PROC REG emits its model summary and estimates
 // as one rich block under a sink.
 func TestRegHeaderHTMLRich(t *testing.T) {

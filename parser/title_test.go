@@ -32,6 +32,28 @@ proc print data=x; run;`).ParseProgram()
 	}
 }
 
+func TestParseFootnote(t *testing.T) {
+	prog := New(`footnote "Source";
+footnote3 'Confidential';
+proc print data=x; run;`).ParseProgram()
+
+	var fns []*ast.FootnoteStatement
+	for _, s := range prog.Steps {
+		if fs, ok := s.(*ast.FootnoteStatement); ok {
+			fns = append(fns, fs)
+		}
+	}
+	if len(fns) != 2 {
+		t.Fatalf("got %d footnote statements, want 2", len(fns))
+	}
+	if fns[0].Level != 1 || fns[0].Text != "Source" {
+		t.Errorf("footnote1 = %+v, want {1 Source}", fns[0])
+	}
+	if fns[1].Level != 3 || fns[1].Text != "Confidential" {
+		t.Errorf("footnote3 = %+v, want {3 Confidential}", fns[1])
+	}
+}
+
 // TestTitleNotConfusedWithVar ensures a variable or step named like "titles"
 // isn't misparsed — only title/title1..title10 are title statements.
 func TestParseTitleLevels(t *testing.T) {
