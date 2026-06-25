@@ -45,6 +45,27 @@ func TestRenderHTMLListingSingularDims(t *testing.T) {
 	}
 }
 
+func TestRenderCrossTabHTML(t *testing.T) {
+	ds := table.NewDataset("", "t")
+	ds.AddColumn(table.Column{Name: "r", Kind: table.Character})
+	ds.AddColumn(table.Column{Name: "c", Kind: table.Character})
+	for _, p := range [][2]string{{"A", "X"}, {"A", "Y"}, {"B", "X"}} {
+		ds.AppendRow(table.Row{"r": table.Char(p[0]), "c": table.Char(p[1])})
+	}
+	f := func(v table.Value) string { return v.Display() }
+	got := renderCrossTabHTML(ds, "r", "c", f, f)
+	for _, want := range []string{
+		"<table", "Table of r by c", "r \\ c", // caption + corner stub
+		">X</th>", ">Y</th>", ">Total</th>", // column headers + total
+		`<th scope="row"`, // row stubs
+		"</table>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("cross-tab HTML missing %q; got:\n%s", want, got)
+		}
+	}
+}
+
 // TestRenderHTMLListingEscapes confirms cell values are HTML-escaped (no markup
 // injection from data).
 func TestRenderHTMLListingEscapes(t *testing.T) {

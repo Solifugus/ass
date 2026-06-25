@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"sort"
 	"strings"
@@ -69,9 +70,14 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			fmt.Fprintln(logger.Listing())
 		default:
 			// Two (or more) variables: cross-tabulate the first two.
-			fmt.Fprint(logger.Listing(), renderCrossTab(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
+			rf, cf := fmtFor(req.vars[0]), fmtFor(req.vars[1])
+			ctHTML := ""
+			if logger.Rich() {
+				ctHTML = renderCrossTabHTML(src, req.vars[0], req.vars[1], rf, cf)
+			}
+			logger.EmitTable(renderCrossTab(src, req.vars[0], req.vars[1], rf, cf), ctHTML)
 			if has(req.opts, "chisq") {
-				fmt.Fprint(logger.Listing(), renderChiSquare(src, req.vars[0], req.vars[1], fmtFor(req.vars[0]), fmtFor(req.vars[1])))
+				fmt.Fprint(logger.Listing(), renderChiSquare(src, req.vars[0], req.vars[1], rf, cf))
 			}
 			fmt.Fprintln(logger.Listing())
 		}
@@ -328,6 +334,82 @@ func renderCrossTab(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt fu
 	line("Total", ct)
 	line(legend[1], cpc)
 
+	return b.String()
+}
+
+// renderCrossTabHTML renders the same contingency table as renderCrossTab but as
+// a styled HTML table for rich frontends. Each body cell stacks the four SAS
+// stats — frequency (bold), then cell/row/column percent (dimmed) — and the
+// margins carry the row, column, and grand totals.
+func renderCrossTabHTML(src *table.Dataset, rowVar, colVar string, rowFmt, colFmt func(table.Value) string) string {
+	rowVals := sortedDistinct(src, rowVar, rowFmt)
+	colVals := sortedDistinct(src, colVar, colFmt)
+
+	count := map[string]map[string]int{}
+	rowTot := map[string]int{}
+	colTot := map[string]int{}
+	grand := 0
+	for _, r := range src.Rows {
+		rv, cv := src.Get(r, rowVar), src.Get(r, colVar)
+		if rv.IsMissing() || cv.IsMissing() {
+			continue
+		}
+		rk, ck := rowFmt(rv), colFmt(cv)
+		if count[rk] == nil {
+			count[rk] = map[string]int{}
+		}
+		count[rk][ck]++
+		rowTot[rk]++
+		colTot[ck]++
+		grand++
+	}
+	pct := func(n, d int) string {
+		if d == 0 {
+			return "."
+		}
+		return fmt.Sprintf("%.2f", 100*float64(n)/float64(d))
+	}
+	dim := `<div style="opacity:.6;font-size:11px">`
+	cell := func(n, rowT, colT int) string {
+		return fmt.Sprintf(`<div style="font-weight:600">%d</div>%s%s</div>%s%s</div>%s%s</div>`,
+			n, dim, pct(n, grand), dim, pct(n, rowT), dim, pct(n, colT))
+	}
+
+	var b strings.Builder
+	b.WriteString(`<table style="` + htmlTableStyle + `">`)
+	fmt.Fprintf(&b, `<caption style="%s">Table of %s by %s<span style="font-weight:400;opacity:.6;margin-left:.55em">freq / cell %% / row %% / col %%</span></caption>`,
+		htmlCaptionStyle, html.EscapeString(rowVar), html.EscapeString(colVar))
+
+	b.WriteString(`<thead><tr><th style="` + htmlThStyle + htmlTextStyle + `">` + html.EscapeString(rowVar) + " \\ " + html.EscapeString(colVar) + `</th>`)
+	for _, cv := range colVals {
+		b.WriteString(`<th style="` + htmlThStyle + htmlNumStyle + `">` + html.EscapeString(cv.label) + `</th>`)
+	}
+	b.WriteString(`<th style="` + htmlThStyle + htmlNumStyle + `">Total</th></tr></thead><tbody>`)
+
+	for i, rv := range rowVals {
+		rk := rv.label
+		if i%2 == 1 {
+			b.WriteString(`<tr style="` + htmlZebraStyle + `">`)
+		} else {
+			b.WriteString("<tr>")
+		}
+		b.WriteString(`<th scope="row" style="` + htmlTdStyle + htmlTextStyle + `;font-weight:600">` + html.EscapeString(rk) + `</th>`)
+		for _, cv := range colVals {
+			n := count[rk][cv.label]
+			b.WriteString(`<td style="` + htmlTdStyle + htmlNumStyle + `">` + cell(n, rowTot[rk], colTot[cv.label]) + `</td>`)
+		}
+		fmt.Fprintf(&b, `<td style="%s%s"><div style="font-weight:600">%d</div>%s%s%%</div></td>`,
+			htmlTdStyle, htmlNumStyle, rowTot[rk], dim, pct(rowTot[rk], grand))
+		b.WriteString("</tr>")
+	}
+
+	b.WriteString(`<tr><th scope="row" style="` + htmlThStyle + htmlTextStyle + `">Total</th>`)
+	for _, cv := range colVals {
+		fmt.Fprintf(&b, `<td style="%s%s"><div style="font-weight:600">%d</div>%s%s%%</div></td>`,
+			htmlThStyle, htmlNumStyle, colTot[cv.label], dim, pct(colTot[cv.label], grand))
+	}
+	fmt.Fprintf(&b, `<td style="%s%s"><div style="font-weight:600">%d</div></td></tr></tbody></table>`,
+		htmlThStyle, htmlNumStyle, grand)
 	return b.String()
 }
 

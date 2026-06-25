@@ -173,17 +173,16 @@ func emitListing(logger *log.Logger, ds *table.Dataset, opts printOptions, capti
 	logger.EmitTable(text, htmlOut)
 }
 
-// HTML styling for rich (notebook) output. Colors are grayscale rgba overlays
-// over the theme background and text inherits the theme foreground, so tables
-// look right on both light and dark notebook themes without detecting which.
+// Short aliases for the shared rich-output styles (defined in package formats so
+// the PROC PROOF panel in package runtime can reuse the same look).
 const (
-	htmlTableStyle   = "border-collapse:collapse;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.45;margin:6px 0;color:inherit"
-	htmlCaptionStyle = "caption-side:top;text-align:left;font-weight:600;padding:0 2px 7px;font-size:13px"
-	htmlThStyle      = "padding:4px 11px;background:rgba(127,127,127,.16);border-bottom:2px solid rgba(127,127,127,.5);white-space:nowrap;"
-	htmlTdStyle      = "padding:3px 11px;border-bottom:1px solid rgba(127,127,127,.16);white-space:nowrap;"
-	htmlZebraStyle   = "background:rgba(127,127,127,.06)"
-	htmlNumStyle     = "text-align:right;font-variant-numeric:tabular-nums"
-	htmlTextStyle    = "text-align:left"
+	htmlTableStyle   = formats.HTMLTableStyle
+	htmlCaptionStyle = formats.HTMLCaptionStyle
+	htmlThStyle      = formats.HTMLThStyle
+	htmlTdStyle      = formats.HTMLTdStyle
+	htmlZebraStyle   = formats.HTMLZebraStyle
+	htmlNumStyle     = formats.HTMLNumStyle
+	htmlTextStyle    = formats.HTMLTextStyle
 )
 
 // headerFor resolves a column's display header (label vs name), shared by the

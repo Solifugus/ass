@@ -2,12 +2,51 @@ package runtime
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/parser"
 	"github.com/solifugus/ass/table"
 )
+
+// TestProofReportRichHTML drives a proof under a rich sink and checks the HTML
+// panel carries PASS/FAIL pills, the dataset name, and the offending-obs detail.
+func TestProofReportRichHTML(t *testing.T) {
+	src := `
+data orders;
+  input id qty;
+  datalines;
+1 5
+2 0
+3 7
+;
+run;
+proc proof data=orders;
+  notnull id qty;
+  range qty 1 - 1000;
+run;`
+	prog := parser.New(src).ParseProgram()
+	lib := table.NewLibrary()
+	var panel string
+	logger := log.NewSink(func(ev log.Event) {
+		if ev.Kind == "table" && ev.HTML != "" {
+			panel += ev.HTML
+		}
+	})
+	if err := RunProgram(prog, lib, logger); err != nil {
+		t.Fatalf("RunProgram: %v", err)
+	}
+	for _, want := range []string{
+		"PROC PROOF", "WORK.ORDERS",
+		">PASS</span>", ">FAIL</span>", // colored verdict pills
+		"offending obs: 2", // qty=0 at obs 2 breaks the range
+	} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("proof panel missing %q; got:\n%s", want, panel)
+		}
+	}
+}
 
 // runProof parses and runs src, returning the library and the logger's error
 // count (which drives the CLI's non-zero exit on an error-level proof failure).

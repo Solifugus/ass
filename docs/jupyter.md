@@ -38,6 +38,12 @@ in execution order:
 - Tabular results — **PROC PRINT / MEANS / FREQ (one-way) / SQL / REG** — render
   as **styled HTML tables**: a caption with the name and `rows × cols`, a shaded
   header, zebra-striped rows, and right-aligned tabular-figure numbers.
+- **PROC FREQ cross-tabs** render as a contingency table — each cell stacks the
+  frequency and the cell/row/column percentages, with row, column, and grand
+  totals in the margins.
+- **PROC PROOF** renders as a pass/fail panel — a header with the passed/failed
+  tally and a status dot, then one row per assertion with a colored PASS / FAIL /
+  N-RUN pill, the violations-over-checked count, and the offending observations.
 
 The styling uses grayscale overlay tints and inherits the theme's text color, so
 tables and the log look right on **both light and dark** notebook themes without
@@ -116,9 +122,9 @@ which ASS never sets). This matches the project's CGo-free default
 
 ## Limitations (v1)
 
-- Tabular PROCs (PRINT/MEANS/FREQ one-way/SQL/REG) render as HTML tables; other
-  output (PROC FREQ cross-tabs, the PROC PROOF report, REG's header lines) is
-  plain streamed text. Extending the HTML rendering to those is forward-looking.
+- PROC PRINT/MEANS/FREQ (one-way and cross-tab)/SQL/REG and PROC PROOF render as
+  HTML; remaining text output (REG's header lines, the chi-square block) is plain
+  streamed text in the colored log block.
 - No `stdin`/`input_request` round-trip — SAS programs are non-interactive, so
   the stdin socket is bound but unused.
 - `interrupt_request` is acknowledged but does not yet abort a running step

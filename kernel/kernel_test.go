@@ -238,6 +238,13 @@ run;
 proc print data=sales; run;
 proc means data=sales; var units revenue; run;
 proc freq data=sales; tables region; run;
+proc freq data=sales; tables region*product; run;
+proc proof data=sales;
+  notnull region product;
+  values region in ("East" "West" "South");
+  range units 0 - 150;
+  rule "revenue positive": revenue > 0;
+run;
 `
 	// Drive a session with the same rich sink the kernel uses.
 	var page strings.Builder

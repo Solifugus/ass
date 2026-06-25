@@ -2,11 +2,13 @@ package runtime
 
 import (
 	"fmt"
+	"html"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/formats"
 	"github.com/solifugus/ass/log"
 	"github.com/solifugus/ass/table"
 )
@@ -398,21 +400,36 @@ func parseFloat(s string) (float64, bool) {
 	return f, err == nil
 }
 
-// writeProofReport prints the per-assertion listing to stdout.
+// proofVerdict classifies an assertion result for display.
+func proofVerdict(r *proofResult) string {
+	switch {
+	case !r.couldRun:
+		return "N/RUN"
+	case r.failed():
+		return "FAIL"
+	default:
+		return "PASS"
+	}
+}
+
+// writeProofReport emits the per-assertion verdict: a plain-text listing always,
+// and — under a rich sink (the Jupyter kernel) — a styled HTML pass/fail panel.
 func writeProofReport(ds *table.Dataset, results []*proofResult, maxSample int, logger *log.Logger) {
+	htmlOut := ""
+	if logger.Rich() {
+		htmlOut = renderProofReportHTML(ds, results, maxSample)
+	}
+	logger.EmitTable(renderProofReportText(ds, results, maxSample), htmlOut)
+}
+
+// renderProofReportText is the plain-text per-assertion listing.
+func renderProofReportText(ds *table.Dataset, results []*proofResult, maxSample int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\nPROC PROOF — %s.%s (%d obs)\n\n",
 		strings.ToUpper(ds.Lib), strings.ToUpper(ds.Name), ds.NObs())
 	fmt.Fprintf(&b, "  %-40s %-6s %s\n", "Assertion", "Result", "Violations/Checked")
 	for _, r := range results {
-		result := "PASS"
-		switch {
-		case !r.couldRun:
-			result = "N/RUN"
-		case r.failed():
-			result = "FAIL"
-		}
-		fmt.Fprintf(&b, "  %-40s %-6s %d/%d\n", truncate(r.desc, 40), result, len(r.violObs), r.checked)
+		fmt.Fprintf(&b, "  %-40s %-6s %d/%d\n", truncate(r.desc, 40), proofVerdict(r), len(r.violObs), r.checked)
 		if !r.couldRun {
 			fmt.Fprintf(&b, "      (could not run: %s)\n", r.why)
 			continue
@@ -425,7 +442,78 @@ func writeProofReport(ds *table.Dataset, results []*proofResult, maxSample int, 
 			fmt.Fprintf(&b, "      offending obs: %s\n", joinInts(sample))
 		}
 	}
-	fmt.Fprint(logger.Listing(), b.String())
+	return b.String()
+}
+
+// renderProofReportHTML renders the per-assertion verdict as a styled panel:
+// each assertion is a row with a colored PASS/FAIL/N-RUN pill (red for an
+// error-level failure, amber for a warn-level one), the violations/checked
+// count, and a sub-line with the offending observations or the not-run reason.
+func renderProofReportHTML(ds *table.Dataset, results []*proofResult, maxSample int) string {
+	pill := func(r *proofResult) string {
+		text, bg := "PASS", "#2f9e44"
+		switch {
+		case !r.couldRun:
+			text, bg = "N/RUN", "#8a8a8a"
+		case r.failed() && r.severity == "warn":
+			text, bg = "WARN", "#d9890b"
+		case r.failed():
+			text, bg = "FAIL", "#e0524a"
+		}
+		return fmt.Sprintf(`<span style="display:inline-block;min-width:42px;text-align:center;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;color:#fff;background:%s">%s</span>`, bg, text)
+	}
+
+	pass, fail := 0, 0
+	for _, r := range results {
+		if r.couldRun && !r.failed() {
+			pass++
+		} else if r.failed() {
+			fail++
+		}
+	}
+	headBg := "#2f9e44"
+	if fail > 0 {
+		headBg = "#e0524a"
+	}
+
+	var b strings.Builder
+	b.WriteString(`<div style="font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;margin:6px 0;color:inherit">`)
+	fmt.Fprintf(&b, `<div style="font-weight:600;margin-bottom:6px">PROC PROOF &mdash; %s.%s `+
+		`<span style="font-weight:400;opacity:.6">%d obs &middot; %d passed, %d failed</span> `+
+		`<span style="display:inline-block;width:9px;height:9px;border-radius:50%%;background:%s;vertical-align:middle"></span></div>`,
+		html.EscapeString(strings.ToUpper(ds.Lib)), html.EscapeString(strings.ToUpper(ds.Name)),
+		ds.NObs(), pass, fail, headBg)
+
+	b.WriteString(`<table style="` + formats.HTMLTableStyle + `"><thead><tr>`)
+	b.WriteString(`<th style="` + formats.HTMLThStyle + formats.HTMLTextStyle + `">Assertion</th>`)
+	b.WriteString(`<th style="` + formats.HTMLThStyle + formats.HTMLTextStyle + `">Result</th>`)
+	b.WriteString(`<th style="` + formats.HTMLThStyle + formats.HTMLNumStyle + `">Violations / Checked</th>`)
+	b.WriteString(`</tr></thead><tbody>`)
+
+	for i, r := range results {
+		zebra := ""
+		if i%2 == 1 {
+			zebra = formats.HTMLZebraStyle
+		}
+		detail := ""
+		switch {
+		case !r.couldRun:
+			detail = `<div style="opacity:.6;font-size:11px">could not run: ` + html.EscapeString(r.why) + `</div>`
+		case r.failed() && maxSample > 0:
+			sample := r.violObs
+			if len(sample) > maxSample {
+				sample = sample[:maxSample]
+			}
+			detail = `<div style="opacity:.6;font-size:11px">offending obs: ` + html.EscapeString(joinInts(sample)) + `</div>`
+		}
+		fmt.Fprintf(&b, `<tr style="%s"><td style="%s%s">%s%s</td><td style="%s%s">%s</td><td style="%s%s">%d / %d</td></tr>`,
+			zebra,
+			formats.HTMLTdStyle, formats.HTMLTextStyle, html.EscapeString(r.desc), detail,
+			formats.HTMLTdStyle, formats.HTMLTextStyle, pill(r),
+			formats.HTMLTdStyle, formats.HTMLNumStyle, len(r.violObs), r.checked)
+	}
+	b.WriteString(`</tbody></table></div>`)
+	return b.String()
 }
 
 // writeProofViolations builds and stores the out= dataset: one row per
