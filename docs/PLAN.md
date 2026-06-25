@@ -23,45 +23,72 @@ If you are a fresh Claude Code instance with no memory of prior work:
 
 ---
 
-## Roadmap (next phase — post-Phase 13)
+## Roadmap (post-Phase 13 — the deferral roadmap, foundational-first)
 
-Phases 0–13 and the deferral backlog are complete. The work now spans four
-parallel tracks. The guiding choice is **pace between compatibility-gap-filling
-(Track A) and differentiators (Track D)** — the decision is to *interleave*, not
-pick: keep the compat core honestly advancing while landing differentiators one
-at a time. Architecture/CGo/Jupyter decisions behind this are recorded in
-[`design.md`](design.md) §14–16; the proofing design in [`proofing.md`](proofing.md).
+Phases 0–13 are complete, as are the post-roadmap differentiators landed since:
+the **resident session model**, the **Jupyter kernel + rich display**, the **PROC
+PROOF validation tier**, the **four industry cookbooks**, and the **testing plan**
+(see the Progress log and [`testing-plan.md`](testing-plan.md)). What remains is
+the set of known deferrals — every one of them is captured below.
 
-**Recommended near-term order:** (1) date/time functions → (2) modernc.org/sqlite
-swap → (3) PROC PROOF vertical slice → (4) DATA-step benchmark. Most items below
-are independent leaf features; the dependency chains are noted.
+The sequencing principle is **foundational-first** (decided 2026-06-25): language
+and format *primitives* and I/O *completeness* land before the higher-level
+reshaping, reporting, and statistics that build on them. The four testing-plan
+tracks (corpus value-verified backfill, edge/robustness, fuzz, differential) run
+**continuously alongside every phase**, not as a separate phase.
+Architecture/CGo/Jupyter rationale is in [`design.md`](design.md) §14–16.
 
-### Track A — Compatibility core (the mission)
-- [x] **Date/time functions** — `today`/`date`, `datetime`, `time`, `mdy`, `year`/`month`/`day`/`qtr`/`weekday`, `datepart`/`timepart`, `hms`/`dhms`, `intck`/`intnx`. Done 2026-06-23 (see Progress log). Not yet: multi-unit/datetime interval forms.
-- [ ] PROC FREQ default (non-`list`) stratified n-way layout + association stats beyond Pearson chi-square (LR, Fisher, measures of association)
-- [ ] PROC GLM SAS-fidelity (sweep/generalized-inverse parameterization, Type I/III SS, LSMEANS/CONTRAST/ESTIMATE) — gated on a real-SAS reference
-- [ ] `proc format` PICTURE templates; user formats on PROC SQL output columns
-- [ ] Multi-line label-header wrapping (cosmetic; long-deferred)
-- [ ] `infile`/`file` options tail (`lrecl=`, `pad`, `end=`, `mod`)
-- [ ] big-endian `.sas7bdat` read; `.sas7bdat` write
+**Statistics validation (clean-room — no licensed SAS).** Expected values for the
+Phase 17 statistical tier are sourced in this precedence order: (1) **published /
+textbook** worked examples and public datasets with known answers; (2) **cross-check
+against other engines** (R, Python statsmodels) for the same model; (3)
+**common-sense / first-principles hand-derivation**. Never proprietary SAS docs,
+source, or internals.
 
-### Track B — Platform & build
-- [x] **modernc.org/sqlite swap** → CGo-free *default* build (PROC SQL kept). Done 2026-06-23: `mattn/go-sqlite3` replaced wholesale; `cgo` gating + PROC SQL stub + corpus skip logic removed; static `CGO_ENABLED=0` build now includes PROC SQL. Verified correct on big-endian s390x (2026-06-23)
-- [ ] Cross-platform release artifacts (Linux/Windows/macOS ~free via Go; s390x validated; AIX is the hard target)
-- [ ] ODBC LIBNAME engine (opt-in CGo, like DB2)
+### Phase 14 — Language & format primitives (foundation for reporting)
+- [ ] **`PUT()` / `INPUT()` functions** — apply a (in)format inside an expression (`band = put(score, scoreband.);`, `n = input(text, comma8.);`); unblocks format-based banding used throughout the cookbooks
+- [ ] **`intck` / `intnx` advanced interval forms** — multi-unit & shifted (`month2`, `week.2`) and datetime intervals (`dtday`, `dtmonth`, `hour`, `minute`, `second`); base date intervals already done
+- [ ] **`proc format` PICTURE templates** (output-only picture formats)
+- [ ] **User formats applied to PROC SQL output columns**
+- [ ] **Multi-line PROC PRINT label-header wrapping** (the pending cosmetic; long-deferred)
 
-### Track C — Architecture & performance (interpreter family; `design.md` §14)
-- [x] **DATA-step benchmark** + cheap interpreter wins — done 2026-06-24: `runtime/bench_test.go` (SetTransform/Generate, 50k rows); fixed the `writeRow` O(rows×vars²) output rebuild (now a cached per-step column plan + `PDV.GetLower`), ~1.3–1.5× and −1 alloc/row. **Decision recorded in [`perf.md`](perf.md): defer the VM** — the remaining bottleneck is data representation (per-row map allocation + PDV string-map hashing), not opcode dispatch
-- [ ] **Slot-indexed PDV + non-map rows** — the actual next perf investment (per `perf.md`): resolve vars to slice slots, drop the per-row `map[string]Value`. Stands alone *and* is the foundation any future VM/vectorized executor builds on. Gate on a workload that needs ≫100k rows/s
-- [ ] **Bytecode VM** (`vm/` package) — **deferred (evidence-based)**: the 2026-06-24 profile shows dispatch is not the cost, so the VM is not the next lever; revisit only after the slot-indexed PDV / non-map rows, if profiling then warrants it. Engine stays the differential-testing oracle via the corpus
-- [ ] (far) native ASS SQL executor on the shared core — the one item that wants the VM done first
+### Phase 15 — I/O & data-access completeness
+- [ ] **`infile` / `file` options tail** — `lrecl=`, `pad`, `end=`, `mod`
+- [ ] **DB pushdown** — push joins/aggregation to the database; `obs=` / `firstobs=` pushdown (value-safe subset already pushed for `keep=` and equality/`>`/`>=` `where=`)
+- [ ] **big-endian `.sas7bdat` read** (little-endian, compressed & not, already read)
+- [ ] **`.sas7bdat` write**
+- [ ] **on-disk format catalogs** (`cntlin`/`cntlout`, persisted user formats)
 
-### Track D — Differentiators (designed / early)
-- [x] **PROC PROOF** (data-quality validation) — **validation tier complete** 2026-06-24: full §8 catalog `require`/`type`/`notnull`/`values`/`range` (inclusive + relational)/`unique`/`key…references` (single + composite, WORK/base/db parent)/`rule` + `/ severity=`/`message=` tail on every assertion (rule included) + report + `out=` violations dataset + non-zero exit on error-level failure (via `log.ErrorCount`, no halt). Only the statistical tier (+ optional `abort`) remains. See [`proofing.md`](proofing.md) §11
-- [ ] **SAS→ASS migration linter** — second wedge; reuses the existing SAS parser
-- [x] **Resident session model** (keystone) — **done 2026-06-24**: `session` package holds persistent `table.Library` + `macro.Processor` across `Submit` calls; batch runner is now one submission; `ass repl` is the first consumer. Unlocks the next two
-- [x] **Jupyter kernel** — **done 2026-06-24**: `kernel` package implements the Jupyter wire protocol (v5.3, HMAC-signed) over pure-Go `go-zeromq/zmq4` (no CGo), feeding each cell to a `session.Session`; `ass kernel --install` registers the kernelspec. In-process ZeroMQ wire test passes. See [`jupyter.md`](jupyter.md)
-- [ ] Vision layer (`future-directions.md`): grounded AI assistant; industry cookbooks; Python/R bridges (Arrow); proofing tiers 2–3 (`constrain`/enhanced `error`, attached constraints, statistical checks)
+### Phase 16 — Reshaping & reporting (build on the Phase-14 primitives)
+- [ ] **PROC TRANSPOSE** — wide↔long reshaping (`by`/`var`/`id`/`prefix`); the reflexive SAS idiom every analyst reaches for
+- [ ] **PROC REPORT** — computed columns, `n (%)` display tables, grouping/ordering/summary lines
+- [ ] **PROC TABULATE** — multi-dimensional summary tables
+- [ ] **PROC FREQ** — default (non-`list`) stratified n-way layout + association stats beyond Pearson chi-square (likelihood-ratio, Fisher exact, measures of association)
+
+### Phase 17 — Statistical tier (validated per the precedence above)
+- [ ] **PROC GLM SAS-fidelity** — sweep/generalized-inverse parameterization, Type I/III SS, F-tests, LSMEANS/CONTRAST/ESTIMATE (CLASS via reference-cell coding already fits correctly)
+- [ ] **Logistic regression** (PROC LOGISTIC / GENMOD-style)
+- [ ] **Survival** — PROC LIFETEST (Kaplan–Meier) and PROC PHREG (Cox PH)
+- [ ] **Mixed models** (PROC MIXED) — largest lift; gate on demand
+- [ ] **PROC PROOF statistical tier** + `abort` (fail-fast) — see [`proofing.md`](proofing.md) §11
+
+### Phase 18 — Interactive / Jupyter polish
+- [ ] **Centered titles/footnotes** (SAS centers; ASS currently left-aligns)
+- [ ] **Tab-completion (`complete_request`) and introspection (`inspect_request`)**
+- [ ] **Cooperative interrupt** — abort a running step on `interrupt_request`
+- [ ] **`stdin` / `input_request` round-trip**
+
+### Independent / continuous (not blocking the phases)
+- [ ] **Testing tracks (continuous)** — corpus value-verified backfill to full reference-surface coverage (35/63 items declare `expected.datasets` today); industry end-to-end items; edge/robustness + fuzz; differential vs published/cross-engine results. See [`testing-plan.md`](testing-plan.md)
+- [ ] **Slot-indexed PDV + non-map rows** (perf foundation; `perf.md`) — resolve vars to slice slots, drop the per-row `map[string]Value`; foundation for any future VM/vectorized executor. Gate on a ≫100k-row workload
+- [ ] **Bytecode VM** (`vm/`) — **deferred (evidence-based)**: the 2026-06-24 profile shows dispatch isn't the cost; revisit only after the slot-indexed PDV, if profiling then warrants it
+- [ ] (far) native ASS SQL executor on the shared core — wants the VM done first
+- [ ] **SAS→ASS migration linter** — reuses the existing SAS parser
+- [ ] **Cross-platform release artifacts** (Linux/Windows/macOS ~free via Go; s390x validated; AIX is the hard target)
+- [ ] **ODBC LIBNAME engine** (opt-in CGo, like DB2)
+- [ ] **Vision layer** (`future-directions.md`): grounded AI assistant; Python/R bridges (Arrow); proofing tiers 2–3 (`constrain`/enhanced `error`, attached constraints, statistical checks)
+
+**Already done since Phase 13** (full detail in the Progress log): date/time functions; modernc.org/sqlite swap (CGo-free default build); DATA-step benchmark + perf win; PROC PROOF validation tier; resident session model; Jupyter kernel + rich display; TITLE/FOOTNOTE; industry cookbooks; testing plan; and the rename-statement / two-way-FREQ-options / MEANS sum+maxdec fixes.
 
 ---
 

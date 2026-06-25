@@ -101,12 +101,24 @@ target over the lexer/parser runs clean in CI.
 **Goal:** where a canonical SAS result is *publicly documented*, assert ASS
 matches it — without a SAS license and without copying proprietary material.
 
+**Source precedence (decided 2026-06-25, clean-room — no licensed SAS).** When an
+expected value is needed, source it in this order:
+
+1. **Published / textbook** worked examples and public datasets with known
+   answers (most authoritative; cite it).
+2. **Cross-check against other engines** — R, Python statsmodels — running the
+   same model. Conventions differ (e.g. reference cell vs. SAS's last-level), but
+   the fitted math agrees; record the engine + version.
+3. **Common-sense / first-principles hand-derivation** when neither above
+   covers it.
+
+Never proprietary SAS documentation, source, or internals.
+
 **Method (clean-room)**
 
-- Source expected results only from **public, citable** material: textbook
-  worked examples, published statistical datasets with known answers, public
-  documentation examples that include their output, and first-principles
-  hand-derivation. Record the citation in the corpus item metadata.
+- Source expected results only from the **public, citable** material above, in
+  that precedence. Record the citation (or engine + version) in the corpus item
+  metadata.
 - Build a small set of canonical-answer items: e.g. a known OLS regression
   (slope/intercept/R² hand-derivable), a chi-square on a textbook contingency
   table, summary stats on a classic public dataset.
