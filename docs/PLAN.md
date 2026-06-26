@@ -71,7 +71,7 @@ Phase-17 stats tier tractable.
 - [ ] **DB pushdown** — push joins/aggregation to the database; `obs=` / `firstobs=` pushdown (value-safe subset already pushed for `keep=` and equality/`>`/`>=` `where=`)
 - [ ] **big-endian `.sas7bdat` read** (little-endian, compressed & not, already read)
 - [ ] **`.sas7bdat` write**
-- [ ] **on-disk format catalogs** (`cntlin`/`cntlout`, persisted user formats)
+- [x] **on-disk format catalogs** (`cntlin`/`cntlout`, persisted user formats) — done 2026-06-25: PROC FORMAT `cntlout=ds` writes VALUE formats to a control dataset (FMTNAME/START/END/LABEL/TYPE/HLO/SEXCL/EEXCL) and `cntlin=ds` rebuilds them from one. `proc.formatCntlout`/`formatCntlin` + `table.FormatCatalog.All`. Corpus `proc_format_cntlout_001` + round-trip tests. (PICTURE/INVALUE round-trip and on-disk catalog files remain deferred.)
 
 ### Phase 16 — Reshaping & reporting (build on the Phase-14 primitives)
 - [ ] **PROC TRANSPOSE** — wide↔long reshaping (`by`/`var`/`id`/`prefix`); the reflexive SAS idiom every analyst reaches for
@@ -1116,3 +1116,9 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Implementation: AST fields on `InfileStatement` (`Lrecl`/`Pad`/`End`) and `FileStatement` (`Mod`); parser cases in `parseInfile`/`parseFile` (`lrecl=`/`pad`/`nopad`/`end=`, `mod`); runtime applies lrecl/pad in `readInfile`, sets the end flag via `setInfileEnd` after each INPUT (both the normal and `#n` multi-line paths) gated on record exhaustion, drops the end var, and routes `mod` to the new `flatfile.AppendLines`.
 - Verification: `parser.TestParseInfileOptionsTail`/`TestParseFileMod`; `runtime.TestInfileEnd` (summary-row idiom + flag excluded), `TestInfilePadLrecl` (short line → missing column), `TestFileMod` (append); corpus `infile_end_001` (value-verified end= + running sum). gofmt/build/vet/test clean both CGO modes; corpus **70/70**, value-verified **50/50**.
 - Docs: reference.md (infile/file option lists + statement table), README (flat-file rows), CLAUDE.md updated.
+
+### 2026-06-25 — Phase 15: PROC FORMAT CNTLOUT=/CNTLIN= (on-disk format catalogs)
+- **CNTLOUT=ds** writes the catalog's VALUE formats to a "control" dataset using the publicly documented column subset: `FMTNAME`, `START`, `END`, `LABEL`, `TYPE` (`N`/`C`), `HLO` (flags `L`=START is LOW, `H`=END is HIGH, `O`=OTHER), `SEXCL`/`EEXCL` (`Y`/`N` exclusive bounds). Numeric bounds render as compact literals; LOW/HIGH bounds are left blank with the flag in HLO. **CNTLIN=ds** reverses it: rows are grouped into formats by (FMTNAME, TYPE) in first-seen order and rebuilt into the catalog, so a persisted lookup table becomes live formats with no VALUE statement. PROC FORMAT options are already parsed generically into `step.Options`, so no parser change was needed.
+- Implementation: new `proc/format_cntl.go` (`formatCntlout`/`formatCntlin` + bound (de)serialization), `table.FormatCatalog.All()` (name-sorted iteration for deterministic output). PICTURE and INVALUE catalogs are intentionally not round-tripped yet (logged/skipped on CNTLOUT=).
+- Verification: `proc.TestFormatCntlout` (control-dataset structure + L/H/O flags + TYPE) and `TestFormatCntlin` (rebuild from a hand-built control dataset, then apply via `put()`), plus corpus `proc_format_cntlout_001` (value-verifies the full control dataset). gofmt/build/vet/test clean both CGO modes; corpus **71/71**, value-verified **51/51**.
+- Docs: reference.md (PROC FORMAT section), README (PROC FORMAT row), COMPATIBILITY.md, CLAUDE.md updated.

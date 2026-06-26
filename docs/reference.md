@@ -400,6 +400,10 @@ run;
   zero-suppresses leading positions, a nonzero selector forces printing) with
   literal message characters, scaled by a default or `mult=` multiplier; options
   `prefix=`, `mult=`, `fill=`. Applied in PROC PRINT and via `put()`.
+- `cntlout=ds` / `cntlin=ds` — persist VALUE formats to a control dataset and
+  rebuild them from one. Columns: `FMTNAME`, `START`, `END`, `LABEL`, `TYPE`
+  (`N`/`C`), `HLO` (`L`/`H`/`O` for low/high/other), `SEXCL`/`EEXCL` (exclusive
+  bounds). PICTURE/INVALUE catalogs are not round-tripped.
 
 ### PROC PROOF
 

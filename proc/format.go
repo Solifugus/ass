@@ -24,6 +24,24 @@ func (formatProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 	if lib.Informats == nil {
 		lib.Informats = table.NewInformatCatalog()
 	}
+
+	var cntlin, cntlout string
+	for _, o := range step.Options {
+		switch strings.ToLower(o.Name) {
+		case "cntlin":
+			cntlin = o.Value
+		case "cntlout":
+			cntlout = o.Value
+		}
+	}
+	// CNTLIN= builds formats from a control dataset before this step's own VALUE
+	// statements (which may then add to or override them).
+	if cntlin != "" {
+		if err := formatCntlin(lib, cntlin, logger); err != nil {
+			logger.Error("PROC FORMAT CNTLIN=: %v", err)
+		}
+	}
+
 	for _, s := range step.Body {
 		vs, ok := s.(*ast.ValueStatement)
 		if !ok {
@@ -48,6 +66,13 @@ func (formatProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 		}
 		lib.Formats.Define(vf)
 		logger.Note("Format %s has been output.", strings.ToUpper(strings.TrimPrefix(vs.Name, "$")))
+	}
+
+	// CNTLOUT= writes the catalog's VALUE formats to a control dataset.
+	if cntlout != "" {
+		if err := formatCntlout(lib, cntlout, logger); err != nil {
+			logger.Error("PROC FORMAT CNTLOUT=: %v", err)
+		}
 	}
 	return nil
 }

@@ -1,0 +1,29 @@
+id: proc_format_cntlout_001
+source: hand-written
+license: MIT
+features:
+  - proc-format
+  - user-formats
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    fmts:
+      columns: [FMTNAME, START, END, LABEL, TYPE, HLO, SEXCL, EEXCL]
+      rows:
+        # Formats sort by name: $REG (stored REG, TYPE C) first, then AGEGRP.
+        # Empty character cells (an unset bound or no HLO flag) are missing (".").
+        - ["REG", "E", "E", "East", "C", ".", "N", "N"]
+        - ["REG", "W", "W", "West", "C", ".", "N", "N"]
+        - ["AGEGRP", ".", "12", "Child", "N", "L", "N", "N"]
+        - ["AGEGRP", "13", "19", "Teen", "N", ".", "N", "N"]
+        - ["AGEGRP", "20", ".", "Adult", "N", "H", "N", "N"]
+        - ["AGEGRP", ".", ".", "?", "N", "O", "N", "N"]
+priority: 2
+notes: |
+  PROC FORMAT CNTLOUT= writes the catalog's VALUE formats to a control dataset
+  with the standard columns FMTNAME/START/END/LABEL/TYPE/HLO/SEXCL/EEXCL. The
+  numeric AGEGRP format yields HLO flags L (low-12), H (20-high), O (other); the
+  character $REG format is TYPE C with START=END for each single value. Verifies
+  the control-dataset structure and the low/high/other encoding end to end.

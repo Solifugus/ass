@@ -2,6 +2,7 @@ package table
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -223,4 +224,22 @@ func (c *FormatCatalog) Lookup(name string) (*ValueFormat, bool) {
 	}
 	vf, ok := c.formats[strings.ToLower(name)]
 	return vf, ok
+}
+
+// All returns the catalog's formats sorted by name, for deterministic output
+// (e.g. PROC FORMAT CNTLOUT=). Nil-safe.
+func (c *FormatCatalog) All() []*ValueFormat {
+	if c == nil {
+		return nil
+	}
+	names := make([]string, 0, len(c.formats))
+	for k := range c.formats {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	out := make([]*ValueFormat, len(names))
+	for i, k := range names {
+		out[i] = c.formats[k]
+	}
+	return out
 }
