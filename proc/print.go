@@ -83,11 +83,40 @@ func parsePrintOptions(step *ast.ProcStep) printOptions {
 // listingColumn is one rendered column: its variable name, the header text to
 // display, its width, and whether its values are right-aligned (numeric).
 type listingColumn struct {
-	name   string
-	header string
-	width  int
-	right  bool
-	format string
+	name        string
+	header      string
+	width       int
+	right       bool
+	format      string
+	headerLines []string // the header split across one or more lines (label wrapping)
+}
+
+// wrapHeader splits a column header into lines no wider than width, breaking at
+// blanks (greedy word packing). A single word longer than width is left on its
+// own (over-wide) line, but callers size width to at least the longest word so
+// that does not happen. Multi-word labels narrower than the data stay on one line.
+func wrapHeader(header string, width int) []string {
+	words := strings.Fields(header)
+	if len(words) == 0 {
+		return []string{header} // preserve an all-blank or empty header verbatim
+	}
+	var lines []string
+	cur := ""
+	for _, w := range words {
+		switch {
+		case cur == "":
+			cur = w
+		case len(cur)+1+len(w) <= width:
+			cur += " " + w
+		default:
+			lines = append(lines, cur)
+			cur = w
+		}
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
 }
 
 // renderListing produces the SAS-style listing text for a dataset. The format
@@ -118,14 +147,26 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 				header = c.Label
 			}
 		}
-		width := len(header)
 		right := c.Kind == table.Numeric
+		// The column is as wide as its widest data cell, but never narrower than the
+		// longest single word in the header — a multi-word label wider than the data
+		// wraps across several header lines (SAS label splitting at blanks).
+		width := 0
 		for _, r := range ds.Rows {
 			if w := len(applyFmt(opts.catalog, ds.Get(r, c.Name), colFormat(c))); w > width {
 				width = w
 			}
 		}
-		lc[i] = listingColumn{name: c.Name, header: header, width: width, right: right, format: colFormat(c)}
+		for _, word := range strings.Fields(header) {
+			if len(word) > width {
+				width = len(word)
+			}
+		}
+		if width == 0 {
+			width = len(header)
+		}
+		lc[i] = listingColumn{name: c.Name, header: header, width: width, right: right,
+			format: colFormat(c), headerLines: wrapHeader(header, width)}
 	}
 
 	obsWidth := len("Obs")
@@ -135,16 +176,36 @@ func renderListing(ds *table.Dataset, opts printOptions) string {
 
 	var b strings.Builder
 
-	// Header row.
-	var head []string
-	if !opts.noobs {
-		head = append(head, pad("Obs", obsWidth, true))
-	}
+	// Header rows. A column's header may wrap into several lines; all columns'
+	// header blocks are bottom-aligned (blank-padded at the top) so their last
+	// lines share the row just above the data.
+	headerRows := 1
 	for _, c := range lc {
-		head = append(head, pad(c.header, c.width, c.right))
+		if n := len(c.headerLines); n > headerRows {
+			headerRows = n
+		}
 	}
-	b.WriteString(strings.TrimRight(strings.Join(head, "  "), " "))
-	b.WriteString("\n\n")
+	for row := 0; row < headerRows; row++ {
+		var head []string
+		if !opts.noobs {
+			obs := ""
+			if row == headerRows-1 {
+				obs = "Obs"
+			}
+			head = append(head, pad(obs, obsWidth, true))
+		}
+		for _, c := range lc {
+			// Bottom-align: this column's lines occupy the last len(lines) rows.
+			line := ""
+			if idx := row - (headerRows - len(c.headerLines)); idx >= 0 && idx < len(c.headerLines) {
+				line = c.headerLines[idx]
+			}
+			head = append(head, pad(line, c.width, c.right))
+		}
+		b.WriteString(strings.TrimRight(strings.Join(head, "  "), " "))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 
 	// Data rows.
 	for i, r := range ds.Rows {

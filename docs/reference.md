@@ -520,4 +520,3 @@ Selected intentional deferrals (full list and rationale in
 - SAS GLM's generalized-inverse parameterization, Type I/III SS, and LSMEANS
   (CLASS effects work via reference-cell coding).
 - Big-endian `.sas7bdat` files (little-endian, compressed and not, are read).
-- Multi-line PROC PRINT label-header wrapping (cosmetic).
