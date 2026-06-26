@@ -60,7 +60,7 @@ Phase-17 stats tier tractable.
 - [ ] **Edge-case / robustness + fuzz (start)** — missing-value / type-coercion / format-boundary suites and a lexer/parser fuzz target; the rest of this track continues alongside later phases
 
 ### Phase 14 — Language & format primitives (foundation for reporting)
-- [ ] **`PUT()` / `INPUT()` functions** — apply a (in)format inside an expression (`band = put(score, scoreband.);`, `n = input(text, comma8.);`); unblocks format-based banding used throughout the cookbooks
+- [x] **`PUT()` / `INPUT()` functions** — done 2026-06-25: `put(value, format.)` → value through a user/built-in format (char); `input(string, informat.)` → string through a user/built-in informat (value). Parser captures the format-spec arg verbatim; catalogs threaded via the PDV. Corpus `put_input_functions_001` + unit tests.
 - [ ] **`intck` / `intnx` advanced interval forms** — multi-unit & shifted (`month2`, `week.2`) and datetime intervals (`dtday`, `dtmonth`, `hour`, `minute`, `second`); base date intervals already done
 - [ ] **`proc format` PICTURE templates** (output-only picture formats)
 - [ ] **User formats applied to PROC SQL output columns**
@@ -1081,3 +1081,10 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - Parser unit tests for both `out=` forms. gofmt/build/vet/test clean both CGO modes; corpus **66/66**, value-verified **46/46**.
 - Coverage impact this Phase-13.5 push: zero-verified features **15 → 2** (only `proc-reg`/`proc-glm` remain), items value-verified **35/63 → 46/66 (69.7%)**.
 - Remaining 2 gaps (`proc-reg`/`proc-glm`) need `outest=` (parameter-estimates output dataset) to be value-verifiable — a distinct feature, naturally landing with the Phase-17 REG/GLM work; deferred for now.
+
+### 2026-06-25 — Phase 14: PUT() / INPUT() functions
+- `put(value, format.)` renders a value through a format (user VALUE format from the catalog, else built-in) returning a character string; `input(string, informat.)` reads a string through an informat (user INVALUE, else built-in) returning the value. The canonical enabler for format-based banding (`band = put(score, scoreband.)`) — replaces the workarounds the cookbooks used.
+- The second argument is a format/informat spec (`dollar8.2`, `comma8.`, `agegrp.`) that doesn't tokenize as an expression, so the parser special-cases `put`/`input` (`parser.parsePutInput`) and captures the spec verbatim from source as a string-literal arg. The format/informat catalogs are threaded to expression eval via two new PDV fields (`formats`/`informats`), set from the library at DATA-step start — no rethreading of `Eval`.
+- `runtime.applyPutFormat` / `applyInputInformat` reuse the existing `formats.Apply` / `formats.ParseInput` and the user catalogs (mirrors `proc.applyFmt`).
+- Verification: `runtime.TestEvalPutInput` (user format, built-in format, comma + date9 informats) + corpus `put_input_functions_001` (banding + comma informat, value-verified). gofmt/build/vet/test clean both CGO modes; corpus **67/67**, value-verified **47/47**; coverage unchanged at 2 gaps (proc-reg/glm).
+- Docs: reference.md (function count 47→49 + put/input entries), README, CLAUDE.md updated.

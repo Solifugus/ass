@@ -113,6 +113,9 @@ func (p *Parser) parsePrefixExpr() ast.Expression {
 		}
 		p.next()
 		if p.curIs(lexer.LPAREN) {
+			if low := strings.ToLower(lit); low == "put" || low == "input" {
+				return p.parsePutInput(low)
+			}
 			return p.parseCall(lit)
 		}
 		if p.curIs(lexer.LBRACE) || p.curIs(lexer.LBRACKET) {
@@ -149,6 +152,47 @@ func (p *Parser) parseArrayRef(name string) ast.Expression {
 		p.addError("expected closing array subscript at line " + itoa(p.cur.Line))
 	}
 	return &ast.ArrayRef{Name: name, Index: idx}
+}
+
+// parsePutInput parses the PUT()/INPUT() functions, whose second argument is a
+// format/informat spec (e.g. `dollar8.2`, `comma8.`, `agegrp.`) that does not
+// tokenize as an ordinary expression. The first argument is a normal expression;
+// the spec is captured verbatim from the source up to the closing ')' and stored
+// as a string-literal argument. cur is the '('.
+func (p *Parser) parsePutInput(name string) ast.Expression {
+	p.next() // consume '('
+	call := &ast.CallExpression{Func: name}
+	call.Args = append(call.Args, p.parseExpression(pLOWEST))
+	if p.curIs(lexer.COMMA) {
+		p.next()
+	} else {
+		p.addError("expected ',' before the " + name + " format at line " + itoa(p.cur.Line))
+	}
+	// Capture the format/informat spec verbatim up to the matching ')'.
+	start := p.cur.Pos
+	end := start
+	depth := 0
+	for !p.curIs(lexer.EOF) {
+		if p.curIs(lexer.LPAREN) {
+			depth++
+		}
+		if p.curIs(lexer.RPAREN) {
+			if depth == 0 {
+				break
+			}
+			depth--
+		}
+		end = p.cur.End
+		p.next()
+	}
+	spec := strings.TrimSpace(p.l.Slice(start, end))
+	call.Args = append(call.Args, &ast.StringLiteral{Value: spec})
+	if p.curIs(lexer.RPAREN) {
+		p.next()
+	} else {
+		p.addError("expected ')' to close " + name + " at line " + itoa(p.cur.Line))
+	}
+	return call
 }
 
 // parseCall parses a function call argument list; cur is the '('.

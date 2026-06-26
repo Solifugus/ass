@@ -22,6 +22,10 @@ type PDV struct {
 	order    []string            // display names, in first-seen order
 	retained map[string]bool     // names exempt from per-iteration reset (lowercased)
 	arrays   map[string][]string // array name (lowercased) -> element variable names
+	// formats/informats are the run's user catalogs, made available to the
+	// PUT()/INPUT() functions during expression evaluation (nil = built-ins only).
+	formats   *table.FormatCatalog
+	informats *table.InformatCatalog
 }
 
 // NewPDV creates an empty PDV.

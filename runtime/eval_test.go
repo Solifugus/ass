@@ -1,11 +1,41 @@
 package runtime
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/solifugus/ass/parser"
 	"github.com/solifugus/ass/table"
 )
+
+func TestEvalPutInput(t *testing.T) {
+	cat := table.NewFormatCatalog()
+	cat.Define(&table.ValueFormat{
+		Name: "scoreband",
+		Ranges: []table.FormatRange{
+			{NoLow: true, High: table.Num(599), Label: "Poor"},
+			{Low: table.Num(600), High: table.Num(749), Label: "Fair"},
+			{Low: table.Num(750), NoHigh: true, Label: "Good"},
+		},
+	})
+	pdv := NewPDV()
+	pdv.formats = cat
+	pdv.informats = table.NewInformatCatalog()
+	pdv.Set("score", table.Num(700))
+
+	if got := evalExpr(t, "put(score, scoreband.)", pdv); got.Str != "Fair" {
+		t.Errorf("put(user format) = %q, want Fair", got.Str)
+	}
+	if got := evalExpr(t, "put(score, dollar8.)", pdv); !strings.Contains(got.Str, "700") {
+		t.Errorf("put(built-in) = %q, want containing 700", got.Str)
+	}
+	if got := evalExpr(t, `input("1,234", comma8.)`, pdv); got.IsMissing() || got.Num != 1234 {
+		t.Errorf("input(comma) = %v, want 1234", got.Display())
+	}
+	if got := evalExpr(t, `input("15JAN2020", date9.)`, pdv); got.IsMissing() || got.Num != 21929 {
+		t.Errorf("input(date9) = %v, want 21929", got.Display())
+	}
+}
 
 // evalExpr parses a SAS expression string and evaluates it against pdv.
 func evalExpr(t *testing.T, src string, pdv *PDV) table.Value {

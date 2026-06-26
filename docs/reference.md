@@ -150,7 +150,7 @@ Example: `set big(keep=id amt where=(amt>0) firstobs=10 obs=100);`
 
 ## Functions
 
-All implemented functions (47). Aggregates ignore missing values and accept a
+All implemented functions (49). Aggregates ignore missing values and accept a
 variable number of arguments.
 
 **Aggregate / numeric reductions**
@@ -218,6 +218,13 @@ propagate.
 | `dhms(d, h, m, s)` | Datetime value from a date plus h/m/s. |
 | `intck(interval, from, to)` | Count of interval boundaries (`day`, `week`, `month`, `qtr`, `year`). |
 | `intnx(interval, start, n <,align>)` | Advance `start` by `n` intervals; align `b`(egin, default)/`m`(iddle)/`e`(nd)/`s`(ame). |
+
+**Format / informat**
+
+| Function | Result |
+|----------|--------|
+| `put(value, format.)` | The value rendered through a format (user VALUE format or built-in), returned as a character string — e.g. `put(score, scoreband.)` bands a number, `put(x, dollar10.2)` → `$1,234.00`. |
+| `input(string, informat.)` | A character string read through an informat (user INVALUE or built-in), returning the value — e.g. `input("1,234", comma8.)` → 1234, `input("15JAN2020", date9.)` → a SAS date. |
 
 ---
 

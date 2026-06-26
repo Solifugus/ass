@@ -104,6 +104,9 @@ type sourceRow struct {
 // A non-nil logger receives the standard post-step NOTE for each output dataset.
 func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error {
 	d := &dataStep{lib: lib, pdv: NewPDV(), logger: logger}
+	// Expose the run's format/informat catalogs to PUT()/INPUT() during eval.
+	d.pdv.formats = lib.Formats
+	d.pdv.informats = lib.Informats
 
 	// Resolve output datasets. An unnamed DATA step writes to WORK.DATA1 in SAS;
 	// we mirror that default. `data _null_;` declares no output (it runs for its

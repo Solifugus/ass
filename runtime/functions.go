@@ -6,8 +6,67 @@ import (
 	"strings"
 
 	"github.com/solifugus/ass/ast"
+	"github.com/solifugus/ass/formats"
 	"github.com/solifugus/ass/table"
 )
+
+// applyPutFormat renders v through a format spec for the PUT() function: a user
+// VALUE format from the catalog if one matches, otherwise the built-in formats.
+func applyPutFormat(cat *table.FormatCatalog, v table.Value, spec string) string {
+	if cat != nil && spec != "" {
+		key := strings.TrimSuffix(strings.ToLower(spec), ".")
+		if vf, ok := lookupUserFormatRT(cat, key); ok {
+			if label, matched := vf.Format(v); matched {
+				return label
+			}
+			return v.Display()
+		}
+	}
+	return formats.Apply(v, spec)
+}
+
+// lookupUserFormatRT finds a user format by name, retrying with trailing
+// display-width digits stripped (e.g. "agegrp8" -> "agegrp").
+func lookupUserFormatRT(cat *table.FormatCatalog, key string) (*table.ValueFormat, bool) {
+	if vf, ok := cat.Lookup(key); ok {
+		return vf, true
+	}
+	if bare := strings.TrimRight(key, "0123456789"); bare != key && bare != "" && bare != "$" {
+		return cat.Lookup(bare)
+	}
+	return nil, false
+}
+
+// applyInputInformat reads field through an informat spec for the INPUT()
+// function: a user INVALUE informat from the catalog if one matches, otherwise
+// the built-in informats.
+func applyInputInformat(cat *table.InformatCatalog, field, spec string) table.Value {
+	name := strings.TrimSuffix(strings.ToLower(spec), ".")
+	if cat != nil {
+		try := func(n string) (table.Value, bool) {
+			inf, ok := cat.Lookup(n)
+			if !ok {
+				return table.Value{}, false
+			}
+			if val, matched := inf.Parse(field); matched {
+				return val, true
+			}
+			if inf.Char {
+				return table.MissingChar(), true
+			}
+			return table.MissingNum(), true
+		}
+		if val, ok := try(name); ok {
+			return val
+		}
+		if bare := strings.TrimRight(name, "0123456789"); bare != name {
+			if val, ok := try(bare); ok {
+				return val
+			}
+		}
+	}
+	return formats.ParseInput(field, spec)
+}
 
 // evalCall evaluates a function call. Functions follow SAS conventions: the
 // aggregate functions (sum, mean, min, max, n) ignore missing arguments, while
@@ -118,6 +177,24 @@ func evalCall(e *ast.CallExpression, pdv *PDV) (table.Value, error) {
 		return intckFn(args)
 	case "intnx":
 		return intnxFn(args)
+	case "put":
+		// put(value, format.) -> the value rendered through the format, as a
+		// character string (user VALUE formats and built-in formats both apply).
+		if len(args) < 2 {
+			return table.MissingChar(), fmt.Errorf("put expects 2 arguments, got %d", len(args))
+		}
+		return table.Char(applyPutFormat(pdv.formats, args[0], args[1].Str)), nil
+	case "input":
+		// input(string, informat.) -> the string read through the informat (user
+		// INVALUE informats and built-in informats both apply).
+		if len(args) < 2 {
+			return table.MissingNum(), fmt.Errorf("input expects 2 arguments, got %d", len(args))
+		}
+		field := args[0].Str
+		if args[0].IsMissing() {
+			field = ""
+		}
+		return applyInputInformat(pdv.informats, field, args[1].Str), nil
 	default:
 		return table.MissingNum(), fmt.Errorf("unknown function %q", e.Func)
 	}

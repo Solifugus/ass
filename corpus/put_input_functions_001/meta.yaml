@@ -1,0 +1,27 @@
+id: put_input_functions_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - functions
+  - proc-format
+  - user-formats
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    scored:
+      columns: [score, raw, band, amount]
+      rows:
+        - [580, "1,234", "Poor", 1234]
+        - [700, "2,500", "Fair", 2500]
+        - [800, "9,999", "Good", 9999]
+priority: 2
+notes: |
+  PUT() and INPUT() functions. put(score, scoreband.) bands a numeric through a
+  user VALUE format (580->Poor, 700->Fair, 800->Good); input(raw, comma8.) reads
+  a character string through a built-in informat ("1,234"->1234). Exercises both
+  the user-format and built-in paths of the new functions.
