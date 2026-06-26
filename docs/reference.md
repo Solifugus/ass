@@ -356,6 +356,9 @@ quit;
   the engine; ends with `quit;`. See the README's build matrix.
 - Sources may be WORK datasets or a database libref; `create table` may target a
   database libref.
+- A result column carried through from a source column (same name) inherits that
+  column's format, so a bare `select` listing renders user/built-in formats as
+  PROC PRINT would; aggregates and renamed columns are unformatted.
 - **Pass-through:** `select ... from connection to LIB (native-sql)` runs SQL on
   the bound database server and returns the result. See
   [`databases.md`](databases.md).
@@ -518,4 +521,3 @@ Selected intentional deferrals (full list and rationale in
   (CLASS effects work via reference-cell coding).
 - Big-endian `.sas7bdat` files (little-endian, compressed and not, are read).
 - Multi-line PROC PRINT label-header wrapping (cosmetic).
-- User formats applied to PROC SQL *output* columns.

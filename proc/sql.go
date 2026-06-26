@@ -58,7 +58,12 @@ func (sqlProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 				logger.Error("PROC SQL: %v", err)
 				continue
 			}
-			emitListing(logger, ds, printOptions{}, "Query Result")
+			// A result column that carries through a source column's name inherits
+			// that column's format, so the listing renders user/built-in formats the
+			// same way PROC PRINT would (e.g. `select region from t` shows the $reg.
+			// labels). The format catalog resolves user VALUE/PICTURE formats.
+			inheritSourceFormats(ds, lib)
+			emitListing(logger, ds, printOptions{catalog: lib.Formats}, "Query Result")
 
 		case strings.HasPrefix(low, "create table"):
 			name := createdTableName(stmt)
@@ -124,6 +129,42 @@ func (sqlProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) e
 		}
 	}
 	return nil
+}
+
+// inheritSourceFormats copies each source column's assigned format onto a query
+// result column of the same name (when the result column has none yet). This is
+// how PROC SQL output picks up the format associated with a column in its source
+// table, matching SAS. Names are matched case-insensitively; the first source
+// dataset defining a format for a given name wins (a deterministic choice when
+// several tables share a column name).
+func inheritSourceFormats(ds *table.Dataset, lib *table.Library) {
+	if ds == nil || lib == nil {
+		return
+	}
+	srcFormats := map[string]string{}
+	for _, key := range lib.Names() {
+		src, ok := lib.Get(key)
+		if !ok {
+			continue
+		}
+		for _, c := range src.Columns {
+			if c.Format == "" {
+				continue
+			}
+			k := strings.ToLower(c.Name)
+			if _, seen := srcFormats[k]; !seen {
+				srcFormats[k] = c.Format
+			}
+		}
+	}
+	for i := range ds.Columns {
+		if ds.Columns[i].Format != "" {
+			continue
+		}
+		if f, ok := srcFormats[strings.ToLower(ds.Columns[i].Name)]; ok {
+			ds.Columns[i].Format = f
+		}
+	}
 }
 
 // splitStatements splits a PROC SQL body into individual statements on
