@@ -141,6 +141,9 @@ type InfileStatement struct {
 	Obs       int
 	Missover  bool
 	Truncover bool
+	Lrecl     int    // logical record length (0 = unset); records longer are truncated
+	Pad       bool   // pad short records with blanks to Lrecl (for column input)
+	End       string // name of the end-of-file flag variable (set to 1 on the last record)
 }
 
 func (in *InfileStatement) statementNode() {}
@@ -156,6 +159,7 @@ type FileStatement struct {
 	Path      string
 	Delimiter string
 	DSD       bool
+	Mod       bool // append to the file instead of overwriting it (MOD option)
 }
 
 func (f *FileStatement) statementNode() {}

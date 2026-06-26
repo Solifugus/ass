@@ -53,6 +53,25 @@ func WriteLines(path string, lines []string) error {
 	return nil
 }
 
+// AppendLines appends each line (followed by a newline) to path, creating the
+// file if it does not exist — the FILE statement's MOD option.
+func AppendLines(path string, lines []string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("%q: %w", path, err)
+	}
+	defer f.Close()
+	var b strings.Builder
+	for _, ln := range lines {
+		b.WriteString(ln)
+		b.WriteByte('\n')
+	}
+	if _, err := f.WriteString(b.String()); err != nil {
+		return fmt.Errorf("%q: %w", path, err)
+	}
+	return nil
+}
+
 // SplitDelim breaks one record into fields on the separator. With dsd=false a
 // run of consecutive delimiters collapses to one (SAS DLM-without-DSD behavior).
 // With dsd=true it uses CSV-style parsing: quoted fields may contain the

@@ -139,6 +139,13 @@ func RunDataStep(ds *ast.DataStep, lib *table.Library, logger *log.Logger) error
 		d.records = collectDatalines(ds.Body)
 	}
 	d.keep, d.drop = collectKeepDrop(ds.Body)
+	// The INFILE END= flag is a temporary variable, not written to the dataset.
+	if d.infile != nil && d.infile.End != "" {
+		if d.drop == nil {
+			d.drop = map[string]bool{}
+		}
+		d.drop[strings.ToLower(d.infile.End)] = true
+	}
 	d.formats = collectFormats(ds.Body)
 	d.labels = collectLabels(ds.Body)
 	d.rename = collectRename(ds.Body)
@@ -601,6 +608,7 @@ func (d *dataStep) execInput(st *ast.InputStatement) (flow, error) {
 		d.recPtr = base + consumed
 		d.holdCross, d.holdLine = false, false
 		d.recCursor = 1
+		d.setInfileEnd()
 		return d.applyWhere()
 	}
 	holding := d.holdCross || d.holdLine
@@ -641,7 +649,23 @@ func (d *dataStep) execInput(st *ast.InputStatement) (flow, error) {
 		d.recPtr++
 		d.recCursor = 1
 	}
+	d.setInfileEnd()
 	return d.applyWhere()
+}
+
+// setInfileEnd updates the INFILE END= flag (when one is named) to 1 if the
+// records are now exhausted — i.e. the record just read was the last — else 0.
+// While a line is held (`@`/`@@`), the record pointer advances only when the line
+// is consumed, so END= flips on the read that exhausts the file.
+func (d *dataStep) setInfileEnd() {
+	if d.infile == nil || d.infile.End == "" {
+		return
+	}
+	v := 0.0
+	if d.recPtr >= len(d.records) {
+		v = 1
+	}
+	d.pdv.Set(d.infile.End, table.Num(v))
 }
 
 // noMoreTokens reports whether the line has no further whitespace-delimited token
@@ -1304,7 +1328,11 @@ func findFile(stmts []ast.Statement) *ast.FileStatement {
 // per line with a trailing newline. A FILE with no PUT output still produces an
 // (empty) file, matching SAS.
 func writeFileOutput(f *ast.FileStatement, lines []string) error {
-	if err := flatfile.WriteLines(f.Path, lines); err != nil {
+	write := flatfile.WriteLines
+	if f.Mod {
+		write = flatfile.AppendLines // MOD: append to an existing file
+	}
+	if err := write(f.Path, lines); err != nil {
 		return fmt.Errorf("file %w", err)
 	}
 	return nil
@@ -1603,6 +1631,19 @@ func readInfile(in *ast.InfileStatement) ([]string, error) {
 	lines, err := flatfile.ReadLines(in.Path, in.Firstobs, in.Obs)
 	if err != nil {
 		return nil, fmt.Errorf("infile %w", err)
+	}
+	// LRECL= caps record length (longer records are truncated); PAD= then blank-pads
+	// short records out to LRECL so fixed-column INPUT reads past short lines.
+	if in.Lrecl > 0 {
+		for i, ln := range lines {
+			if len(ln) > in.Lrecl {
+				ln = ln[:in.Lrecl]
+			}
+			if in.Pad && len(ln) < in.Lrecl {
+				ln += strings.Repeat(" ", in.Lrecl-len(ln))
+			}
+			lines[i] = ln
+		}
 	}
 	return lines, nil
 }

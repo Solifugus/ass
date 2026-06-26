@@ -502,6 +502,34 @@ func TestParseInfileOptions(t *testing.T) {
 	}
 }
 
+func TestParseInfileOptionsTail(t *testing.T) {
+	body := dataBody(t, `data t; infile "d.dat" lrecl=80 pad end=eof; input x; run;`)
+	in, ok := body[0].(*ast.InfileStatement)
+	if !ok {
+		t.Fatalf("stmt 0 is %T, want *ast.InfileStatement", body[0])
+	}
+	if in.Lrecl != 80 {
+		t.Errorf("Lrecl = %d, want 80", in.Lrecl)
+	}
+	if !in.Pad {
+		t.Error("Pad = false, want true")
+	}
+	if in.End != "eof" {
+		t.Errorf("End = %q, want eof", in.End)
+	}
+}
+
+func TestParseFileMod(t *testing.T) {
+	body := dataBody(t, `data _null_; set s; file "out.txt" mod; put x; run;`)
+	fs, ok := body[1].(*ast.FileStatement)
+	if !ok {
+		t.Fatalf("stmt 1 is %T, want *ast.FileStatement", body[1])
+	}
+	if !fs.Mod {
+		t.Error("Mod = false, want true")
+	}
+}
+
 func TestParseFileAndPut(t *testing.T) {
 	body := dataBody(t, `data _null_; set s; file "out.csv" dsd dlm=","; put "row" name age dollar8.2; run;`)
 

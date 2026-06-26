@@ -1,0 +1,27 @@
+id: infile_end_001
+source: hand-written
+license: MIT
+features:
+  - infile
+  - data-step
+  - sum-statement
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    summary:
+      # Sum-statement variables (total, count) are registered ahead of the
+      # input variable, so the column order is total, count, value.
+      columns: [total, count, value]
+      rows:
+        # Only the last record (value=40) outputs; total = 10+20+30+40 = 100,
+        # count = 4. The END= flag variable `last` is temporary, not a column.
+        - [100, 4, 40]
+priority: 2
+notes: |
+  Reads an external file via `infile "@DIR@/nums.txt" end=last;`. The END= variable
+  `last` is 0 until the final record is read, then 1, so `if last then output;`
+  emits exactly one summary row. The sum statements accumulate total=100 and
+  count=4 across the four records. Verifies END= last-record detection, the running
+  sum, and that the END= variable is excluded from the output dataset.

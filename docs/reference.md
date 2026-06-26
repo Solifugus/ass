@@ -50,7 +50,7 @@ Comments: `/* ... */` and `* ... ;`.
 | `data NAME ... ;` | Open a step; one or more output datasets. `data _null_;` produces none. |
 | `input ...;` | Read fields from `datalines`/`infile` into the PDV. See [INPUT](#input--reading-data). |
 | `datalines;` / `cards;` | Begin inline data; the block ends at a line containing only `;`. |
-| `infile "path" <opts>;` | Read an external flat file. Options: `dlm=`/`delimiter=`, `dsd`, `firstobs=`, `obs=`. |
+| `infile "path" <opts>;` | Read an external flat file. Options: `dlm=`/`delimiter=`, `dsd`, `firstobs=`, `obs=`, `lrecl=`, `pad`, `end=`. |
 | `set DS <(opts)>;` | Read rows from an existing dataset. |
 | `merge DS1<(in=a)> DS2<(in=b)>;` | Match-merge by the following `by`; `in=` flags row provenance. |
 | `by VAR <descending VAR> ...;` | Define BY groups; activates `first.VAR`/`last.VAR`. |
@@ -67,7 +67,7 @@ Comments: `/* ... */` and `* ... ;`.
 | `rename old=new ...;` | Rename variables in the output dataset(s). Within the step the original names are used; the rename applies when the output is written (the `rename=` dataset option is the other form). |
 | `format VAR fmt. ...;` | Attach output formats. |
 | `label VAR="text" ...;` | Attach variable labels. |
-| `file "path" <opts>;` | Direct `put` output to a file. Options: `dlm=`, `dsd`. |
+| `file "path" <opts>;` | Direct `put` output to a file. Options: `dlm=`, `dsd`, `mod` (append). |
 | `put ...;` | Write to the current `file` (or the log). See [PUT](#put--file--writing-flat-files). |
 
 When no explicit `output` appears, the step writes one row at the bottom of each
@@ -93,14 +93,17 @@ iteration.
 
 `infile` options: `dlm=`/`delimiter="c"` (field separator), `dsd` (CSV rules —
 quoted fields, embedded delimiters, two delimiters ⇒ missing), `firstobs=n`
-(start line), `obs=n` (last line).
+(start line), `obs=n` (last line), `lrecl=n` (record-length cap), `pad`
+(blank-pad short records to `lrecl` for column input), `end=var` (a temporary
+flag set to 1 on the last record, excluded from the output dataset).
 
 ---
 
 ## PUT / FILE — writing flat files
 
-`file "path"` selects the output file (options `dlm=`, `dsd`); `put` writes to
-it. `data _null_;` is the usual host for file-writing steps.
+`file "path"` selects the output file (options `dlm=`, `dsd`, `mod` to append
+instead of overwrite); `put` writes to it. `data _null_;` is the usual host for
+file-writing steps.
 
 | `put` form | Effect |
 |------------|--------|

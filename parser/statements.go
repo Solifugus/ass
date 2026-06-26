@@ -547,6 +547,30 @@ func (p *Parser) parseInfile() ast.Statement {
 				stmt.Obs = atoiSafe(p.cur.Literal)
 				p.next()
 			}
+		case "lrecl":
+			p.next()
+			if p.curIs(lexer.EQ) {
+				p.next()
+			}
+			if p.curIs(lexer.NUMBER) {
+				stmt.Lrecl = atoiSafe(p.cur.Literal)
+				p.next()
+			}
+		case "pad":
+			stmt.Pad = true
+			p.next()
+		case "nopad":
+			stmt.Pad = false
+			p.next()
+		case "end":
+			p.next()
+			if p.curIs(lexer.EQ) {
+				p.next()
+			}
+			if p.curIs(lexer.IDENT) {
+				stmt.End = p.cur.Literal
+				p.next()
+			}
 		default:
 			p.next()
 		}
@@ -582,6 +606,9 @@ func (p *Parser) parseFile() ast.Statement {
 			}
 		case "dsd":
 			stmt.DSD = true
+			p.next()
+		case "mod":
+			stmt.Mod = true
 			p.next()
 		default:
 			p.next()
