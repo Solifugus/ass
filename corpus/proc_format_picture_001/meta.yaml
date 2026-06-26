@@ -1,0 +1,27 @@
+id: proc_format_picture_001
+source: hand-written
+license: MIT
+features:
+  - proc-format
+  - user-formats
+  - functions
+  - data-step
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    formatted:
+      columns: [damt, dph, dpc, zid]
+      rows:
+        - ["$1,234.50", "555-1234", "7.3%", "000042"]
+        - ["$58.07", "123-4567", "100.0%", "000007"]
+priority: 2
+notes: |
+  PROC FORMAT PICTURE templates rendered via put() (stripped of leading picture
+  blanks). dollars '000,000,009.99' (prefix='$'): default mult 100, comma grouping,
+  leading zero-suppression -> $1,234.50 / $58.07. phone '000-0000': all-suppress
+  selectors with a dash message char, value fills every selector -> 555-1234.
+  pct '009.9%': default mult 10, trailing % message char -> 7.3% / 100.0%.
+  zid '000000' (mult=1 fill='0'): integer scale, zero-fill leading positions ->
+  000042 / 000007.

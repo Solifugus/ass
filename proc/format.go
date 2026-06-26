@@ -13,8 +13,8 @@ func init() { Register("format", formatProc{}) }
 
 // formatProc implements PROC FORMAT: it registers user-defined VALUE formats in
 // the library's format catalog so later steps (e.g. PROC PRINT) can render
-// values through them. Only the VALUE statement is supported (PICTURE, INVALUE,
-// and format catalogs on disk are not).
+// values through them. VALUE, INVALUE (user informats), and PICTURE (output
+// templates) statements are supported; format catalogs on disk are not.
 type formatProc struct{}
 
 func (formatProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) error {
@@ -38,9 +38,13 @@ func (formatProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger
 			logger.Note("Informat %s has been output.", strings.ToUpper(strings.TrimPrefix(vs.Name, "$")))
 			continue
 		}
-		vf := &table.ValueFormat{Name: vs.Name, Char: vs.Char}
+		vf := &table.ValueFormat{Name: vs.Name, Char: vs.Char, Picture: vs.Picture}
 		for _, r := range vs.Ranges {
-			vf.Ranges = append(vf.Ranges, convertRange(r, vs.Char))
+			cr := convertRange(r, vs.Char)
+			if vs.Picture {
+				applyPictureOptions(&cr, r)
+			}
+			vf.Ranges = append(vf.Ranges, cr)
 		}
 		lib.Formats.Define(vf)
 		logger.Note("Format %s has been output.", strings.ToUpper(strings.TrimPrefix(vs.Name, "$")))
@@ -102,6 +106,20 @@ func convertRange(r ast.ValueRange, char bool) table.FormatRange {
 	out.Low = boundValue(r.Low, char)
 	out.High = boundValue(r.High, char)
 	return out
+}
+
+// applyPictureOptions copies a PICTURE range's parenthesized options (prefix,
+// mult, fill) from the parsed AST range onto the table.FormatRange.
+func applyPictureOptions(cr *table.FormatRange, r ast.ValueRange) {
+	cr.Prefix = r.Prefix
+	if r.Mult != "" {
+		if m, err := strconv.ParseFloat(r.Mult, 64); err == nil {
+			cr.Mult = m
+		}
+	}
+	if r.Fill != "" {
+		cr.Fill = r.Fill[0]
+	}
 }
 
 // boundValue converts a range-bound's source text to a table.Value.

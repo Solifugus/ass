@@ -1,6 +1,10 @@
 package table
 
-import "strings"
+import (
+	"math"
+	"strconv"
+	"strings"
+)
 
 // FormatRange is one mapping in a user-defined VALUE format: input values that
 // fall in the range render as Label. A range is either a single value, a
@@ -15,14 +19,21 @@ type FormatRange struct {
 	HighExcl bool  // upper bound is exclusive (`a -< b`)
 	Other    bool  // catch-all `other=`
 	Label    string
+
+	// PICTURE per-range options. Label holds the digit-selector template; these
+	// refine its rendering. Mult==0 means "use the template's default multiplier".
+	Prefix string
+	Mult   float64
+	Fill   byte
 }
 
 // ValueFormat is a user-defined format created by PROC FORMAT's VALUE statement.
 // Char is true for a character format (its name began with `$`).
 type ValueFormat struct {
-	Name   string
-	Char   bool
-	Ranges []FormatRange
+	Name    string
+	Char    bool
+	Picture bool // a PICTURE format: matched labels are digit-selector templates
+	Ranges  []FormatRange
 }
 
 // Format returns the label for v if it matches one of the format's ranges. The
@@ -40,13 +51,26 @@ func (vf *ValueFormat) Format(v Value) (string, bool) {
 			continue
 		}
 		if r.matches(v, vf.Char) {
-			return r.Label, true
+			return vf.render(r, v), true
 		}
 	}
 	if other != nil {
-		return other.Label, true
+		return vf.render(other, v), true
 	}
 	return "", false
+}
+
+// render produces the output text for value v matched by range r. For a PICTURE
+// format the matched label is a digit-selector template; otherwise the label is
+// returned verbatim.
+func (vf *ValueFormat) render(r *FormatRange, v Value) string {
+	if vf.Picture && !vf.Char {
+		if v.IsMissing() {
+			return " "
+		}
+		return r.renderPicture(v.Num)
+	}
+	return r.Label
 }
 
 // matches reports whether v falls within range r.
@@ -72,6 +96,105 @@ func (r *FormatRange) matches(v Value, char bool) bool {
 		}
 	}
 	return true
+}
+
+// renderPicture renders a non-negative-magnitude numeric value through this
+// range's PICTURE template (held in Label). Digit selectors (0-9) are positions
+// the value's digits fill right to left; a selector of 0 zero-suppresses leading
+// positions (printed as the fill char, blank by default) while a nonzero selector
+// forces printing from its position rightward. Non-selector characters are
+// message characters, printed only once significant digits have begun. The value
+// is scaled by Mult (default: 10^(selectors after the decimal point)) and rounded
+// to an integer before mapping. Prefix is inserted just before the first printed
+// digit. The sign is dropped, matching SAS picture behavior.
+func (r *FormatRange) renderPicture(num float64) string {
+	tmpl := r.Label
+	// Locate digit-selector positions and count those after a decimal point.
+	var sel []int
+	decimals, seenDot := 0, false
+	for i := 0; i < len(tmpl); i++ {
+		c := tmpl[i]
+		switch {
+		case c >= '0' && c <= '9':
+			sel = append(sel, i)
+			if seenDot {
+				decimals++
+			}
+		case c == '.':
+			seenDot = true
+		}
+	}
+	d := len(sel)
+	if d == 0 {
+		return tmpl // no digit selectors: a constant picture
+	}
+
+	mult := r.Mult
+	if mult == 0 {
+		mult = math.Pow(10, float64(decimals))
+	}
+	scaled := int64(math.Round(math.Abs(num) * mult))
+	digits := strconv.FormatInt(scaled, 10)
+	switch {
+	case len(digits) < d:
+		digits = strings.Repeat("0", d-len(digits)) + digits
+	case len(digits) > d:
+		digits = digits[len(digits)-d:] // overflow: keep the low-order d digits
+	}
+
+	// firstSig: index of the first significant (nonzero) digit in the padded value.
+	firstSig := d
+	for k := 0; k < d; k++ {
+		if digits[k] != '0' {
+			firstSig = k
+			break
+		}
+	}
+	// forceFrom: index of the first nonzero digit selector (forces printing).
+	forceFrom := d
+	for k := 0; k < d; k++ {
+		if tmpl[sel[k]] != '0' {
+			forceFrom = k
+			break
+		}
+	}
+	startPrint := firstSig
+	if forceFrom < startPrint {
+		startPrint = forceFrom
+	}
+
+	fill := byte(' ')
+	if r.Fill != 0 {
+		fill = r.Fill
+	}
+
+	var b strings.Builder
+	selIdx, started, prefixed := 0, false, false
+	for i := 0; i < len(tmpl); i++ {
+		c := tmpl[i]
+		if c >= '0' && c <= '9' {
+			k := selIdx
+			selIdx++
+			if k >= startPrint {
+				if !prefixed {
+					b.WriteString(r.Prefix)
+					prefixed = true
+				}
+				b.WriteByte(digits[k])
+				started = true
+			} else {
+				b.WriteByte(fill)
+			}
+			continue
+		}
+		// Message character: shown once printing has begun, else blanked.
+		if started {
+			b.WriteByte(c)
+		} else {
+			b.WriteByte(fill)
+		}
+	}
+	return b.String()
 }
 
 // FormatCatalog holds the user-defined formats for one run, keyed by lowercased

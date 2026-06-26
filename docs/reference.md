@@ -384,11 +384,16 @@ proc format;
   value agegrp low-17="minor" 18-high="adult" other="?";
   value $reg "N"="North" "S"="South";
   invalue yn "Y"=1 "N"=0;
+  picture dollars low-high='000,000,009.99' (prefix='$');
 run;
 ```
 - `value` — output formats: numeric ranges, `low`/`high`, `other`, and `$`
   character formats. Applied in PROC PRINT and for grouping in FREQ/MEANS.
 - `invalue` — user informats read by `input`.
+- `picture` — output picture templates: digit selectors (`0`-`9`; a `0` selector
+  zero-suppresses leading positions, a nonzero selector forces printing) with
+  literal message characters, scaled by a default or `mult=` multiplier; options
+  `prefix=`, `mult=`, `fill=`. Applied in PROC PRINT and via `put()`.
 
 ### PROC PROOF
 
@@ -507,7 +512,6 @@ ass test --coverage corpus/   # per-feature value-verification backlog (gaps fir
 Selected intentional deferrals (full list and rationale in
 [`COMPATIBILITY.md`](COMPATIBILITY.md)):
 
-- `PROC FORMAT PICTURE` (output-only picture formats).
 - The default stratified PROC FREQ n-way layout (only `/ list` and `/ chisq`),
   and association statistics beyond Pearson chi-square.
 - SAS GLM's generalized-inverse parameterization, Type I/III SS, and LSMEANS

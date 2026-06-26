@@ -1101,9 +1101,11 @@ func (p *Parser) parseProcStatement() ast.Statement {
 	case p.identIs("model"):
 		return p.parseModel()
 	case p.identIs("value"):
-		return p.parseValueStmt(false)
+		return p.parseValueStmt(false, false)
 	case p.identIs("invalue"):
-		return p.parseValueStmt(true)
+		return p.parseValueStmt(true, false)
+	case p.identIs("picture"):
+		return p.parseValueStmt(false, true)
 	default:
 		return p.parseRawStatement()
 	}
@@ -1336,9 +1338,9 @@ func (p *Parser) parseProofTail(s *ast.ProofStatement) {
 // statement into a ValueStatement. Ranges may be single values, `low`/`high`
 // open-ended or exclusive (`a <- b`, `a -< b`) intervals, comma lists (each
 // value shares the label), or the catch-all `other`.
-func (p *Parser) parseValueStmt(invalue bool) ast.Statement {
-	p.next() // 'value' / 'invalue'
-	stmt := &ast.ValueStatement{Invalue: invalue}
+func (p *Parser) parseValueStmt(invalue, picture bool) ast.Statement {
+	p.next() // 'value' / 'invalue' / 'picture'
+	stmt := &ast.ValueStatement{Invalue: invalue, Picture: picture}
 	if p.curIs(lexer.DOLLAR) {
 		stmt.Char = true
 		stmt.Name = "$"
@@ -1361,8 +1363,16 @@ func (p *Parser) parseValueStmt(invalue bool) ast.Statement {
 				label = p.cur.Literal
 				p.next()
 			}
+			// PICTURE templates may be followed by `(prefix='$' mult=n fill='x')`.
+			var prefix, mult, fill string
+			if picture && p.curIs(lexer.LPAREN) {
+				prefix, mult, fill = p.parsePictureOptions()
+			}
 			for i := range pending {
 				pending[i].Label = label
+				pending[i].Prefix = prefix
+				pending[i].Mult = mult
+				pending[i].Fill = fill
 			}
 			stmt.Ranges = append(stmt.Ranges, pending...)
 			pending = nil
@@ -1377,6 +1387,39 @@ func (p *Parser) parseValueStmt(invalue bool) ast.Statement {
 	}
 	p.expectSemicolon()
 	return stmt
+}
+
+// parsePictureOptions parses a PICTURE range's parenthesized option list, e.g.
+// `(prefix='$' mult=100 fill='0')`. Unknown options are skipped. The opening
+// paren is current on entry; the closing paren is consumed on exit.
+func (p *Parser) parsePictureOptions() (prefix, mult, fill string) {
+	p.next() // '('
+	for !p.curIs(lexer.RPAREN) && !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) {
+		if p.curIs(lexer.IDENT) && p.peek.Type == lexer.EQ {
+			key := strings.ToLower(p.cur.Literal)
+			p.next() // key
+			p.next() // '='
+			val := ""
+			if p.curIs(lexer.STRING) || p.curIs(lexer.NUMBER) || p.curIs(lexer.IDENT) {
+				val = p.cur.Literal
+				p.next()
+			}
+			switch key {
+			case "prefix":
+				prefix = val
+			case "mult", "multiplier":
+				mult = val
+			case "fill":
+				fill = val
+			}
+			continue
+		}
+		p.next() // skip stray token
+	}
+	if p.curIs(lexer.RPAREN) {
+		p.next()
+	}
+	return prefix, mult, fill
 }
 
 // parseRangeItem parses a single range (one endpoint, or `lo - hi`, or `other`).

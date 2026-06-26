@@ -531,6 +531,10 @@ type ValueRange struct {
 	HighExcl bool
 	Other    bool
 	Label    string
+	// PICTURE per-range options (from the parenthesized list after the template).
+	Prefix string
+	Mult   string
+	Fill   string
 }
 
 // ValueStatement is `value [$]name <range>=<label> ...;` inside PROC FORMAT. It
@@ -541,6 +545,7 @@ type ValueStatement struct {
 	Name    string
 	Char    bool
 	Invalue bool
+	Picture bool // the statement was `picture` (labels are output picture templates)
 	Ranges  []ValueRange
 }
 

@@ -364,6 +364,39 @@ run;`
 	}
 }
 
+func TestParsePictureStatement(t *testing.T) {
+	src := `proc format;
+  picture dollars low-high = '000,000,009.99' (prefix='$');
+  picture zfill   other    = '000000' (mult=1 fill='0');
+run;`
+	p := New(src)
+	prog := p.ParseProgram()
+	if errs := p.Errors(); len(errs) != 0 {
+		t.Fatalf("parse errors: %v", errs)
+	}
+	ps := prog.Steps[0].(*ast.ProcStep)
+	var vals []*ast.ValueStatement
+	for _, s := range ps.Body {
+		if v, ok := s.(*ast.ValueStatement); ok {
+			vals = append(vals, v)
+		}
+	}
+	if len(vals) != 2 {
+		t.Fatalf("got %d picture statements, want 2", len(vals))
+	}
+	d := vals[0]
+	if !d.Picture || d.Name != "dollars" {
+		t.Errorf("dollars: picture=%v name=%q", d.Picture, d.Name)
+	}
+	if len(d.Ranges) != 1 || d.Ranges[0].Label != "000,000,009.99" || d.Ranges[0].Prefix != "$" {
+		t.Errorf("dollars range wrong: %+v", d.Ranges)
+	}
+	z := vals[1]
+	if !z.Picture || z.Ranges[0].Mult != "1" || z.Ranges[0].Fill != "0" {
+		t.Errorf("zfill options wrong: %+v", z.Ranges)
+	}
+}
+
 func TestParseTablesCrossing(t *testing.T) {
 	src := `proc freq data=d; tables a b c*d / nocol; run;`
 	p := New(src)
