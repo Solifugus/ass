@@ -1479,7 +1479,16 @@ func (p *Parser) parseTables() ast.Statement {
 	// (`opt=...`) are recorded by name only.
 	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
 		if p.curIs(lexer.IDENT) {
-			stmt.Options = append(stmt.Options, strings.ToLower(p.cur.Literal))
+			name := strings.ToLower(p.cur.Literal)
+			if name == "out" && p.peek.Type == lexer.EQ {
+				p.next() // '='
+				p.next() // dataset name
+				if p.curIs(lexer.IDENT) {
+					stmt.Out = p.cur.Literal
+				}
+			} else {
+				stmt.Options = append(stmt.Options, name)
+			}
 		}
 		p.next()
 	}

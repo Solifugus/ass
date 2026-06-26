@@ -93,8 +93,49 @@ func (freqProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger) 
 			}
 			fmt.Fprintln(logger.Listing())
 		}
+
+		// `/ out=<name>` writes the table to a dataset (SAS shape: the table
+		// variable(s), COUNT, PERCENT — one row per observed combination/cell).
+		if req.opts != nil && req.opts.Out != "" {
+			res := buildFreqResultN(src, req.vars, fmtFor, fmtdFor)
+			outDS := freqOutDataset(res, req.vars, datasetName(req.opts.Out))
+			if err := lib.Store(req.opts.Out, outDS); err != nil {
+				logger.Error("PROC FREQ: %v", err)
+			} else {
+				logger.Note("The data set WORK.%s has %d observations and %d variables.",
+					strings.ToUpper(datasetName(req.opts.Out)), outDS.NObs(), len(outDS.Columns))
+			}
+		}
 	}
 	return nil
+}
+
+// freqOutDataset converts a built frequency table (category columns + Frequency/
+// Percent) into the SAS `out=` shape: the classification variable(s) followed by
+// COUNT and PERCENT, one row per observed combination.
+func freqOutDataset(res *table.Dataset, vars []string, name string) *table.Dataset {
+	out := table.NewDataset("", name)
+	for _, v := range vars {
+		kind := table.Character
+		for _, c := range res.Columns {
+			if strings.EqualFold(c.Name, v) {
+				kind = c.Kind
+			}
+		}
+		out.AddColumn(table.Column{Name: v, Kind: kind})
+	}
+	out.AddColumn(table.Column{Name: "COUNT", Kind: table.Numeric})
+	out.AddColumn(table.Column{Name: "PERCENT", Kind: table.Numeric})
+	for _, r := range res.Rows {
+		nr := table.Row{}
+		for _, v := range vars {
+			nr[strings.ToLower(v)] = res.Get(r, v)
+		}
+		nr["count"] = res.Get(r, "Frequency")
+		nr["percent"] = res.Get(r, "Percent")
+		out.AppendRow(nr)
+	}
+	return out
 }
 
 // applyFreqOptions drops result columns suppressed by `/ options`: nofreq removes

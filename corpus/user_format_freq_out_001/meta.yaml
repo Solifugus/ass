@@ -1,0 +1,26 @@
+id: user_format_freq_out_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - proc-format
+  - user-formats
+  - proc-freq
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    rf:
+      columns: [region, COUNT, PERCENT]
+      rows:
+        - ["East", 3, 60]
+        - ["West", 2, 40]
+priority: 2
+notes: |
+  PROC FREQ groups by the user VALUE format ($reg: e->East, w->West), and `out=`
+  captures the grouped result so the formatted categories are value-verifiable:
+  East=3 (60%), West=2 (40%). Regression for user-format grouping (previously only
+  observable in the printed listing, not in a dataset).

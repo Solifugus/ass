@@ -1,0 +1,31 @@
+id: proc_freq_out_001
+source: hand-written
+license: MIT
+features:
+  - data-step
+  - input
+  - datalines
+  - proc-freq
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    onef:
+      columns: [region, COUNT, PERCENT]
+      rows:
+        - ["e", 3, 60]
+        - ["w", 2, 40]
+    twof:
+      columns: [region, product, COUNT, PERCENT]
+      rows:
+        - ["e", "a", 2, 40]
+        - ["e", "b", 1, 20]
+        - ["w", "a", 1, 20]
+        - ["w", "b", 1, 20]
+priority: 2
+notes: |
+  PROC FREQ `tables / out=` writes the frequency table to a dataset (SAS shape:
+  classification variable(s) + COUNT + PERCENT, one row per observed cell). One-way
+  ONEF: e=3 (60%), w=2 (40%). Two-way TWOF: one row per (region,product) cell.
+  Regression for value-verifying PROC FREQ results (the PROC otherwise only prints).

@@ -46,6 +46,38 @@ func TestParseRenameAsVariable(t *testing.T) {
 	}
 }
 
+func TestParseTablesOut(t *testing.T) {
+	// `/ out=<name>` is captured into Out (not treated as an option), while other
+	// options after the slash are still recorded.
+	p := New("proc freq data=s; tables a*b / out=counts chisq; run;")
+	prog := p.ParseProgram()
+	if errs := p.Errors(); len(errs) != 0 {
+		t.Fatalf("parse errors: %v", errs)
+	}
+	ps, ok := prog.Steps[0].(*ast.ProcStep)
+	if !ok {
+		t.Fatalf("step 0 is %T, want *ast.ProcStep", prog.Steps[0])
+	}
+	var ts *ast.TablesStatement
+	for _, s := range ps.Body {
+		if t2, ok := s.(*ast.TablesStatement); ok {
+			ts = t2
+		}
+	}
+	if ts == nil {
+		t.Fatalf("no TablesStatement parsed; body = %v", ps.Body)
+	}
+	if ts.Out != "counts" {
+		t.Errorf("Out = %q, want counts", ts.Out)
+	}
+	if !ts.HasOption("chisq") {
+		t.Errorf("chisq option lost; options = %v", ts.Options)
+	}
+	if ts.HasOption("out") {
+		t.Errorf("out should be captured into Out, not left as an option: %v", ts.Options)
+	}
+}
+
 func TestParseAssignmentAndInput(t *testing.T) {
 	body := dataBody(t, "data s; input item $ qty price; total = qty * price; run;")
 	if len(body) != 2 {

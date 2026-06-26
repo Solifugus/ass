@@ -546,6 +546,8 @@ type TablesStatement struct {
 	// Options holds the `/ options` tail (lowercased), e.g. nocol/norow/
 	// nopercent/nocum/nofreq/list/chisq.
 	Options []string
+	// Out is the `/ out=<name>` output dataset (unqualified member), "" if absent.
+	Out string
 }
 
 // HasOption reports whether the tables `/ options` tail included opt.
