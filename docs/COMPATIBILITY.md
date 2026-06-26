@@ -100,10 +100,11 @@ passing cosmetic check.
 days since 1960-01-01, datetime = seconds since then, time = seconds since
 midnight): `today`/`date`, `datetime`, `time`, `mdy` (returns missing for invalid
 dates like 30FEB), `year`/`month`/`day`/`qtr`/`weekday` (Sunday=1), `datepart`/
-`timepart`, `hms`/`dhms`, `intck` and `intnx` over the base intervals
-`day`/`week`/`month`/`qtr`/`year` (`intnx` alignments `b`/`m`/`e`/`s`). Missing
-arguments propagate. Not yet: multi-unit/shifted interval names (`month2`,
-`week.2`) and datetime intervals (`dtday`, `hour`, …).
+`timepart`, `hms`/`dhms`, `intck` and `intnx` over the intervals
+`day`/`week`/`month`/`qtr`/`semiyear`/`year`/`hour`/`minute`/`second`, including
+multipliers (`month2`), shifts (`week.2`), and `dt`-prefixed datetime intervals
+(`dtday`, `dtmonth`) — `intnx` alignments `b`/`m`/`e`/`s`. Missing arguments
+propagate.
 
 ## Value-adds beyond SAS
 

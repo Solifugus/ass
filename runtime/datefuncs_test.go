@@ -116,6 +116,51 @@ func TestIntnx(t *testing.T) {
 	wantNum(t, "intnx day", v, err, 105)
 }
 
+func TestIntervalAdvanced(t *testing.T) {
+	const (
+		jan15 = 21929.0 // 15JAN2020 (a date)
+		day   = 86400.0
+		wed   = 5.0     // 1960-01-06 is a Wednesday (day 0 = Friday)
+		t1430 = 52200.0 // 14:30:00 in seconds since midnight
+	)
+
+	// Multiplier: MONTH2 partitions into bimonthly Jan/Mar/May/... runs.
+	v, err := intnxFn([]table.Value{table.Char("month2"), table.Num(jan15), table.Num(1)})
+	wantNum(t, "intnx month2 begin", v, err, 21975) // 01MAR2020
+	v, err = intckFn([]table.Value{table.Char("month2"), table.Num(jan15), table.Num(22036)})
+	wantNum(t, "intck month2", v, err, 2) // 15JAN -> 01MAY = 2 bimonthly boundaries
+
+	// Shift: WEEK.2 starts weeks on Monday (vs Sunday for plain WEEK).
+	v, err = intnxFn([]table.Value{table.Char("week"), table.Num(wed), table.Num(0)})
+	wantNum(t, "intnx week begin (Sunday)", v, err, 2) // 1960-01-03 Sun
+	v, err = intnxFn([]table.Value{table.Char("week.2"), table.Num(wed), table.Num(0)})
+	wantNum(t, "intnx week.2 begin (Monday)", v, err, 3) // 1960-01-04 Mon
+
+	// SEMIYEAR: half-year runs Jan/Jul.
+	v, err = intnxFn([]table.Value{table.Char("semiyear"), table.Num(jan15), table.Num(1)})
+	wantNum(t, "intnx semiyear begin", v, err, 22097) // 01JUL2020
+
+	// DT-prefixed calendar intervals operate on datetime (seconds) values.
+	v, err = intckFn([]table.Value{table.Char("dtday"), table.Num(jan15 * day), table.Num((jan15 + 3) * day)})
+	wantNum(t, "intck dtday", v, err, 3)
+	v, err = intnxFn([]table.Value{table.Char("dtmonth"), table.Num(jan15 * day), table.Num(1)})
+	wantNum(t, "intnx dtmonth begin", v, err, 21946*day) // 01FEB2020 00:00:00
+
+	// Sub-day intervals: hour / minute / second on seconds values.
+	v, err = intnxFn([]table.Value{table.Char("hour"), table.Num(t1430), table.Num(2)})
+	wantNum(t, "intnx hour begin", v, err, 57600) // 16:00:00
+	v, err = intnxFn([]table.Value{table.Char("hour"), table.Num(t1430), table.Num(0), table.Char("e")})
+	wantNum(t, "intnx hour end", v, err, 53999) // 14:59:59
+	v, err = intckFn([]table.Value{table.Char("hour"), table.Num(t1430), table.Num(t1430 + 2*3600)})
+	wantNum(t, "intck hour", v, err, 2)
+	v, err = intnxFn([]table.Value{table.Char("minute"), table.Num(90), table.Num(1)})
+	wantNum(t, "intnx minute begin", v, err, 120) // 00:02:00
+
+	// Multiplier on hours: HOUR3 partitions the day into 3-hour runs from midnight.
+	v, err = intnxFn([]table.Value{table.Char("hour3"), table.Num(t1430), table.Num(1)})
+	wantNum(t, "intnx hour3 begin", v, err, 54000) // 14:30 in [12:00,15:00) -> next run 15:00
+}
+
 func TestTodayIsSane(t *testing.T) {
 	v, err := todayFn(nil)
 	if err != nil || v.IsMissing() {

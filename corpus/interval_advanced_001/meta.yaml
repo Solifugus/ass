@@ -1,0 +1,26 @@
+id: interval_advanced_001
+source: hand-written
+license: MIT
+features:
+  - functions
+  - date-functions
+  - data-step
+  - date-literals
+expected:
+  parse: pass
+  execute: pass
+  output: unverified
+  datasets:
+    ivals:
+      columns: [bimo, bimock, sunwk, monwk, semiyr, dtdaynum, dtck, hr, hrck, mn]
+      rows:
+        - [21975, 2, 21926, 21927, 22097, 21932, 3, 57600, 2, 120]
+priority: 2
+notes: |
+  Advanced intck/intnx interval forms, all derived from d='15JAN2020'd (day 21929,
+  a Wednesday). Multiplier: intnx('month2',d,1)=21975 (01MAR2020, bimonthly
+  Jan/Mar/May) and intck('month2',d,'01MAY2020'd)=2. Shift: intnx('week',d,0)=21926
+  (Sun 12JAN) vs intnx('week.2',d,0)=21927 (Mon 13JAN). SEMIYEAR:
+  intnx('semiyear',d,1)=22097 (01JUL2020). Datetime: dtday over a dhms datetime,
+  datepart of intnx('dtday',dt,3)=21932 and intck('dtday',...)=3. Sub-day:
+  intnx('hour',52200,2)=57600 (16:00:00), intck('hour',...)=2, intnx('minute',90,1)=120.

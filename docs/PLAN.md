@@ -61,7 +61,7 @@ Phase-17 stats tier tractable.
 
 ### Phase 14 — Language & format primitives (foundation for reporting)
 - [x] **`PUT()` / `INPUT()` functions** — done 2026-06-25: `put(value, format.)` → value through a user/built-in format (char); `input(string, informat.)` → string through a user/built-in informat (value). Parser captures the format-spec arg verbatim; catalogs threaded via the PDV. Corpus `put_input_functions_001` + unit tests.
-- [ ] **`intck` / `intnx` advanced interval forms** — multi-unit & shifted (`month2`, `week.2`) and datetime intervals (`dtday`, `dtmonth`, `hour`, `minute`, `second`); base date intervals already done
+- [x] **`intck` / `intnx` advanced interval forms** — done 2026-06-25: unified grid model handles multipliers (`month2`), shifts (`week.2`), `dt`-prefixed datetime intervals (`dtday`/`dtmonth`), the `semiyear` interval, and sub-day intervals (`hour`/`minute`/`second`). Corpus `interval_advanced_001` + `TestIntervalAdvanced`.
 - [ ] **`proc format` PICTURE templates** (output-only picture formats)
 - [ ] **User formats applied to PROC SQL output columns**
 - [ ] **Multi-line PROC PRINT label-header wrapping** (the pending cosmetic; long-deferred)
@@ -1088,3 +1088,9 @@ Append newest entries at the bottom. One entry per work session/step. Format:
 - `runtime.applyPutFormat` / `applyInputInformat` reuse the existing `formats.Apply` / `formats.ParseInput` and the user catalogs (mirrors `proc.applyFmt`).
 - Verification: `runtime.TestEvalPutInput` (user format, built-in format, comma + date9 informats) + corpus `put_input_functions_001` (banding + comma informat, value-verified). gofmt/build/vet/test clean both CGO modes; corpus **67/67**, value-verified **47/47**; coverage unchanged at 2 gaps (proc-reg/glm).
 - Docs: reference.md (function count 47→49 + put/input entries), README, CLAUDE.md updated.
+
+### 2026-06-25 — Phase 14: intck / intnx advanced interval forms
+- Replaced the per-interval switch in `intck`/`intnx` with a **unified grid model** (`runtime.intervalSpec`): every interval partitions a one-dimensional grid (months, days, or fixed-size seconds) into runs of `period` grid units offset by `offset` units. `intck` = difference of run ordinals; `intnx` = jump `n` runs then align (`b`/`m`/`e`/`s`). The new model reproduces all prior base-interval behavior (existing `TestIntck`/`TestIntnx` unchanged and green) and generalizes cleanly.
+- Now supported on the interval name: **multipliers** (`month2` = bimonthly, `hour3` = 3-hour runs), **shifts** (`week.2` = weeks starting Monday, `qtr.2`, `year.4` fiscal-year start), the **`semiyear`** interval, **`dt`-prefixed datetime intervals** (`dtday`/`dtmonth`/`dtqtr`/`dtyear` — a calendar interval applied to datetime/seconds values, scaled by 86400), and **sub-day intervals** (`hour`/`minute`/`second`) over time/datetime values. `parser`-free — all handled in `runtime/datefuncs.go` via `parseInterval` (name → multiplier/shift/dt).
+- Verification: `runtime.TestIntervalAdvanced` (hand-derived: month2→01MAR2020, week vs week.2 = Sun/Mon, semiyear→01JUL2020, dtday/dtmonth, hour/minute, hour3) + corpus `interval_advanced_001` (value-verified, 10 computed columns from `'15JAN2020'd`). gofmt/build/vet/test clean both CGO modes; corpus **68/68**, value-verified **48/48**.
+- Docs: reference.md (interval list + multiplier/shift/dt note, deferral bullet removed), COMPATIBILITY.md, README unchanged (already lists intck/intnx).

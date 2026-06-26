@@ -216,8 +216,10 @@ propagate.
 | `datepart(dt)` / `timepart(dt)` | Date / time part of a SAS datetime. |
 | `hms(h, m, s)` | Time value from hours/minutes/seconds. |
 | `dhms(d, h, m, s)` | Datetime value from a date plus h/m/s. |
-| `intck(interval, from, to)` | Count of interval boundaries (`day`, `week`, `month`, `qtr`, `year`). |
+| `intck(interval, from, to)` | Count of interval boundaries (`day`, `week`, `month`, `qtr`, `semiyear`, `year`, `hour`, `minute`, `second`). |
 | `intnx(interval, start, n <,align>)` | Advance `start` by `n` intervals; align `b`(egin, default)/`m`(iddle)/`e`(nd)/`s`(ame). |
+
+Both accept a multiplier and shift on the interval name (`month2` = bimonthly, `week.2` = weeks starting Monday, `qtr2.2`), and a `dt` prefix to apply a calendar interval to datetime values (`dtday`, `dtmonth`, `dtqtr`, `dtyear`).
 
 **Format / informat**
 
@@ -505,9 +507,6 @@ ass test --coverage corpus/   # per-feature value-verification backlog (gaps fir
 Selected intentional deferrals (full list and rationale in
 [`COMPATIBILITY.md`](COMPATIBILITY.md)):
 
-- Advanced `intck`/`intnx` interval forms (multi-unit/shifted intervals like
-  `month2` or `week.2`, and datetime intervals such as `dtday`/`hour`) — the base
-  date intervals `day`/`week`/`month`/`qtr`/`year` are supported (see Functions).
 - `PROC FORMAT PICTURE` (output-only picture formats).
 - The default stratified PROC FREQ n-way layout (only `/ list` and `/ chisq`),
   and association statistics beyond Pearson chi-square.

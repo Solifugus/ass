@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -138,25 +139,144 @@ func dhmsFn(args []table.Value) (table.Value, error) {
 	return table.Num(args[0].Num*86400 + args[1].Num*3600 + args[2].Num*60 + args[3].Num), nil
 }
 
-// weekIndex maps a SAS day number to its (Sunday-aligned) week ordinal. SAS day 0
-// (1960-01-01) is a Friday, so the Sunday on/before it is day -5.
-func weekIndex(day float64) int { return int(math.Floor((day + 5) / 7)) }
+// intervalSpec is a parsed SAS interval name (e.g. "MONTH2.2", "WEEK", "DTDAY",
+// "HOUR3"). SAS interval syntax is <name><multiplier>.<shift>, optionally with a
+// "DT" prefix that reinterprets a date interval against datetime values.
+//
+// The model is a uniform grid: every interval partitions a one-dimensional grid
+// (months, days, or fixed-size seconds) into consecutive runs of `period` grid
+// units, with the run boundaries shifted by `offset` units. intck counts the run
+// boundaries crossed; intnx jumps `n` runs and aligns within the target run.
+type intervalSpec struct {
+	grid    string  // "month", "day", or "sec"
+	secUnit float64 // grid unit size in seconds (sec grid only): hour=3600, minute=60, second=1
+	period  int     // grid units per interval = base * multiplier
+	offset  int     // boundary offset in grid units = baseOffset + (shift-1)
+	dt      bool    // a date interval (month/day grid) applied to datetime values
+}
 
-// addMonths advances (year, month[1..12]) by n months with correct flooring for
-// negative n, returning the new year and 1..12 month.
-func addMonths(y, m, n int) (int, int) {
-	base := y*12 + (m - 1) + n
-	ny := base / 12
-	nm := base % 12
-	if nm < 0 {
-		nm += 12
-		ny--
+// parseInterval parses a SAS interval name into an intervalSpec.
+func parseInterval(s string) (intervalSpec, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	shift := 1
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		if v, err := strconv.Atoi(strings.TrimSpace(s[i+1:])); err == nil && v >= 1 {
+			shift = v
+		}
+		s = s[:i]
 	}
-	return ny, nm + 1
+	// Trailing digits are the multiplier (e.g. MONTH2, WEEK3).
+	mult := 1
+	j := len(s)
+	for j > 0 && s[j-1] >= '0' && s[j-1] <= '9' {
+		j--
+	}
+	if j < len(s) {
+		if v, err := strconv.Atoi(s[j:]); err == nil && v >= 1 {
+			mult = v
+		}
+		s = s[:j]
+	}
+	dt := false
+	if strings.HasPrefix(s, "dt") && len(s) > 2 {
+		dt = true
+		s = s[2:]
+	}
+
+	var sp intervalSpec
+	base, baseOffset := 1, 0
+	switch s {
+	case "day", "days":
+		sp.grid = "day"
+	case "week", "weeks":
+		// SAS weeks start Sunday; day 0 (1960-01-01) is a Friday, so Sundays are
+		// the days d with (d-2) divisible by 7. The shift index counts days, so
+		// WEEK.2 starts weeks on Monday.
+		sp.grid, base, baseOffset = "day", 7, 2
+	case "month", "months":
+		sp.grid = "month"
+	case "qtr", "quarter", "qtrs", "quarters":
+		sp.grid, base = "month", 3
+	case "semiyear", "semiyears":
+		sp.grid, base = "month", 6
+	case "year", "years":
+		sp.grid, base = "month", 12
+	case "hour", "hours":
+		sp.grid, sp.secUnit = "sec", 3600
+	case "minute", "minutes":
+		sp.grid, sp.secUnit = "sec", 60
+	case "second", "seconds":
+		sp.grid, sp.secUnit = "sec", 1
+	default:
+		return sp, fmt.Errorf("unsupported interval %q", s)
+	}
+	// The DT prefix only changes scaling for calendar (month/day) intervals;
+	// sub-day intervals already operate on the seconds of a datetime directly.
+	sp.dt = dt && sp.grid != "sec"
+	sp.period = base * mult
+	sp.offset = baseOffset + (shift - 1)
+	return sp, nil
+}
+
+// toGrid converts a SAS value (date, datetime, or time) to this interval's grid
+// domain: a day number for month/day grids, or seconds for the sec grid. A DT
+// calendar interval receives datetime seconds, which become day numbers.
+func (sp intervalSpec) toGrid(value float64) float64 {
+	if sp.dt {
+		return value / 86400
+	}
+	return value
+}
+
+// fromGrid converts a grid-domain result back to the SAS value domain.
+func (sp intervalSpec) fromGrid(g float64) float64 {
+	if sp.dt {
+		return g * 86400
+	}
+	return g
+}
+
+// gridIndex maps a grid-domain value to its integer grid-unit index.
+func (sp intervalSpec) gridIndex(g float64) int {
+	switch sp.grid {
+	case "month":
+		t := formats.SASDateToTime(math.Floor(g))
+		return t.Year()*12 + int(t.Month()) - 1
+	case "day":
+		return int(math.Floor(g))
+	default: // sec
+		return int(math.Floor(g / sp.secUnit))
+	}
+}
+
+// gridBoundary maps a grid-unit index back to the grid-domain value at its start.
+func (sp intervalSpec) gridBoundary(i int) float64 {
+	switch sp.grid {
+	case "month":
+		y := i / 12
+		m := i % 12
+		if m < 0 {
+			m += 12
+			y--
+		}
+		return formats.TimeToSASDate(time.Date(y, time.Month(m+1), 1, 0, 0, 0, 0, time.UTC))
+	case "day":
+		return float64(i)
+	default: // sec
+		return float64(i) * sp.secUnit
+	}
+}
+
+// intervalIndex is the ordinal of the interval (run of `period` grid units)
+// containing grid-domain value g.
+func (sp intervalSpec) intervalIndex(g float64) int {
+	return int(math.Floor(float64(sp.gridIndex(g)-sp.offset) / float64(sp.period)))
 }
 
 // intck(interval, from, to) — the number of interval boundaries between two
-// dates. Supported intervals: day, week, month, qtr/quarter, year.
+// values. Intervals: day, week, month, qtr, semiyear, year, hour, minute,
+// second; an optional multiplier (MONTH2), shift (WEEK.2), and DT prefix
+// (DTMONTH, for datetime values).
 func intckFn(args []table.Value) (table.Value, error) {
 	if len(args) != 3 {
 		return table.MissingNum(), fmt.Errorf("intck expects 3 arguments, got %d", len(args))
@@ -164,32 +284,18 @@ func intckFn(args []table.Value) (table.Value, error) {
 	if args[1].IsMissing() || args[2].IsMissing() {
 		return table.MissingNum(), nil
 	}
-	interval := strings.ToLower(strings.TrimSpace(args[0].Str))
-	from, to := args[1].Num, args[2].Num
-	ft := formats.SASDateToTime(from)
-	tt := formats.SASDateToTime(to)
-	switch interval {
-	case "day", "days":
-		return table.Num(math.Floor(to) - math.Floor(from)), nil
-	case "week", "weeks":
-		return table.Num(float64(weekIndex(to) - weekIndex(from))), nil
-	case "month", "months":
-		return table.Num(float64((tt.Year()-ft.Year())*12 + (int(tt.Month()) - int(ft.Month())))), nil
-	case "qtr", "quarter":
-		fq := (int(ft.Month()) - 1) / 3
-		tq := (int(tt.Month()) - 1) / 3
-		return table.Num(float64((tt.Year()-ft.Year())*4 + (tq - fq))), nil
-	case "year", "years":
-		return table.Num(float64(tt.Year() - ft.Year())), nil
-	default:
-		return table.MissingNum(), fmt.Errorf("intck: unsupported interval %q", interval)
+	sp, err := parseInterval(args[0].Str)
+	if err != nil {
+		return table.MissingNum(), fmt.Errorf("intck: %v", err)
 	}
+	from := sp.intervalIndex(sp.toGrid(args[1].Num))
+	to := sp.intervalIndex(sp.toGrid(args[2].Num))
+	return table.Num(float64(to - from)), nil
 }
 
 // intnx(interval, start, increment[, alignment]) — advances start by increment
 // intervals and aligns the result within the resulting interval. Alignment:
-// b(eginning, default), m(iddle), e(nd), s(ame). Intervals: day, week, month,
-// qtr/quarter, year.
+// b(eginning, default), m(iddle), e(nd), s(ame).
 func intnxFn(args []table.Value) (table.Value, error) {
 	if len(args) < 3 || len(args) > 4 {
 		return table.MissingNum(), fmt.Errorf("intnx expects 3 or 4 arguments, got %d", len(args))
@@ -197,55 +303,34 @@ func intnxFn(args []table.Value) (table.Value, error) {
 	if args[1].IsMissing() || args[2].IsMissing() {
 		return table.MissingNum(), nil
 	}
-	interval := strings.ToLower(strings.TrimSpace(args[0].Str))
-	start := args[1].Num
+	sp, err := parseInterval(args[0].Str)
+	if err != nil {
+		return table.MissingNum(), fmt.Errorf("intnx: %v", err)
+	}
 	n := int(args[2].Num)
 	align := "b"
 	if len(args) == 4 && strings.TrimSpace(args[3].Str) != "" {
 		align = strings.ToLower(strings.TrimSpace(args[3].Str))[:1]
 	}
 
-	// Compute the target interval as [begin, end] day numbers plus the start
-	// interval's beginning (for "same" alignment), then apply alignment uniformly.
-	var begin, end, beginOfStart float64
-	st := formats.SASDateToTime(start)
-	switch interval {
-	case "day", "days":
-		begin = math.Floor(start) + float64(n)
-		end = begin
-		beginOfStart = math.Floor(start)
-	case "week", "weeks":
-		curSunday := float64(weekIndex(start)*7 - 5)
-		tgtSunday := float64((weekIndex(start)+n)*7 - 5)
-		begin, end, beginOfStart = tgtSunday, tgtSunday+6, curSunday
-	case "month", "months":
-		ny, nm := addMonths(st.Year(), int(st.Month()), n)
-		begin = formats.TimeToSASDate(time.Date(ny, time.Month(nm), 1, 0, 0, 0, 0, time.UTC))
-		end = formats.TimeToSASDate(time.Date(ny, time.Month(nm)+1, 0, 0, 0, 0, 0, time.UTC))
-		beginOfStart = formats.TimeToSASDate(time.Date(st.Year(), st.Month(), 1, 0, 0, 0, 0, time.UTC))
-	case "qtr", "quarter":
-		fq := (int(st.Month()) - 1) / 3
-		ny, nm := addMonths(st.Year(), fq*3+1, n*3)
-		begin = formats.TimeToSASDate(time.Date(ny, time.Month(nm), 1, 0, 0, 0, 0, time.UTC))
-		end = formats.TimeToSASDate(time.Date(ny, time.Month(nm)+3, 0, 0, 0, 0, 0, time.UTC))
-		beginOfStart = formats.TimeToSASDate(time.Date(st.Year(), time.Month(fq*3+1), 1, 0, 0, 0, 0, time.UTC))
-	case "year", "years":
-		ty := st.Year() + n
-		begin = formats.TimeToSASDate(time.Date(ty, 1, 1, 0, 0, 0, 0, time.UTC))
-		end = formats.TimeToSASDate(time.Date(ty, 12, 31, 0, 0, 0, 0, time.UTC))
-		beginOfStart = formats.TimeToSASDate(time.Date(st.Year(), 1, 1, 0, 0, 0, 0, time.UTC))
-	default:
-		return table.MissingNum(), fmt.Errorf("intnx: unsupported interval %q", interval)
-	}
+	startG := sp.toGrid(args[1].Num)
+	gi := sp.intervalIndex(startG)
+	beginGrid := (gi+n)*sp.period + sp.offset
+	begin := sp.gridBoundary(beginGrid)
+	end := sp.gridBoundary(beginGrid+sp.period) - 1 // last grid unit of the run
 
+	var result float64
 	switch align {
 	case "e":
-		return table.Num(end), nil
+		result = end
 	case "m":
-		return table.Num(math.Floor((begin + end) / 2)), nil
+		result = math.Floor((begin + end) / 2)
 	case "s":
-		return table.Num(begin + (math.Floor(start) - beginOfStart)), nil
+		// Preserve the offset of start within its own run.
+		within := startG - sp.gridBoundary(gi*sp.period+sp.offset)
+		result = begin + within
 	default: // "b"
-		return table.Num(begin), nil
+		result = begin
 	}
+	return table.Num(sp.fromGrid(result)), nil
 }
