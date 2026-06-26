@@ -71,6 +71,7 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	}
 
 	var analysisVars, classVars []string
+	var outStmt *ast.MeansOutputStatement
 	procFormats := map[string]string{}
 	for _, s := range step.Body {
 		switch st := s.(type) {
@@ -84,6 +85,8 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 			for k, v := range st.Formats {
 				procFormats[strings.ToLower(k)] = v
 			}
+		case *ast.MeansOutputStatement:
+			outStmt = st
 		}
 	}
 	if len(analysisVars) == 0 {
@@ -114,7 +117,88 @@ func (meansProc) Run(lib *table.Library, step *ast.ProcStep, logger *log.Logger)
 	emitTitles(logger, lib.TitleLines())
 	emitListing(logger, result, printOptions{}, "Summary Statistics")
 	emitFootnotes(logger, lib.FootnoteLines())
+
+	// `output out=<name> <stat>=<vars>` writes the statistics to a dataset.
+	if outStmt != nil && outStmt.Out != "" {
+		outDS := buildMeansOut(src, analysisVars, classVars, outStmt, lib.Formats, procFormats)
+		if err := lib.Store(outStmt.Out, outDS); err != nil {
+			logger.Error("PROC MEANS: %v", err)
+		} else {
+			logger.Note("The data set WORK.%s has %d observations and %d variables.",
+				strings.ToUpper(datasetName(outStmt.Out)), outDS.NObs(), len(outDS.Columns))
+		}
+	}
 	return nil
+}
+
+// buildMeansOut builds the PROC MEANS `output out=` dataset: the class variables,
+// then _TYPE_ and _FREQ_, then one column per requested statistic output variable
+// (positionally matched to the analysis variables). One row per class group (the
+// detail/nway level).
+func buildMeansOut(src *table.Dataset, analysisVars, classVars []string, outStmt *ast.MeansOutputStatement, cat *table.FormatCatalog, procFormats map[string]string) *table.Dataset {
+	fmts := make([]func(table.Value) string, len(classVars))
+	formatted := make([]bool, len(classVars))
+	for i, cv := range classVars {
+		fmts[i] = freqFormatter(src, cat, procFormats, cv)
+		formatted[i] = varFormatSpec(src, procFormats, cv) != ""
+	}
+
+	out := table.NewDataset("", datasetName(outStmt.Out))
+	for i, cv := range classVars {
+		kind := table.Numeric
+		for _, c := range src.Columns {
+			if strings.EqualFold(c.Name, cv) {
+				kind = c.Kind
+			}
+		}
+		if formatted[i] {
+			kind = table.Character
+		}
+		out.AddColumn(table.Column{Name: cv, Kind: kind})
+	}
+	out.AddColumn(table.Column{Name: "_TYPE_", Kind: table.Numeric})
+	out.AddColumn(table.Column{Name: "_FREQ_", Kind: table.Numeric})
+
+	// Statistic output columns, in clause then name order; each maps positionally
+	// to an analysis variable.
+	type statCol struct{ name, av, stat string }
+	var statCols []statCol
+	for _, sc := range outStmt.Stats {
+		for i, nm := range sc.Names {
+			if i >= len(analysisVars) {
+				break
+			}
+			statCols = append(statCols, statCol{name: nm, av: analysisVars[i], stat: sc.Stat})
+			out.AddColumn(table.Column{Name: nm, Kind: table.Numeric})
+		}
+	}
+
+	typeBits := 0
+	if n := len(classVars); n > 0 {
+		typeBits = (1 << uint(n)) - 1 // 0 with no class vars
+	}
+	typeVal := float64(typeBits)
+	groups, order := groupRows(src, classVars, fmts)
+	for _, key := range order {
+		rows := groups[key]
+		row := table.Row{}
+		for i, cv := range classVars {
+			if formatted[i] {
+				row[strings.ToLower(cv)] = table.Char(fmts[i](src.Get(rows[0], cv)))
+			} else {
+				row[strings.ToLower(cv)] = src.Get(rows[0], cv)
+			}
+		}
+		row["_type_"] = table.Num(typeVal)
+		row["_freq_"] = table.Num(float64(len(rows)))
+		for _, sc := range statCols {
+			if ms, ok := meansStat(sc.stat); ok {
+				row[strings.ToLower(sc.name)] = ms.value(computeStats(src, rows, sc.av))
+			}
+		}
+		out.AppendRow(row)
+	}
+	return out
 }
 
 // buildMeansResult computes the statistics table. CLASS variables are grouped

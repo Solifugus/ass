@@ -1096,6 +1096,8 @@ func (p *Parser) parseProcStatement() ast.Statement {
 		return &ast.ClassStatement{Vars: p.parseProcNameList()}
 	case p.identIs("tables") || p.identIs("table"):
 		return p.parseTables()
+	case p.identIs("output"):
+		return p.parseMeansOutput()
 	case p.identIs("model"):
 		return p.parseModel()
 	case p.identIs("value"):
@@ -1491,6 +1493,44 @@ func (p *Parser) parseTables() ast.Statement {
 			}
 		}
 		p.next()
+	}
+	p.expectSemicolon()
+	return stmt
+}
+
+// parseMeansOutput parses PROC MEANS/SUMMARY
+// `output out=<name> <stat>=<v ...> ... [/ options];`. `out=` names the dataset;
+// each `stat=name name ...` clause names the output variables for a statistic,
+// positional to the analysis (VAR) variables. A trailing `/ options` tail is
+// skipped.
+func (p *Parser) parseMeansOutput() ast.Statement {
+	p.next() // 'output'
+	stmt := &ast.MeansOutputStatement{}
+	for p.curIs(lexer.IDENT) {
+		key := strings.ToLower(p.cur.Literal)
+		if p.peek.Type != lexer.EQ {
+			p.next() // stray token; skip
+			continue
+		}
+		p.next() // key
+		p.next() // '='
+		if key == "out" {
+			if p.curIs(lexer.IDENT) {
+				stmt.Out = p.cur.Literal
+				p.next()
+			}
+			continue
+		}
+		// A statistic keyword: collect output names until the next `key=` or the end.
+		var names []string
+		for p.curIs(lexer.IDENT) && p.peek.Type != lexer.EQ {
+			names = append(names, p.cur.Literal)
+			p.next()
+		}
+		stmt.Stats = append(stmt.Stats, ast.MeansOutStat{Stat: key, Names: names})
+	}
+	for !p.curIs(lexer.SEMICOLON) && !p.curIs(lexer.EOF) && !p.curIs(lexer.RUN) && !p.curIs(lexer.QUIT) {
+		p.next() // skip any `/ options` tail
 	}
 	p.expectSemicolon()
 	return stmt

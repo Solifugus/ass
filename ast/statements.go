@@ -434,6 +434,30 @@ func (b *ByStatement) String() string {
 	return "by " + strings.Join(parts, " ") + ";"
 }
 
+// MeansOutputStatement is PROC MEANS/SUMMARY `output out=<name> <stat>=<v ...> ...;`
+// — it writes the computed statistics to a dataset. Each MeansOutStat names the
+// output variable(s) for a statistic, positionally matched to the analysis
+// variables (the VAR list).
+type MeansOutputStatement struct {
+	Out   string
+	Stats []MeansOutStat
+}
+
+// MeansOutStat is one `stat=name name ...` clause of a MeansOutputStatement.
+type MeansOutStat struct {
+	Stat  string   // lowercased: n/mean/std/stddev/min/max/sum
+	Names []string // output variable names, positional to the analysis variables
+}
+
+func (m *MeansOutputStatement) statementNode() {}
+func (m *MeansOutputStatement) String() string {
+	parts := make([]string, 0, len(m.Stats))
+	for _, s := range m.Stats {
+		parts = append(parts, s.Stat+"="+strings.Join(s.Names, " "))
+	}
+	return "output out=" + m.Out + " " + strings.Join(parts, " ") + ";"
+}
+
 // RenameStatement is `rename old=new old2=new2 ...;` renaming variables in the
 // step's output dataset(s). Map keys are lowercased old names; values are the new
 // names (case preserved). Within the step the original names remain in use; the

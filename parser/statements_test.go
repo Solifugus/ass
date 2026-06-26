@@ -78,6 +78,36 @@ func TestParseTablesOut(t *testing.T) {
 	}
 }
 
+func TestParseMeansOutput(t *testing.T) {
+	p := New("proc means data=s; var x y; output out=stats mean=mx my sum=sx sy; run;")
+	prog := p.ParseProgram()
+	if errs := p.Errors(); len(errs) != 0 {
+		t.Fatalf("parse errors: %v", errs)
+	}
+	ps := prog.Steps[0].(*ast.ProcStep)
+	var os *ast.MeansOutputStatement
+	for _, s := range ps.Body {
+		if o, ok := s.(*ast.MeansOutputStatement); ok {
+			os = o
+		}
+	}
+	if os == nil {
+		t.Fatalf("no MeansOutputStatement parsed; body = %v", ps.Body)
+	}
+	if os.Out != "stats" {
+		t.Errorf("Out = %q, want stats", os.Out)
+	}
+	if len(os.Stats) != 2 {
+		t.Fatalf("got %d stat clauses, want 2: %+v", len(os.Stats), os.Stats)
+	}
+	if os.Stats[0].Stat != "mean" || len(os.Stats[0].Names) != 2 || os.Stats[0].Names[0] != "mx" {
+		t.Errorf("clause 0 = %+v, want mean=[mx my]", os.Stats[0])
+	}
+	if os.Stats[1].Stat != "sum" || os.Stats[1].Names[1] != "sy" {
+		t.Errorf("clause 1 = %+v, want sum=[sx sy]", os.Stats[1])
+	}
+}
+
 func TestParseAssignmentAndInput(t *testing.T) {
 	body := dataBody(t, "data s; input item $ qty price; total = qty * price; run;")
 	if len(body) != 2 {
