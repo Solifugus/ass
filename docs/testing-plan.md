@@ -16,8 +16,8 @@ exact spacing of a PROC listing.
 
 ## Where we are today
 
-- `ass test corpus/` reports **62/62** items parsed / executed / passed (100%).
-- **34/34** items that declare `expected.datasets` value-match (100%).
+- `ass test corpus/` reports **71/71** items parsed / executed / passed (100%).
+- **51/51** items that declare `expected.datasets` value-match (100%).
 - Go unit tests cover the lexer, parser, macro, runtime, formats, proc, sql,
   table, session, kernel, and log packages.
 

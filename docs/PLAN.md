@@ -55,7 +55,7 @@ Establish before Phase 14; the testing tracks then keep running alongside every
 later phase. This is the most leveraged investment — it de-risks and cheapens
 everything after it, and the differential harness in particular is what makes the
 Phase-17 stats tier tractable.
-- [ ] **Corpus value-verified backfill** — raise `expected.datasets` coverage from 35/63 toward full reference-surface coverage; add a coverage report (extend `ass test --json`) that flags any reference.md surface item lacking a value-verified corpus item, so the backlog is visible and shrinks measurably
+- [ ] **Corpus value-verified backfill** — raise `expected.datasets` coverage from 51/71 toward full reference-surface coverage; add a coverage report (extend `ass test --json`) that flags any reference.md surface item lacking a value-verified corpus item, so the backlog is visible and shrinks measurably
 - [ ] **Cross-engine differential harness** — automate checking ASS output against R / Python statsmodels (and published values) for the same program, per the validation precedence; cite source/engine+version per item
 - [ ] **Edge-case / robustness + fuzz (start)** — missing-value / type-coercion / format-boundary suites and a lexer/parser fuzz target; the rest of this track continues alongside later phases
 
